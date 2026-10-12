@@ -1,316 +1,244 @@
-# Serverless multiplayer for vel.gg/bo1z
+# Serverless multiplayer (`p2p/`)
 
-The site ships single-player only. This folder adds a **peer-to-peer multiplayer
-layer that needs no server at all** — no signalling server, no relay, no turn
-server, no database, no account. Two browsers find each other by pasting a text
-blob, then talk directly.
+Up to four players (one host and three guests) connect directly to each other in a
+browser with **no server in the back**: no signalling server, no relay, no TURN, no
+database, no account. Connections are made from text the players copy between chat
+windows.
 
-Everything here is **new code written for this review**, not scraped from
-vel.gg. It is a plain ES-module trio with no dependencies and no build step, so
-you can read all of it and drop it anywhere.
+**What this is:** a tested transport and netcode layer, running a movement sandbox.
+Four coloured squares, one room, real WebRTC between the players.
+
+**What this is not:** Black Ops Zombies. Wiring this into the real game needs the
+vel.gg engine and its game data, neither of which is in this repository. See
+[the last section](#what-it-would-take-to-run-the-real-game).
+
+## How to play it with friends
+
+1. **Host** opens `p2p/demo.html` and clicks **Open room**. You get one invite per
+   slot: `p2`, `p3`, `p4`.
+2. Send each friend **only the invite for their slot**, by any chat app.
+3. **Friend** opens the same page, pastes their invite, clicks **Make my answer**,
+   and sends the answer back.
+4. **Host** pastes that answer into the friend's slot and clicks **Connect**.
+   Repeat for each friend. Slots can fill in any order.
+5. If someone leaves, their slot shows *free*. Click **New invite** for it and send
+   a fresh invite to whoever is joining.
+
+Everyone uses `WASD` or the arrow keys. Each invite is bound to its room and slot, and the
+host accepts one answer per invite. **Anyone who obtains an invite before its slot is answered
+can take that slot,** so send invites only to the people you mean, over a channel you trust.
+
+Players who are not on the same network need a STUN server. Put
+`stun:stun.l.google.com:19302` in the STUN field on both sides. STUN only tells each
+player their public address; it never sees game traffic. The default is blank, which
+keeps every connection on your own network.
+
+## Files
 
 ```
 p2p/
-├── protocol.js    wire format: frame codec, chunking, blob encoding, room codes
-├── transport.js   Peer: one WebRTC data channel, reliable + unreliable streams
-├── netcode.js     host-authoritative session: snapshots, prediction, reconciliation
-├── demo.html      browser demo UI (no build step, no external assets)
-├── demo.js        browser demo logic
-├── test/
-│   └── run-tests.mjs   20 checks: codec unit tests + two real peers + netcode
-└── package.json   npm test / npm run demo
+├── protocol.js        frames, chunking, reassembly, CRC-32, blob encoding
+├── transport.js       one Peer: ICE/DTLS/SCTP, heartbeats, RTT, BYE, slot labels
+├── netcode.js         createHost (star, up to 3 guests) and createClient
+├── lobby.js           openLobby (one invite per slot) and joinLobby
+├── demo.html          the four-player page
+├── demo.js            the game, the lobby UI, and the stats panel
+└── test/run-tests.mjs 27 checks: codec, real WebRTC, netcode, four players
 ```
 
-## Proof it works
+`transport.js`, `protocol.js`, `netcode.js` and `lobby.js` have no DOM or Node
+dependencies. The browser build uses the global `RTCPeerConnection`. Node uses
+`node-datachannel` (a devDependency) so the tests can open real connections.
 
-```sh
-cd p2p
-npm install          # node-datachannel, the only dependency, test-only
-npm test             # 20 passed, 0 failed
-```
+## Topology
 
-The test suite does not mock the network. Section B creates two real
-`PeerConnection`s, exchanges a real SDP blob, completes a real
-ICE / DTLS-SRTP / SCTP handshake over UDP loopback, and moves real bytes:
+A **star**. The host holds one connection to each guest, and guests never talk to
+each other. A four-player room therefore has three connections, and each guest has
+one.
 
-| What is asserted | Result |
-| --- | --- |
-| 1 MiB split into 683 frames and reassembled | byte-identical at the receiver |
-| DTLS certificate fingerprint | matches the SDP **and** matches on both sides |
-| Round-trip time over the real channel | measured, not assumed |
-| Heartbeat | a vanished peer is declared gone |
-| `BYE` | closes the far side cleanly, not as a failure |
-| Guest input drives the host simulation | both views converge |
-| **25 % of unreliable frames dropped in both directions** | drift stays bounded, reconciliation fires |
-| Stale / out-of-order snapshot | ignored without rewinding local state |
-| Malformed netcode message | reported, session survives |
-| `iceServers` during all of the above | **`[]` — asserted empty** |
-
-That last row is the point: the whole run completes with no STUN server, no TURN
-server and no signalling service configured. The only thing that ever leaves the
-machine is UDP to the other peer.
-
-## Try it in a browser
-
-```sh
-cd p2p
-npm run demo         # python3 -m http.server 8080 --bind 0.0.0.0
-```
-
-Open `http://localhost:8080/demo.html` **twice** — two tabs, or two machines on
-the same LAN. Then:
-
-1. Leave the room code as it is (both sides must agree on it), pick **Host** in
-   tab A and **Guest** in tab B.
-2. Leave **ICE servers** on `none (direct — no third party)`. With a STUN server
-   selected the page would contact it for address discovery; with none, the page
-   makes zero network requests after it loads.
-3. Tab A: **Start connection** → an offer blob appears. Copy it into tab B's
-   *their signalling blob* box.
-4. Tab B: **Start connection** → an answer blob appears. Copy it into tab A's box
-   and press **Accept their answer**.
-5. Move with **WASD**. Both squares move in both tabs.
-
-The demo includes a **simulated packet loss** selector (0 / 5 / 15 / 30 / 60 %).
-Turn it up and watch: the guest keeps moving smoothly because it predicts
-locally, and `corrections` climbs as the host's authoritative snapshots pull it
-back into line. That is reconciliation doing its job on a deliberately bad link.
-
-WebRTC needs a **secure context**, which `localhost` and any `https://` origin
-both satisfy. Opening `demo.html` straight off disk (`file://`) will not work.
-
-## How the connection is established without a server
-
-The classic objection to peer-to-peer is *"you still need a signalling server"*.
-Not if the signalling **is** the message. The blob carries everything:
-
-```
-BO1ZP2P1.<base64url of JSON>.<crc32 hex>
-
-{ "v": 1, "kind": "offer" | "answer", "role": "host" | "guest",
-  "room": "XY34-A79C", "sdp": "v=0...", "fp": "AA:BB:...:99" }
-```
-
-- `sdp` — the session description, including the peer's ICE candidates.
-- `fp` — the SHA-256 fingerprint of that peer's DTLS certificate. Because each
-  side learns the other's fingerprint *before* connecting, it can be compared
-  out-of-band: if the two blobs did not really come from the two people who
-  pasted them, the fingerprints will not match and the call fails closed.
-  WebRTC's DTLS handshake enforces the fingerprint itself; the blob just lets a
-  human verify it too.
-- `crc32` — catches truncation and typos, which is the realistic failure mode
-  when a blob travels through a chat window.
-- `room` — four-plus-four characters from an unambiguous alphabet
-  (`[ACDEFGHJKLMNPQRTUVWXY3479]{4}-…`), so nobody confuses `0` with `O` or `1`
-  with `I`. It is **not** a secret and not a discovery mechanism; it only labels
-  the channel so a wrong paste is detected rather than silently accepted.
-
-Copy-paste is the transport for the handshake, exactly like
-[`wasm-webrtc`](https://github.com/wasmerio/) demos, `ShareDrop`, or SSH's
-out-of-band key verification. Anything that can carry text works: a chat app, a
-QR code, a USB stick.
-
-### Which ICE servers, and what they cost
-
-| Mode | What it contacts | What you get |
+| | Star (used) | Full mesh |
 | --- | --- | --- |
-| `iceServers: []` | **nothing** | Direct connection. Works same-LAN and same-machine always; works across the internet when both peers have public or port-forwarded addresses. |
-| one STUN URL | that STUN server (address discovery only) | Also works across NAT for most home connections — STUN tells each peer its public address. No media or messages pass through it. |
-| TURN | a relay you must operate | Guarantees connectivity even behind symmetric NAT, but it *is* a server in the back, so it is deliberately not used here. |
+| Connections, 4 players | 3 | 6 |
+| Upload per guest | one stream | three streams |
+| Who is authoritative | the host | everyone must agree |
+| If the host leaves | the room ends | the room continues |
 
-The code accepts the browser form (`{urls, username, credential}`) and translates
-it for Node. Two public STUN servers are offered in the demo UI, unselected by
-default: `stun:stun.l.google.com:19302` and `stun:stun.cloudflare.com:3478`
-(the latter is the only non-local URL the preservation project's overlay uses).
+The star was chosen because the host is the authority, so cheating and disagreement
+are both bounded. The cost is that **if the host leaves, the room ends.** Host
+migration is not implemented. It is the main missing feature for real play.
 
-## Architecture
+## Invites and identity
 
-### 1. `protocol.js` — framing
+- Each invite is a `BO1ZP2P1.<base64url json>.<crc32>` blob holding the SDP, the
+  DTLS fingerprint, the room code and the **slot name** (`p2`, `p3` or `p4`).
+- A guest adopts the slot from the offer, so it cannot end up in the wrong slot.
+- The host checks that an answer's slot matches the invite it answers, so pasting
+  p2's answer into p3's box is refused and nothing connects.
+- The host decides who is who from **which connection a message arrives on**. A
+  message that claims to be another player is ignored. The test suite checks this
+  by sending input with a forged id.
+- The DTLS fingerprint in the blob is what authenticates the connection. Whoever
+  gives you the invite is the peer you end up connected to.
 
-One data channel carries several logical streams, so every message gets an
-11-byte header:
+## Netcode
 
-```
- 0      1      2             6             10            11
- +------+------+------+-------------+--------------+--------+
- | ver  | kind | flags|      seq    |  total bytes |  chan  |
- +------+------+------+-------------+--------------+--------+
- | payload ...                                              |
-```
+Built on the same primitives as before, with five changes that target lag:
 
-- `kind`: `HELLO` `WELCOME` `PING` `PONG` `BYE` `DATA` `EVENT`.
-- `flags` bit 0 = reliable, bit 1 = part of a chunk.
-- SCTP data channels cap a single message (the negotiated maximum is read from
-  the channel, defaulting to 64 KiB), so anything larger is split into chunks
-  and reassembled by `Reassembler`. It caps inflight partial messages at 8,
-  rejects a chunk whose shape changes mid-message, and drops — rather than
-  throws on — anything malformed, so one bad frame cannot kill a session.
-- `encodeBlob` / `decodeBlob` / `sdpFingerprint` / `randomRoomCode` handle the
-  copy-paste signalling described above.
+1. **Redundant input.** Each input packet carries the last 8 inputs the host has not
+   yet acknowledged, not just the newest one. A dropped packet is repaired by the
+   next one. Measured: about 35% of received input entries are duplicates, which is
+   the cost of this.
+2. **In-order application with the guest's own `dt`.** The host applies every input
+   it receives, in sequence, using the `dt` the guest predicted with. The guest's
+   prediction and the host's result therefore come from the same arithmetic. On a
+   clean link the guest never corrects: corrections = 0 in the measurement run.
+3. **Adaptive interpolation.** Remote players are drawn `interpolationMs` in the past.
+   That delay is `2 × tick interval + 2 × measured jitter`, clamped to 67–250 ms, and
+   it eases toward its target so remote players never jump in time. Measured on the
+   clean link: 67 ms, down from the earlier fixed 100 ms.
+4. **Brief extrapolation.** If the newest snapshot is late, remote players keep moving
+   along their last velocity for up to 100 ms, then hold. A short gap looks like
+   motion instead of a freeze.
+5. **A single movement function.** The game supplies `applyMove(axes, player, dt)`.
+   The host and every guest run that same code. It clamps the axes and `dt`, so a
+   modified client cannot teleport. The test suite checks that one forged input moves
+   at most `SPEED × 0.25` units per axis for one input.
 
-### 2. `transport.js` — the channel
+Snapshots are unreliable. A stale snapshot is worthless, and the next one arrives in
+about 33 ms. An oversized snapshot is dropped and reported, never sent reliably.
+Events (round changes, purchases, downs) are reliable and identified by connection.
 
-`Peer` is deliberately backend-agnostic. It uses the global `RTCPeerConnection`
-in a browser and [`node-datachannel`](https://github.com/murat-dogan/node-datachannel)
-under Node, behind the same API:
+### Measured (four players, real connections, clean link, 5 s window)
+
+| Quantity | Value |
+| --- | --- |
+| Snapshot size, four players | 150 bytes |
+| Host tick rate | 30.0 per second |
+| Guest upload | 8.7 KB/s each |
+| Host download, all three guests | 16.7 KB/s |
+| Host upload, all three guests | 16.7 KB/s |
+| Interpolation delay | 67 ms |
+| Corrections | 0 |
+
+These figures are from one loopback run in a sandbox. They say nothing about the real
+internet, where latency is what limits play. Expect the interpolation delay to grow
+with jitter and corrections to appear with loss.
+
+### Under loss (automated)
+
+| Injected loss | Result |
+| --- | --- |
+| 25%, two players | views stay within 1.5 units; estimator reads >5% |
+| 30%, four players | every guest's drift stays under 2.5 units |
+
+Loss was injected on unreliable traffic in both directions. Reliable traffic is left
+alone, because SCTP retransmits it on real links.
+
+Not measured: how the old netcode compares under the same conditions. There is no
+before-and-after benchmark here, and none of the numbers above are presented as a
+percentage improvement.
+
+## Limits and failure modes
+
+- **Host leaves = room ends.** No migration.
+- **Guests drop cleanly.** Their avatar is removed for everyone, and the slot can be
+  re-invited. A guest who vanishes without a BYE is detected by the heartbeat and
+  removed the same way once `timeoutMs` passes (default 8 s; the tests use 3 s).
+  Before the fix made in this round, a silent guest kept its slot indefinitely. The
+  test suite now covers that path.
+- **NAT.** Without STUN, players on different networks often cannot connect. With
+  STUN, most home networks work. Symmetric NAT needs TURN, which is a server, so it
+  is deliberately not used here.
+- **Copy-paste is the rendezvous.** It is slow, and invites expire when the room
+  closes. Nothing is stored anywhere.
+- **Browser behaviour is unverified here.** The sandbox has no browser, and the
+  browser download hosts are blocked, so `demo.html` has not been clicked through.
+  Its element IDs were checked against the script. The protocol itself is tested
+  over real connections using `node-datachannel`, not a browser.
+- **Background tabs.** Browsers throttle timers in hidden tabs. A host with the tab
+  hidden will tick slowly and stall the room. Keep the host tab focused.
+
+## Test suite
+
+`npm test` in `p2p/` runs 27 checks, about 20 seconds:
+
+- **A. codec (7):** CRC, frame round-trip, malformed frames, 1 MiB chunking,
+  reassembly abuse, blob tamper detection, room-code alphabet.
+- **B. transport (8):** two peers connect from pasted blobs only; fingerprint
+  travels in the blob; 1 MiB binary and JSON arrive intact; unreliable frames are
+  size-capped; heartbeats measure RTT and detect a silent peer; BYE closes the far
+  side; wrong-session blobs are refused; unknown data channels are refused.
+- **C. netcode (5):** input converges both views; 25% loss converges; a stale
+  snapshot is ignored; malformed messages are reported without killing the session;
+  events cross reliably and carry the sender's identity.
+- **D. four players (7):** invites are labelled and a wrong-slot answer is refused;
+  four players converge and each guest moves; a forged id cannot move someone else
+  and an impossible step is clamped; 30% loss; a leave is removed for everyone and
+  the slot can be re-invited; a guest that vanishes without a goodbye is removed after
+  the heartbeat timeout; a fourth guest and an unknown slot are refused.
+
+Sections B to D run over real ICE/DTLS/SCTP. Section B asserts `iceServers` is empty,
+so that run cannot have used a STUN server. Nothing in the test run contacts a server.
+
+A note on the test harness: `close()` on a `Peer` waits `byeGraceMs` before tearing
+down its sockets, so tests wait on each peer's `closed` promise rather than a fixed
+delay. Earlier fixed delays produced intermittent failures under `node-datachannel`.
+
+## Public API
 
 ```js
-const host = new Peer({ role: 'host', room, iceServers: [] });
-const offer = await host.createOffer();       // → paste to guest
-const guest = new Peer({ role: 'guest', room, iceServers: [] });
-const answer = await guest.acceptOffer(offer); // → paste back to host
-await host.acceptAnswer(answer);
+import { Peer } from './transport.js';
+import { createHost, createClient } from './netcode.js';
+import { openLobby, joinLobby } from './lobby.js';
 
-await host.hello;                              // handshake done, roles verified
-host.send({ any: 'json' });                    // reliable, ordered
-host.send(bytes, { reliable: false });         // unreliable, unordered
-host.onEvent = ({ type, payload, from }) => { … };
-host.close();                                  // sends BYE first
-```
+// host: one invite per free slot
+const lobby = await openLobby({
+  room, peerOptions: { iceServers: [] },
+  onConnect: (slot, peer) => host.addGuest(slot, peer),
+  onDrop: slot => host.removeGuest(slot, 'closed'),
+});
+lobby.offerFor('p2');                 // the text to send that friend
+await lobby.answer('p2', answerText); // their answer, pasted back
+await lobby.invite('p2');             // a fresh invite for a free slot
 
-Three promises sequence the lifecycle: `ready` (channel open) → `hello`
-(HELLO/WELCOME exchanged, so `peerRole` and `peerNonce` are known) → `closed`.
-States are `connecting` `open` `closing` `closed` `failed`.
+// guest
+const { slot, peer, answer } = await joinLobby(offerText);
+// send `answer` back, then:
+const client = createClient({ peer, readInput, applyInput, onRender });
 
-Under the hood:
-
-- **Liveness.** A `PING` every 1 s carrying a sequence number; the `PONG` echoes
-  it *in its JSON body* (not the frame header), so RTT is measured per probe.
-  `peerTimeoutMs` of silence declares the peer gone. The transport owns liveness;
-  the netcode layer deliberately does not duplicate it.
-- **Close.** `close()` sets state to `closing` immediately but defers socket
-  teardown by `byeGraceMs` (150 ms) so the queued `BYE` actually flushes. Without
-  that grace period the far side always saw a `failed` transition instead of a
-  clean close. Receiving a `BYE` closes locally at once.
-- **Binary.** `sendMessageBinary` for bytes (`sendMessage` is text-only in
-  node-datachannel — sending bytes through it throws). The boolean it returns is
-  checked: an unreliable send that does not fit the buffer is counted as
-  `framesDropped` and silently lost, which is exactly what an unreliable channel
-  should do; a reliable send that fails is fatal.
-- **Channel adoption.** Only the label the session negotiated is accepted; a
-  channel opened by anything else is rejected, and text frames are refused on a
-  binary channel.
-- **`stats`** exposes `iceServers`, `bindAddress`, `candidates`, `bytesSent`,
-  `bytesReceived`, `framesDropped` and `remoteFingerprint`, which is what makes
-  the "no server was used" claim testable rather than rhetorical.
-
-### 3. `netcode.js` — the model
-
-Host-authoritative, which is the right choice for a co-op game with a host that
-already owns all the state:
-
-```js
-// host: owns the simulation
+// host session
 const host = createHost({
-  peer, tickRate: 30, initialState,
-  simulate(state, inputs, dt) { /* move everything, in arrival order */ },
-  stateFor(state) { /* trim to what guests need, round it, keep it small */ },
+  tickRate: 30, maxGuests: 3, initialState,
+  simulate(state, inputs, dt, tick) {  // inputs: Map(id -> { queue, latest })
+    for (const [id, player] of Object.entries(state)) {
+      for (const input of inputs.get(id)?.queue ?? []) applyMove(input.axes, player, input.dt);
+    }
+  },
+  stateFor: state => projectForGuests(state),       // keep it under ~1100 bytes
+  onGuestJoin: (id) => { host.state[id] = spawn(id); },
+  onGuestLeave: (id) => { delete host.state[id]; },
+  onEvent: ({ from, name, payload }) => {},         // from = the guest's slot
 });
-
-// guest: predicts locally, renders remotes interpolated
-const client = createClient({
-  peer, id: 'guest', inputRate: 60, interpolationMs: 100, initialState,
-  readInput() { return { mx, my }; },
-  applyInput(axes, predicted, dt) { /* same rule the host runs */ },
-  onRender({ self, remote, tick, hostTime }) { draw(self, remote); },
-});
+host.emit('round', { n: 12 });                      // reliable, to everyone
 ```
 
-Message kinds are `in` (input), `snap` (snapshot), `ev` (app event), `join`,
-`leave`, each carrying `v: 1` so a future change is rejected instead of
-misread.
+`applyMove` must be the same function on the host and in every guest, or prediction
+and authority will disagree.
 
-- **Host.** Drains each guest's input queue once per tick, rejecting stale and
-  duplicate sequence numbers (`outOfOrder`), and sends a snapshot with
-  `ack: {id: lastSeq}` embedded so the guest learns how far the host got. A
-  snapshot over `maxSnapshotBytes` (1100 — safely inside one unreliable datagram)
-  is dropped and counted (`oversizedSnapshots`) rather than thrown from inside a
-  timer. A guest is only forgotten after prolonged silence.
-- **Guest.** Keeps a bounded snapshot buffer, **predicts** by applying its own
-  input immediately, and **reconciles** when an ack arrives: any input the host
-  has not yet consumed is re-applied on top of the authoritative state. A
-  correction larger than 0.5 units is smoothed over `snapMs` (120 ms by default)
-  with a smoothstep, so a lost packet produces a glide instead of a teleport. Late or
-  out-of-order snapshots are ignored rather than rewinding local state.
-- **Clocks.** The client estimates its offset to the host from the measured RTT
-  (`localAt − rtt/2 − hostTime`, smoothed 0.9/0.1) and interpolates remote
-  players at `now − interpolationMs − clockOffset` **in the host's clock domain**.
-  That is what makes a remote player move smoothly at 30 Hz snapshots while the
-  local player renders at the display's refresh rate.
+## What it would take to run the real game
 
-## Attaching this to the real game
+This repository does not contain the game. To put this transport under
+Black Ops Zombies as it actually runs, you would need:
 
-**This is the honest limitation.** The stack above is complete and tested, but
-wiring it into vel.gg/bo1z as it actually runs needs two things this sandbox does
-not have: `artifacts/KisakBlack-web.wasm` and the 6.35 GB asset capture. So the
-splice below is designed against the site's code but **not executed** — treat it
-as a plan with verified primitives, not a finished co-op mode.
+1. **The engine.** `KisakBlack-web.wasm` and the other vel.gg build artifacts. They
+   are not here, and the sandbox cannot fetch them.
+2. **The game data.** A local Steam install of Black Ops, or the vel.gg asset packs.
+   Both are Activision/Treyarch copyright; this project does not distribute them.
+3. **Engine integration.** The host would run the real simulation and project
+   player state into `stateFor`. Guests would feed their input into the engine and
+   render the projected state, rather than moving squares.
+4. **A late-join state transfer.** A guest arriving mid-round needs a full state dump
+   before snapshots make sense. That dump is not implemented.
+5. **Host migration**, if the room should survive the host leaving.
 
-The seam is `play.js`, which owns the simulation and the frame loop:
-
-1. **Expose state.** `stateFor` returns only what a guest must render — player
-   position/orientation, health, current wave, and a hash of anything else the
-   guest can derive locally. Round it (`Math.round(x * 10) / 10`); a tenth of a
-   unit is invisible and it keeps snapshots inside the byte budget.
-2. **Feed input.** `readInput` returns the axis vector `input.js` already
-   produces; `applyInput` reuses the *same* movement function the engine uses, so
-   prediction and authority cannot diverge by construction.
-3. **Who simulates.** The host keeps running the real engine. A guest runs the
-   engine too, but its `simulate` is a no-op for anything it does not own: the
-   authoritative snapshot overwrites position, health and wave state each render.
-   Zombie AI stays on the host — that is the whole benefit of host authority.
-4. **Events, not state.** Round start, perk purchase, downed player, door
-   purchase: send these as `peer.send({type}, {reliable: true})` so they are
-   ordered and never lost. Only continuous values ride the unreliable snapshot
-   stream. `onEvent` on both sides is the hook.
-5. **Late join.** A guest joining mid-round needs a full state dump before the
-   first interpolated snapshot; `initialState` plus one reliable `ev` covers it.
-6. **Determinism is not required.** Because the host is authoritative and the
-   guest reconciles, the wasm does not need deterministic float behaviour. That
-   is deliberate: requiring determinism across browsers would have made this
-   unusable.
-
-**Prior art in the same problem space.** The preservation project
-([`VinceGuyMan/vel-gg-bo1z-preservation`](https://github.com/VinceGuyMan/vel-gg-bo1z-preservation))
-ships an experimental co-op overlay worth reading before building anything
-serious: `overlay/rtc-transport.js`, `overlay/ws-transport.js`,
-`overlay/signaling.py`, `overlay/peer-schema.js` and
-`overlay/engine-recipe.json`. Its transport can fall back to a **WebSocket
-signalling server** (`ws-transport.js` + `signaling.py`), which is precisely the
-"server in the back" this folder avoids; `rtc-transport.js` is the comparable
-serverless path. Note also that `overlay/free_host.py` publishes a **public**
-`*.trycloudflare.com` tunnel — convenient, but it exposes your machine to the
-internet, which is why it is not used here.
-
-## Caveats you will hit
-
-- **`bindAddress` (Node only).** A container whose only interfaces are
-  `lo 127.0.0.1/8` and a link-local `eth0 169.254.0.21/30` advertises **zero** ICE
-  candidates with default configuration; `enableIceTcp` does not help. Setting
-  `bindAddress: '127.0.0.1'` produces a host candidate and the test suite uses it.
-  A normal desktop or LAN machine does **not** need it — do not hardcode it. When
-  gathering produces no candidate, `transport.js` throws a diagnostic error naming
-  `bindAddress` and STUN as the fixes instead of hanging.
-- **NAT.** Without STUN or TURN, two peers behind different NATs will often not
-  connect. Same LAN and same machine always work. This is a property of WebRTC,
-  not of this code.
-- **Blob freshness.** An SDP blob is single-use: ICE candidates and the DTLS
-  fingerprint are generated per `Peer`. Re-running **Start connection** invalidates
-  any blob already copied.
-- **`byeGraceMs` and `peer.hello` exist for reasons.** Both were added after tests
-  showed the naive versions were wrong — closing too eagerly looked like a crash,
-  and `ready` resolving before the handshake meant role-dependent assertions read
-  `undefined`. If you fork this, keep both.
-- **Two peers, by design.** The session model is 1:1 (one host, one guest). More
-  players means a mesh (host opens N peers, each guest one) or a host that
-  re-broadcasts state; `netcode.js` already keys everything by guest id, so the
-  host side generalises, but it is untested beyond two.
-
-## Not covered
-
-No encryption beyond DTLS-SRTP (which is mandatory in WebRTC and authenticated by
-the fingerprint check). No authentication of *who* is on the other end — the room
-code is a label, not a password. No NAT traversal guarantee. No persistence: when
-a peer closes, the session is gone. All four are correct properties for a
-co-op game between friends and all four would be wrong for anything handling
-secrets.
+Until those exist, this is the networking layer and a sandbox to test it with.

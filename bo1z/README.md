@@ -17,7 +17,7 @@ Details, and the gaps this review could not close, are in
 
 | | | |
 | --- | --- | --- |
-| **[MULTIPLAYER.md](MULTIPLAYER.md)** + [`p2p/`](p2p/) | Serverless co-op: WebRTC data channel, copy-paste signalling, host-authoritative netcode with prediction, reconciliation and interpolation. **No signalling server, no relay, no database.** `iceServers: []` is asserted empty by the test suite. | 20/20 checks pass, including two real peers over real ICE/DTLS/SCTP and bounded drift under 25 % packet loss |
+| **[MULTIPLAYER.md](MULTIPLAYER.md)** + [`p2p/`](p2p/) | Serverless co-op for up to four players: WebRTC data channels, copy-paste invites with one slot each, host-authoritative netcode with redundant input, prediction, reconciliation and adaptive interpolation. **No signalling server, no relay, no database.** `iceServers: []` is asserted empty by the test suite. | 27/27 checks pass, including four real players over real ICE/DTLS/SCTP, bounded drift under 25–30 % packet loss, and forged-input rejection |
 | **[hardening/HARDENING.md](hardening/HARDENING.md)** | The "sketchy stuff", removed three ways: the site's own `?telemetry=0` opt-out, two uBlock filters, and a userscript that forces the opt-out *and* pins egress to the two audited hosts so a future deploy cannot add a tracker silently. | 19/19 checks pass, run headless in a `node:vm` sandbox |
 | **[PERFORMANCE.md](PERFORMANCE.md)** | Where the lag actually comes from, and every knob that exists, cited to `file:line`. Includes the site's own measured numbers (renderer init waited 6.5–9.5 s, sound init 1–13 s) and the native build's five mod dvars. | **Makes no claim to have improved anything** — there is no browser, no wasm and no 6.35 GB of packs here to measure against |
 
@@ -56,10 +56,11 @@ bo1z/
 │   └── test-userscript.mjs    19 checks, headless (node:vm, no browser)
 └── p2p/                       NEW: multiplayer with no server in the back
     ├── protocol.js            frame codec, chunking, blob signalling, room codes
-    ├── transport.js           Peer: one data channel, reliable + unreliable streams
-    ├── netcode.js             host-authoritative snapshots, prediction, reconciliation
-    ├── demo.html / demo.js    browser demo: paste two blobs, move with WASD
-    ├── test/run-tests.mjs     20 checks, two real peers over real ICE/DTLS/SCTP
+    ├── transport.js           Peer: one data channel, reliable + unreliable streams, slot labels
+    ├── netcode.js             star host (up to 3 guests), prediction, reconciliation, interpolation
+    ├── lobby.js               one copy-paste invite per slot; the guest side of the join
+    ├── demo.html / demo.js    four-player browser demo: invites, WASD, live network stats
+    ├── test/run-tests.mjs     27 checks, real ICE/DTLS/SCTP, four players, loss, forged input
     └── package.json           npm test / npm run demo
 ```
 
@@ -100,8 +101,8 @@ python3 tools/mirror-site.py --output ~/bo1z-src
 node hardening/test-userscript.mjs      # 19 passed, 0 failed
 
 # 6. test the serverless multiplayer stack, then play it
-cd p2p && npm install && npm test       # 20 passed, 0 failed
-npm run demo                            # → http://localhost:8080/demo.html, open twice
+cd p2p && npm install && npm test       # 27 passed, 0 failed
+npm run demo                            # → http://localhost:8080/demo.html, one tab per player
 ```
 
 Steps 5 and 6 need nothing but Node; step 6's `npm install` pulls

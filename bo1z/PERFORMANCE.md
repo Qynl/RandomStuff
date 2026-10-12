@@ -225,46 +225,47 @@ everywhere, those four are the subsystems to look at, in that order.
 ## What the multiplayer layer costs
 
 [`p2p/`](p2p/) is the one thing here that adds runtime work, so it should be
-costed rather than waved at. Defaults from `netcode.js`:
+costed rather than waved at. Defaults from `netcode.js`, with a four-player room
+(host + three guests):
 
 | Stream | Rate | Channel | Size |
 | --- | --- | --- | --- |
-| Snapshot (host → guest) | `tickRate` = 30 Hz | **unreliable, unordered** | capped at `maxSnapshotBytes` = 1100 B; over budget it is dropped and counted (`oversizedSnapshots`), never thrown |
-| Input (guest → host) | `inputRate` = 60 Hz | **unreliable, unordered** | ~40–80 B |
+| Snapshot (host → each guest) | `tickRate` = 30 Hz | **unreliable, unordered** | 150 B measured for four players; capped at `maxSnapshotBytes` = 1100 B, and over budget it is dropped and counted (`oversizedSnapshots`), never sent reliably |
+| Input (guest → host) | `inputRate` = 60 Hz | **unreliable, unordered** | up to 8 unacknowledged inputs per packet, ~55 B each |
 | App events (both ways) | on demand | **reliable, ordered** | small JSON |
 | Heartbeat `PING`/`PONG` | 1 Hz | reliable | ~30 B |
 
-Arithmetic, clearly labelled as arithmetic: worst case is
-`1100 × 30 ≈ 33 KB/s` per guest, but a real two-player snapshot
-(`{tick, t, ack, players:{host:{x,y}, guest:{x,y}}}` rounded to a tenth) is
-roughly 150 B, so **≈ 4.5 KB/s** — well under a single 64 KiB SCTP message and
-comparable to a slow video stream. The demo's `bytes sent / received` tiles show
-the actual numbers for your session.
+**Measured** on a clean loopback link, four players, real ICE/DTLS, 5-second window:
+guest upload 8.7 KB/s each; host 16.7 KB/s down and 16.7 KB/s up across three guests.
+Those are the only measured figures; none of this has been measured over the internet.
 
 Design choices that keep it off the frame budget:
 
 - **Unreliable for state, reliable only for events.** A lost snapshot is skipped,
-  not retransmitted — the next one supersedes it. Round-start and perk purchases go
+  not retransmitted; the next one supersedes it. Round-start and purchases go
   reliable so they cannot be lost or reordered.
-- **Interpolation, not extrapolation.** Remotes render at
-  `now − interpolationMs − clockOffset` (default 100 ms behind), in the host's clock
-  domain, using an RTT-derived offset smoothed 0.9/0.1. No guessing where a player
-  "should" be, so no rubber-banding when a packet is late.
-- **Prediction + reconciliation on the guest.** Local input applies immediately, so
-  your own movement never waits for the network. Corrections larger than 0.5 units
-  are smoothed over `snapMs` (120 ms by default) with a smoothstep rather than
-  snapped.
-  The test suite proves this holds under 25 % loss in both directions: drift stays
-  bounded and reconciliation fires (`p2p/test/run-tests.mjs`).
+- **Redundant input.** Each input packet repeats the unacknowledged tail (up to 8
+  entries). Measured: about 35% of received entries are duplicates; that is the
+  price of losing no movement to a single dropped packet.
+- **Adaptive interpolation.** Remote players render at
+  `now − interpolationMs − clockOffset`, where `interpolationMs` is
+  `2 × tick interval + 2 × measured jitter`, clamped to 67–250 ms and eased toward
+  its target. Measured on the clean link: 67 ms, down from the earlier fixed 100 ms.
+  The clock offset is RTT-derived and smoothed 0.9/0.1, in the host's clock domain.
+- **Brief extrapolation.** When the newest snapshot is late, remotes continue along
+  their last velocity for up to 100 ms, then hold. Late packets look like motion.
+- **Prediction + in-order authority.** The host applies each guest's inputs in
+  sequence with the guest's own `dt`, using the same `applyMove` as the guest's
+  prediction. On the clean link the measured correction count is 0. Corrections
+  above 0.5 units are smoothed over `snapMs` (120 ms) with a smoothstep.
+  Under 25% and 30% loss the tests check bounded drift (`p2p/test/run-tests.mjs`).
 - **Stale snapshots are ignored, not applied.** A late snapshot cannot rewind local
   state (`outOfOrderSnapshots`).
 - **No timers that outlive the session.** Every `setInterval` is cleared in
   `stop()` and `unref()`'d under Node, and an oversized snapshot is reported through
-  `onError` instead of throwing from inside an interval — which would otherwise kill
-  the host's tick loop mid-frame.
+  `onError` instead of being thrown into the tick loop.
 
-**The new constraint is the host's tick budget.** A host now runs the simulation
-*and* serialises a snapshot 30 times a second. That is cheap in isolation and
-unmeasured against the real engine — if you splice this into `play.js`, profile the
-host's `stateFor` first, because it is the one function that runs per tick per
-guest and touches game state.
+Where the time actually goes, honestly: over the internet, almost all of the felt
+lag is the network's round trip, which no code here can remove. What the code can
+do is avoid adding to it (no relay, one hop per direction) and avoid freezing when
+packets are late (the jitter buffer and extrapolation above).

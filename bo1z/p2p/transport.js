@@ -130,6 +130,9 @@ export class Peer {
    * @param {object} options
    * @param {'host'|'guest'} options.role  who creates the offer
    * @param {string} [options.room]        session label; mismatched blobs are refused
+   * @param {string} [options.label]       slot name, e.g. 'p2'. The host sets it per
+   *                                       invite; the guest adopts it from the offer, so a
+   *                                       guest cannot end up in the wrong slot.
    * @param {string[]|object[]} [options.iceServers]  see the NAT note above
    * @param {(message:{type:string,data:Uint8Array|object,reliable:boolean,peer:Peer})=>void} [options.onMessage]
    * @param {(state:string, detail?:object)=>void} [options.onState]
@@ -137,10 +140,14 @@ export class Peer {
    * @param {(error:Error)=>void} [options.onError]
    */
   constructor(options = {}) {
-    const { role, room, onMessage, onState, onRtt, onError, ...rest } = options;
+    const { role, room, label, onMessage, onState, onRtt, onError, ...rest } = options;
     if (role !== 'host' && role !== 'guest') throw new ProtocolError("role must be 'host' or 'guest'");
+    if (label !== undefined && label !== null && (typeof label !== 'string' || !/^[A-Za-z0-9_-]{1,16}$/.test(label))) {
+      throw new ProtocolError('label must be 1-16 letters, digits, _ or -');
+    }
     this.role = role;
     this.room = room ?? randomRoomCode();
+    this.label = label ?? null;
     this.config = { ...DEFAULTS, ...rest, iceServers: normalizeIceServers(rest.iceServers) };
     this.state = STATE.NEW;
     this.rttMs = null;
@@ -195,6 +202,7 @@ export class Peer {
   async acceptOffer(offerBlob) {
     if (this.role !== 'guest') throw new ProtocolError('only the guest accepts an offer');
     const offer = decodeBlob(offerBlob, { expectRoom: this.room, expectKind: 'offer' });
+    if (offer.label) this.label = offer.label;          // adopt the slot the host invited us to
     await this._init();
     this._remoteFingerprint = sdpFingerprint(offer.sdp);
     await this._setRemote({ type: 'offer', sdp: offer.sdp });
@@ -205,6 +213,10 @@ export class Peer {
   async acceptAnswer(answerBlob) {
     if (this.role !== 'host') throw new ProtocolError('only the host accepts an answer');
     const answer = decodeBlob(answerBlob, { expectRoom: this.room, expectKind: 'answer' });
+    if (this.label !== null && answer.label !== this.label) {
+      throw new ProtocolError(`that answer is for slot ${JSON.stringify(answer.label)}, `
+        + `but this invite is for slot ${JSON.stringify(this.label)}`);
+    }
     this._remoteFingerprint = sdpFingerprint(answer.sdp);
     await this._setRemote({ type: 'answer', sdp: answer.sdp });
     return this.fingerprint;
@@ -216,7 +228,7 @@ export class Peer {
     this._localDescription = description;
     this._setState(STATE.SIGNALING);
     return encodeBlob({ kind: description.type, sdp, room: this.room,
-                        nonce: this.nonce, label: this.role });
+                        nonce: this.nonce, label: this.label });
   }
 
   /* ------------------------------------------------------------ lifecycle */
@@ -232,7 +244,7 @@ export class Peer {
     const config = { iceServers: servers, ...(backend ? { disableAutoNegotiation: true } : {}) };
     if (backend && this.config.bindAddress) config.bindAddress = this.config.bindAddress;
     this._pc = backend
-      ? new backend.Ctor(`bo1z-${this.role}-${this.room}`, config)
+      ? new backend.Ctor(`bo1z-${this.role}-${this.room}-${this.nonce}`, config)
       : new RTCPeerConnection(config);
 
     if (backend) {
@@ -621,10 +633,16 @@ export class Peer {
 
   _fail(error) {
     if (this._closed) return;
+    this._closed = true;
     this._setState(STATE.FAILED, { message: error.message });
     this._report(error);
     this._rejectReady(error);
+    this._rejectHello?.(error);
     this._teardown();
+    // A failed peer is gone, so `closed` must resolve. Otherwise whoever tracks the
+    // connection (a host's roster, a lobby's slots) never hears about a guest that
+    // vanished without a BYE, and its slot is held forever.
+    this._resolveClosed(this);
   }
 
   close({ remote = false } = {}) {
@@ -668,7 +686,7 @@ export class Peer {
 
   get stats() {
     return {
-      state: this.state, role: this.role, room: this.room, rttMs: this.rttMs,
+      state: this.state, role: this.role, room: this.room, label: this.label, rttMs: this.rttMs,
       bytesSent: this.bytesSent, bytesReceived: this.bytesReceived,
       framesSent: this.framesSent, framesDropped: this.framesDropped,
       fingerprint: this.fingerprint ?? null, remoteFingerprint: this._remoteFingerprint ?? null,
