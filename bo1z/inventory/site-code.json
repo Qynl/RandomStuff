@@ -1,0 +1,354 @@
+{
+  "schema": "bo1z-site-inventory/v1",
+  "source_index_sha256": "b370176be5786afa4e5fb2f69558a9940b288718303672b2196b4438ea020fe2",
+  "source_index_bytes": 491796,
+  "source_index_origin": "github.com/VinceGuyMan/vel-gg-bo1z-preservation preservation/SHA256SUMS.capture.txt (capture of 2026-10-08)",
+  "note": "Hashes are the reference capture's, not hashes of the files in ../site/, which are proxy reconstructions and cannot match byte for byte.",
+  "listed_file_count": 3656,
+  "by_kind": {
+    "cinematic video": 20,
+    "code": 63,
+    "emscripten glue module": 1,
+    "game pack payload": 144,
+    "image art": 49,
+    "other": 3378,
+    "wasm engine binary": 1
+  },
+  "code_file_count": 63,
+  "site_js_file_count": 18,
+  "site_code_files": [
+    {
+      "path": "evidence/live-maps.json",
+      "sha256": "f25c1c0f1e061f38e307755ca4be3b9b42ca80a14134d68c93038fc917e4d8e7",
+      "kind": "code"
+    },
+    {
+      "path": "evidence/live-menu-dom.html",
+      "sha256": "52bd1a97cf2ba618d1860811b7e0b569ac7533f9de1d90ac8923ea5d29cf9b0a",
+      "kind": "code"
+    },
+    {
+      "path": "evidence/offline-five-engine-test.json",
+      "sha256": "57ae3006fa5807153f8bd79d3ca7d0ef7e51b9c7b28bcd012f959acd76461850",
+      "kind": "code"
+    },
+    {
+      "path": "evidence/offline-smoke-test.json",
+      "sha256": "7376571f9189785df7ed0a8793dd648f6e3f80f5f8311c292904cd99a664a157",
+      "kind": "code"
+    },
+    {
+      "path": "metadata/errors.json",
+      "sha256": "38b2a4604c41912dc2386bf5440ba2b515d5f0f090fedc7961eefa5ff33a863d",
+      "kind": "code"
+    },
+    {
+      "path": "metadata/manifest-verification.json",
+      "sha256": "b9d66da400fe0411b2ccb268f396a15e451ad6f571d579a2d19b13defe566994",
+      "kind": "code"
+    },
+    {
+      "path": "metadata/responses.json",
+      "sha256": "0c42013f632513bf6ac64f6535c43d9129b7f5f6b33125eebf1ea3f0db4d4dec",
+      "kind": "code"
+    },
+    {
+      "path": "metadata/transport-groups.json",
+      "sha256": "b1087638ed2238601c495b272c3b66930d82bea858f83b3f3f8f48af846ed985",
+      "kind": "code"
+    },
+    {
+      "path": "serve.py",
+      "sha256": "fd10d2aa113172e1dfef3310dec53a5293e24369879ffb6c6a4db2c698056c30",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/artifacts/five-pipelines.json",
+      "sha256": "aeadbdbf35dfc146e577720dba89689288253b69b45447c1d73a8f2c285213e6",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/artifacts/five-programs.json",
+      "sha256": "e9382800a08070b4c1ef25b1076cad1e6ef602205bae185e839c2c1285110577",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/artifacts/kino-pipelines.json",
+      "sha256": "069f75048f4a1cc6d45fdf6920d77d0df0371e7a57303bf6d4bad925e000aae5",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/ascension/manifest.json",
+      "sha256": "7acf12df1fdaebf9290eae1c1dd9d2f91c0a3342cc150a7939334b175ed195ea",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/ascension.html",
+      "sha256": "be9e248a2c23c854cfad1c18cfa11361ab0fba8b103aa99ef9d18df87a7c123b",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/ascension.page.html",
+      "sha256": "be9e248a2c23c854cfad1c18cfa11361ab0fba8b103aa99ef9d18df87a7c123b",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/audio-worklet.js",
+      "sha256": "8d2bb6e5d1184b975e3555ac354a0a43829a368a91a2168ee9841cb2e3fa098f",
+      "kind": "code",
+      "reconstructed_here": false
+    },
+    {
+      "path": "site/bo1z/canvas.js",
+      "sha256": "6615890f0f29f492b6990e820e5491d81a740cb078267079fd21fdd57866ea67",
+      "kind": "code",
+      "reconstructed_here": false
+    },
+    {
+      "path": "site/bo1z/capabilities.js",
+      "sha256": "a3fa06776c28a1c4e17fee5660b0c754ccc947813adcf70053483de9cfffa374",
+      "kind": "code",
+      "reconstructed_here": true
+    },
+    {
+      "path": "site/bo1z/capability-worker.js",
+      "sha256": "81b32366c6c3792aaf5d158d73530abf64cdc157ab9e8648ffe037ceca2c0efc",
+      "kind": "code",
+      "reconstructed_here": true
+    },
+    {
+      "path": "site/bo1z/cotd/manifest.json",
+      "sha256": "594369314220125f3dbf0ceb20831ebf648d181799d41229447d64b88d38abf8",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/cotd.html",
+      "sha256": "aa19b783f2c43437da9d534a69f4c6650de4840a404c5724f662c7d4220e71e0",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/cotd.page.html",
+      "sha256": "aa19b783f2c43437da9d534a69f4c6650de4840a404c5724f662c7d4220e71e0",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/download-worker.js",
+      "sha256": "062e106f14033bd9f5573823a34ab81773d3e982810820283a9976279c2d241d",
+      "kind": "code",
+      "reconstructed_here": true
+    },
+    {
+      "path": "site/bo1z/dxs.js",
+      "sha256": "c6983d6171302a0e73a175bc73bdaa8abefdc7471e1ed1371d94f5a39c4ff9b2",
+      "kind": "code",
+      "reconstructed_here": false
+    },
+    {
+      "path": "site/bo1z/engine-download-worker.js",
+      "sha256": "9b93f198f20af9450a4e06b9d8f3445a508a8d5a52283f617950f5cfd1dbe607",
+      "kind": "code",
+      "reconstructed_here": false
+    },
+    {
+      "path": "site/bo1z/engine.js",
+      "sha256": "d0296c4b2bd78e83709c9a3533ea191af936b13c49ce8142a5c877c20b8c07af",
+      "kind": "code",
+      "reconstructed_here": false
+    },
+    {
+      "path": "site/bo1z/five.html",
+      "sha256": "548b91cabc984744f067ad2c47ab918a0515b656243033bebaa7443657af9910",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/five.page.html",
+      "sha256": "548b91cabc984744f067ad2c47ab918a0515b656243033bebaa7443657af9910",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/horde.js",
+      "sha256": "a5887e1d4d769ebb6aa098676db575f21999c0c81093a9ebaf7d554ca09ac8a1",
+      "kind": "code",
+      "reconstructed_here": false
+    },
+    {
+      "path": "site/bo1z/index.html",
+      "sha256": "bb4a694300b08c27829b08b6a7b4bcb167291c7136b485843a80c233b0d90dd5",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/input.js",
+      "sha256": "13863a91c7e0d987a49d680bb5d40e064b82cda1180b7901547d4b305ba5db02",
+      "kind": "code",
+      "reconstructed_here": false
+    },
+    {
+      "path": "site/bo1z/kino/manifest.json",
+      "sha256": "bfc2ad2daf211157d6baddc61eb7437a7cb2c0e3e1b79b97bce833a4bc5f1004",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/kino.html",
+      "sha256": "f4ae79decc3bde994ee9d761bc7472eef22f5e0550f74e703a5d4b461575d971",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/kino.page.html",
+      "sha256": "f4ae79decc3bde994ee9d761bc7472eef22f5e0550f74e703a5d4b461575d971",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/landing.js",
+      "sha256": "4d693a8481eb2d8cbb408171207f1d3a69b435b729faaee5357bc56011a91b3f",
+      "kind": "code",
+      "reconstructed_here": false
+    },
+    {
+      "path": "site/bo1z/manifest.json",
+      "sha256": "6f8ecd9acd1e2c8b6bd0119e78101cdd7e1384f71e265f6aee578a6dd3b67631",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/maps.js",
+      "sha256": "a0116675e10835242617cdc087b8c70e4bd0e7d12e69d3e07dd78b8cd150ab1f",
+      "kind": "code",
+      "reconstructed_here": true
+    },
+    {
+      "path": "site/bo1z/moon/manifest.json",
+      "sha256": "7b873777a6d644e5b163a99c90b857e8de5e4c268b1f88365544f4f11a1308ce",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/moon.html",
+      "sha256": "368c2dc6215d3c67471ab662908020578c51af992e6b1b3a63e36ed4c9b615f9",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/moon.page.html",
+      "sha256": "368c2dc6215d3c67471ab662908020578c51af992e6b1b3a63e36ed4c9b615f9",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/nacht/manifest.json",
+      "sha256": "002209b0cf65ba365f3290a5152385871c9a8add5da684d541313f3c8594cd51",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/nacht.html",
+      "sha256": "98673a523a21152681d5fe1ea2e2f49df87d00bb29d5b0f0d18a15b8ed3aed4b",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/nacht.page.html",
+      "sha256": "98673a523a21152681d5fe1ea2e2f49df87d00bb29d5b0f0d18a15b8ed3aed4b",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/opfs-icase.js",
+      "sha256": "865c37237c04a69ec689aa6e03c388241d78f8c915ead6dfc52ab26dd7c0fafb",
+      "kind": "code",
+      "reconstructed_here": false
+    },
+    {
+      "path": "site/bo1z/opus-worker.js",
+      "sha256": "b06453d07d61685d771766cf99d3013205df7ae9b09e14848fb41f703aaca9e8",
+      "kind": "code",
+      "reconstructed_here": false
+    },
+    {
+      "path": "site/bo1z/perf-overlay.js",
+      "sha256": "cde1a7685c27eb4646d9f1b3a6d890a54f680ee21aab7dd0d3b9a210a16bcd7c",
+      "kind": "code",
+      "reconstructed_here": false
+    },
+    {
+      "path": "site/bo1z/play.css",
+      "sha256": "b44b5fb50a6fe2923e77b77e6d51ed5c59f0405811a90b4dc19cfcb82a9508e7",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/play.js",
+      "sha256": "aa1dd0fbe00605e906fe78b07b9823a538993b651bf368d99ca506b702c1773a",
+      "kind": "code",
+      "reconstructed_here": false
+    },
+    {
+      "path": "site/bo1z/riese/manifest.json",
+      "sha256": "1ba98c6e13a08cadcfa5a029ce6f3f41f561b69218902a9196a2b01da2184e41",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/riese.html",
+      "sha256": "5f732ad0dc59030413da6d57eaeff613c8da55c69ec0eb4f7a1cf46ad716b0f8",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/riese.page.html",
+      "sha256": "5f732ad0dc59030413da6d57eaeff613c8da55c69ec0eb4f7a1cf46ad716b0f8",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/sha256.js",
+      "sha256": "65faaaca30ccede6e3521de9f3ec855cef184e8559c8847676d81bea5ed4ff9d",
+      "kind": "code",
+      "reconstructed_here": true
+    },
+    {
+      "path": "site/bo1z/shangrila/manifest.json",
+      "sha256": "5ef61305dd725b187338c142ce3017bb95bf4ee866f71d65b17d91638b422600",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/shangrila.html",
+      "sha256": "8be8eaf52ca644066d98352e8b3ed59d77774ffc381be2869a79f2766813deab",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/shangrila.page.html",
+      "sha256": "8be8eaf52ca644066d98352e8b3ed59d77774ffc381be2869a79f2766813deab",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/shinonuma/manifest.json",
+      "sha256": "194bd5967eea01ff56d12aed1619a73f6a4ac2ab0d5c610fe07449af5b8c2180",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/shinonuma.html",
+      "sha256": "bd6aff55b914f031e19ee1254c87396af3559ea76d47f557902579c5b2be1eb4",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/shinonuma.page.html",
+      "sha256": "bd6aff55b914f031e19ee1254c87396af3559ea76d47f557902579c5b2be1eb4",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/telemetry.js",
+      "sha256": "d69a86d0348a1475611e0ebda57a21d8447967f14105b43f16c08f0410935453",
+      "kind": "code",
+      "reconstructed_here": true
+    },
+    {
+      "path": "site/bo1z/verruckt/manifest.json",
+      "sha256": "4bd98e5dd1cee94951470f57783287261b4b5409233c9b88b2e15b29b30003c6",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/verruckt.html",
+      "sha256": "cceb7168869f774b8ef4369c4cff386020b6369088e30148c72a2c425ce26580",
+      "kind": "code"
+    },
+    {
+      "path": "site/bo1z/verruckt.page.html",
+      "sha256": "cceb7168869f774b8ef4369c4cff386020b6369088e30148c72a2c425ce26580",
+      "kind": "code"
+    },
+    {
+      "path": "verify.py",
+      "sha256": "82a1e06b56e4fd9694beb19bd47d49f53426f5de04ed8fdccf04e0ca1b841f00",
+      "kind": "code"
+    }
+  ]
+}

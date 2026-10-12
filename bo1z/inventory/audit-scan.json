@@ -1,0 +1,245 @@
+{
+  "schema": "bo1z-audit-scan/v1",
+  "files": [
+    {
+      "file": "capabilities.js",
+      "bytes": 6169,
+      "lines": 120,
+      "absolute_urls": [],
+      "hits": {
+        "fingerprint": [
+          {
+            "line": 5,
+            "pattern": "userAgent",
+            "code": "if (/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) |"
+          },
+          {
+            "line": 54,
+            "pattern": "userAgent",
+            "code": "message: /\\bEdg\\//.test(navigator.userAgent) ?"
+          }
+        ],
+        "persistence": [
+          {
+            "line": 21,
+            "pattern": "storage.persist",
+            "code": "[navigator.storage?.getDirectory && navigator.storage.estimate && navigator.storage.persist && navigator.locks, 'private file storage (OPFS, quota checks and We"
+          }
+        ]
+      }
+    },
+    {
+      "file": "capability-worker.js",
+      "bytes": 830,
+      "lines": 26,
+      "absolute_urls": [],
+      "hits": {
+        "storage": [
+          {
+            "line": 10,
+            "pattern": "OPFS",
+            "code": "[navigator.storage?.getDirectory && self.FileSystemFileHandle?.prototype.createSyncAccessHandle && navigator.locks, 'worker OPFS storage'],"
+          }
+        ]
+      }
+    },
+    {
+      "file": "download-worker.js",
+      "bytes": 34672,
+      "lines": 897,
+      "absolute_urls": [],
+      "hits": {
+        "network": [
+          {
+            "line": 37,
+            "pattern": "fetch(",
+            "code": "return await fetch(url, {"
+          },
+          {
+            "line": 255,
+            "pattern": "fetch(",
+            "code": "return opusWorkerPromise ??= fetch(new URL('./opus-worker.js', import.meta.url), {"
+          },
+          {
+            "line": 707,
+            "pattern": "fetch(",
+            "code": "const response = await fetch(manifestUrl, {"
+          },
+          {
+            "line": 834,
+            "pattern": "fetch(",
+            "code": "const response = await fetch(manifestUrl, {"
+          }
+        ],
+        "storage": [
+          {
+            "line": 112,
+            "pattern": "OPFS",
+            "code": "// Reopening it for every entry stalled createSyncAccessHandle on the 1,858-file"
+          },
+          {
+            "line": 197,
+            "pattern": "OPFS",
+            "code": "const access = await handle.createSyncAccessHandle();"
+          },
+          {
+            "line": 351,
+            "pattern": "OPFS",
+            "code": "const access = await handle.createSyncAccessHandle();"
+          },
+          {
+            "line": 515,
+            "pattern": "OPFS",
+            "code": "let access = await handle.createSyncAccessHandle();"
+          },
+          {
+            "line": 667,
+            "pattern": "OPFS",
+            "code": "access = await handle.createSyncAccessHandle();"
+          },
+          {
+            "line": 715,
+            "pattern": "OPFS",
+            "code": "root = await (await navigator.storage.getDirectory()).getDirectoryHandle(map.opfs, {"
+          },
+          {
+            "line": 723,
+            "pattern": "OPFS",
+            "code": "})).createSyncAccessHandle();"
+          },
+          {
+            "line": 845,
+            "pattern": "OPFS",
+            "code": "const pack = await (await navigator.storage.getDirectory()).getDirectoryHandle(map.opfs);"
+          }
+        ],
+        "fingerprint": [
+          {
+            "line": 389,
+            "pattern": "hardwareConcurrency",
+            "code": "length: Math.min(4, navigator.hardwareConcurrency || 4)"
+          }
+        ],
+        "obfuscation": [
+          {
+            "line": 310,
+            "pattern": "atob",
+            "code": "const head = Uint8Array.from(atob(meta.head), ch => ch.charCodeAt(0)),"
+          }
+        ]
+      }
+    },
+    {
+      "file": "maps.js",
+      "bytes": 6307,
+      "lines": 115,
+      "absolute_urls": [
+        "https://cdn.vel.gg",
+        "https://vel.gg"
+      ],
+      "hits": {
+        "network": [
+          {
+            "line": 95,
+            "pattern": "absolute URL literal",
+            "code": "// 'https://cdn.vel.gg'); download-worker.js then fetches pack bytes (Brotli parts as .br/, whole files with Range)"
+          },
+          {
+            "line": 101,
+            "pattern": "absolute URL literal",
+            "code": "export const PACK_ORIGIN = 'https://cdn.vel.gg';"
+          },
+          {
+            "line": 102,
+            "pattern": "absolute URL literal",
+            "code": "const PACK_ORIGIN_FOR = 'https://vel.gg';"
+          }
+        ]
+      }
+    },
+    {
+      "file": "sha256.js",
+      "bytes": 4603,
+      "lines": 127,
+      "absolute_urls": [],
+      "hits": {}
+    },
+    {
+      "file": "telemetry.js",
+      "bytes": 12317,
+      "lines": 405,
+      "absolute_urls": [],
+      "hits": {
+        "network": [
+          {
+            "line": 148,
+            "pattern": "sendBeacon",
+            "code": "if (final && text.length < beaconBytes && navigator.sendBeacon?.(TELEMETRY_URL, new Blob([text], {"
+          },
+          {
+            "line": 151,
+            "pattern": "fetch(",
+            "code": "fetch(TELEMETRY_URL, {"
+          },
+          {
+            "line": 178,
+            "pattern": "fetch(",
+            "code": "const ready = fetch(TELEMETRY_URL, {"
+          }
+        ],
+        "fingerprint": [
+          {
+            "line": 32,
+            "pattern": "unmasked GPU renderer",
+            "code": "vendor: gl.getParameter(debug ? debug.UNMASKED_VENDOR_WEBGL : gl.VENDOR),"
+          },
+          {
+            "line": 33,
+            "pattern": "unmasked GPU renderer",
+            "code": "renderer: gl.getParameter(debug ? debug.UNMASKED_RENDERER_WEBGL : gl.RENDERER),"
+          },
+          {
+            "line": 378,
+            "pattern": "userAgent",
+            "code": "userAgent: navigator.userAgent,"
+          },
+          {
+            "line": 379,
+            "pattern": "userAgent",
+            "code": "platform: navigator.userAgentData?.platform ?? navigator.platform,"
+          },
+          {
+            "line": 380,
+            "pattern": "hardwareConcurrency",
+            "code": "hardwareConcurrency: navigator.hardwareConcurrency ?? null,"
+          },
+          {
+            "line": 381,
+            "pattern": "deviceMemory",
+            "code": "deviceMemory: navigator.deviceMemory ?? null,"
+          },
+          {
+            "line": 383,
+            "pattern": "screen geometry",
+            "code": "width: screen.width,"
+          },
+          {
+            "line": 384,
+            "pattern": "screen geometry",
+            "code": "height: screen.height,"
+          },
+          {
+            "line": 385,
+            "pattern": "screen geometry",
+            "code": "availWidth: screen.availWidth,"
+          },
+          {
+            "line": 387,
+            "pattern": "screen geometry",
+            "code": "colorDepth: screen.colorDepth"
+          }
+        ]
+      }
+    }
+  ]
+}
