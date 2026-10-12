@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bo1z p2p — serverless co-op transport demo</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px; background: #14161a; color: #e6e6e6;
+         font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  h1 { font-size: 17px; margin: 0 0 4px; letter-spacing: .02em; }
+  .sub { color: #9aa0a6; margin: 0 0 20px; font-size: 12.5px; }
+  .grid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 16px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+  .card { background: #1b1e24; border: 1px solid #2a2f38; border-radius: 8px; padding: 14px; }
+  .card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .09em;
+             color: #9aa0a6; margin: 0 0 10px; font-weight: 600; }
+  label { display: block; font-size: 12px; color: #9aa0a6; margin: 10px 0 4px; }
+  textarea { width: 100%; height: 74px; resize: vertical; background: #10131a; color: #cfe3ff;
+             border: 1px solid #2a2f38; border-radius: 6px; padding: 8px; font: 11.5px/1.45 inherit; }
+  button { background: #2b3240; color: #e6e6e6; border: 1px solid #3a4250; border-radius: 6px;
+           padding: 8px 14px; font: inherit; font-size: 13px; cursor: pointer; margin: 8px 6px 0 0; }
+  button:hover:not(:disabled) { background: #353d4d; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.primary { background: #6b3a2a; border-color: #8a4c36; }
+  button.primary:hover:not(:disabled) { background: #7d452f; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  select, input[type=text] { background: #10131a; color: #e6e6e6; border: 1px solid #2a2f38;
+           border-radius: 6px; padding: 7px 8px; font: inherit; font-size: 13px; }
+  canvas { width: 100%; height: 260px; background: #0d0f13; border: 1px solid #2a2f38;
+           border-radius: 6px; display: block; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px,1fr)); gap: 8px; margin-top: 12px; }
+  .stat { background: #10131a; border: 1px solid #232833; border-radius: 6px; padding: 8px 10px; }
+  .stat b { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em;
+            color: #7d8590; font-weight: 600; }
+  .stat span { font-size: 15px; color: #e6e6e6; }
+  #log { height: 150px; overflow-y: auto; background: #10131a; border: 1px solid #232833;
+         border-radius: 6px; padding: 8px; font-size: 11.5px; white-space: pre-wrap; }
+  .ok { color: #7ee787; } .warn { color: #f0b429; } .err { color: #ff7b72; } .dim { color: #7d8590; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px;
+          border: 1px solid #3a4250; background: #10131a; }
+  .pill.open { border-color: #2ea043; color: #7ee787; }
+  .pill.failed { border-color: #da3633; color: #ff7b72; }
+  code { background: #10131a; padding: 1px 5px; border-radius: 4px; color: #cfe3ff; }
+  .note { font-size: 12px; color: #9aa0a6; margin-top: 10px; }
+</style>
+</head>
+<body>
+<h1>bo1z p2p — serverless transport demo</h1>
+<p class="sub">
+  Two peers, no lobby server, no matchmaking, no relay, no backend. Each side produces one
+  blob; you carry it across by hand. That exchange is the rendezvous <em>and</em> the
+  authentication: the DTLS fingerprint rides inside the blob, so whoever hands you the blob
+  is provably whoever you end up connected to.
+</p>
+
+<div class="grid">
+  <div class="card">
+    <h2>1 · Session</h2>
+    <div class="row">
+      <label style="margin:0">Room code</label>
+      <input type="text" id="room" size="11" spellcheck="false">
+      <button id="reroll">New code</button>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <label style="margin:0">This peer is the</label>
+      <select id="role">
+        <option value="host">Host (authoritative, creates the offer)</option>
+        <option value="guest">Guest (accepts the offer)</option>
+      </select>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <label style="margin:0">ICE servers</label>
+      <select id="ice">
+        <option value="">none — truly serverless (same machine / LAN)</option>
+        <option value="stun:stun.l.google.com:19302">Google public STUN (cross-network)</option>
+        <option value="stun:stun.cloudflare.com:3478">Cloudflare public STUN</option>
+      </select>
+    </div>
+    <p class="note">
+      STUN never carries game data — it only tells a peer its own public address. It is needed
+      when the two players are on different home networks. On one machine or one LAN, leave it
+      at <code>none</code> and nothing outside this page is contacted at all.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>2 · Exchange blobs</h2>
+    <label for="out">Your blob — send this to the other player</label>
+    <textarea id="out" readonly spellcheck="false" placeholder="Choose a role, then press Start."></textarea>
+    <div class="row">
+      <button id="start" class="primary">Start</button>
+      <button id="copy" disabled>Copy</button>
+      <span id="state" class="pill">idle</span>
+    </div>
+    <label for="in">Their blob — paste it here</label>
+    <textarea id="in" spellcheck="false" placeholder="BO1ZP2P1.…"></textarea>
+    <div class="row">
+      <button id="accept" disabled>Connect</button>
+      <button id="close" disabled>Disconnect</button>
+    </div>
+  </div>
+</div>
+
+<div class="grid" style="margin-top:16px">
+  <div class="card">
+    <h2>3 · Host-authoritative movement</h2>
+    <canvas id="game" width="800" height="520"></canvas>
+    <p class="note">
+      Move with <code>WASD</code> or the arrows. Your own square is client-side predicted, so it
+      responds instantly; the other player is drawn from interpolated snapshots, deliberately
+      100 ms in the past so a 30 Hz stream with jitter still looks smooth. Only the host
+      simulates — the guest sends inputs and renders what comes back.
+    </p>
+    <div class="stats">
+      <div class="stat"><b>state</b><span id="s-state">—</span></div>
+      <div class="stat"><b>rtt</b><span id="s-rtt">—</span></div>
+      <div class="stat"><b>host tick</b><span id="s-tick">—</span></div>
+      <div class="stat"><b>snapshot buffer</b><span id="s-buffer">—</span></div>
+      <div class="stat"><b>inputs awaiting ack</b><span id="s-pending">—</span></div>
+      <div class="stat"><b>corrections</b><span id="s-corr">—</span></div>
+      <div class="stat"><b>frames dropped</b><span id="s-dropped">—</span></div>
+      <div class="stat"><b>bytes sent / received</b><span id="s-bytes">—</span></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <label style="margin:0">Simulated loss on unreliable frames</label>
+      <select id="loss">
+        <option value="0">0 %</option><option value="0.05">5 %</option>
+        <option value="0.15">15 %</option><option value="0.3">30 %</option>
+        <option value="0.6">60 %</option>
+      </select>
+      <span class="note" style="margin:0">— watch reconciliation hold the two views together</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>4 · Log</h2>
+    <div id="log"></div>
+    <p class="note">
+      Open this page twice (two tabs, two windows, or two machines) and make one Host and one
+      Guest. They must agree on the room code. Nothing is stored, nothing is uploaded, and with
+      ICE servers set to <code>none</code> the page makes no network request at all after loading.
+    </p>
+  </div>
+</div>
+
+<script type="module" src="./demo.js"></script>
+</body>
+</html>

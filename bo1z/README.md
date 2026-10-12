@@ -1,7 +1,9 @@
-# vel.gg/bo1z — source review
+# vel.gg/bo1z — source review, hardening, and serverless co-op
 
 A safety review and partial source capture of **[vel.gg/bo1z](https://vel.gg/bo1z/)**,
-the browser port of *Call of Duty: Black Ops* Zombies.
+the browser port of *Call of Duty: Black Ops* Zombies — plus three pieces of new work
+built on top of it: a privacy hardening kit, a documented performance map, and a
+**peer-to-peer multiplayer layer that needs no server of any kind**.
 
 **Verdict: nothing malicious found in anything reviewed.** The site's code talks to
 exactly two hosts (`vel.gg` and its own `cdn.vel.gg`), contains no `eval`, no HTML
@@ -10,6 +12,14 @@ byte it downloads. One real privacy finding: it posts performance telemetry,
 including your GPU model, to its own origin — opt out with `?telemetry=0`.
 Details, and the gaps this review could not close, are in
 [SECURITY-AUDIT.md](SECURITY-AUDIT.md).
+
+## What was added after the review
+
+| | | |
+| --- | --- | --- |
+| **[MULTIPLAYER.md](MULTIPLAYER.md)** + [`p2p/`](p2p/) | Serverless co-op: WebRTC data channel, copy-paste signalling, host-authoritative netcode with prediction, reconciliation and interpolation. **No signalling server, no relay, no database.** `iceServers: []` is asserted empty by the test suite. | 20/20 checks pass, including two real peers over real ICE/DTLS/SCTP and bounded drift under 25 % packet loss |
+| **[hardening/HARDENING.md](hardening/HARDENING.md)** | The "sketchy stuff", removed three ways: the site's own `?telemetry=0` opt-out, two uBlock filters, and a userscript that forces the opt-out *and* pins egress to the two audited hosts so a future deploy cannot add a tracker silently. | 19/19 checks pass, run headless in a `node:vm` sandbox |
+| **[PERFORMANCE.md](PERFORMANCE.md)** | Where the lag actually comes from, and every knob that exists, cited to `file:line`. Includes the site's own measured numbers (renderer init waited 6.5–9.5 s, sound init 1–13 s) and the native build's five mod dvars. | **Makes no claim to have improved anything** — there is no browser, no wasm and no 6.35 GB of packs here to measure against |
 
 > **Read this before publishing anything.** `Qynl/RandomStuff` is a **public**
 > repository. The code here is scraped, unlicensed third-party source, and it drives
@@ -24,6 +34,8 @@ bo1z/
 ├── README.md                  this file
 ├── SECURITY-AUDIT.md          the actual review: findings, egress surface, verdicts
 ├── PROVENANCE.md              where the bytes came from, what is lossy, rights
+├── MULTIPLAYER.md             the serverless co-op layer: design, API, caveats
+├── PERFORMANCE.md             every perf knob that exists, cited to file:line
 ├── SHA256SUMS.txt             hashes of every file in this folder
 ├── site/                      6 reconstructed JS modules from the live site
 ├── raw-capture/               the verbatim proxy output those were derived from
@@ -31,12 +43,24 @@ bo1z/
 │   ├── SHA256SUMS.capture.txt SHA-256 of all 3,656 files in an independent capture
 │   ├── site-code.json         the 63 code files, with hashes + reconstruction status
 │   └── audit-scan.json        machine-readable output of the danger-pattern scan
-└── tools/
-    ├── reconstruct.py         raw-capture/ → site/ (unescape, reformat, validate)
-    ├── verify-sha256.mjs      runs reconstructed sha256.js against node:crypto
-    ├── audit-scan.py          static danger-pattern scanner
-    ├── build_inventory.py     regenerates inventory/ from the capture index
-    └── mirror-site.py         ★ byte-exact download + verification (run this at home)
+├── tools/
+│   ├── reconstruct.py         raw-capture/ → site/ (unescape, reformat, validate)
+│   ├── verify-sha256.mjs      runs reconstructed sha256.js against node:crypto
+│   ├── audit-scan.py          static danger-pattern scanner
+│   ├── build_inventory.py     regenerates inventory/ from the capture index
+│   └── mirror-site.py         ★ byte-exact download + verification (run this at home)
+├── hardening/                 NEW: turn the one finding off, three ways
+│   ├── HARDENING.md           what is collected, what each layer does, the knob table
+│   ├── ublock-filters.txt     two static filters for uBlock Origin / AdGuard
+│   ├── vel-gg-bo1z-hardening.user.js   opt-out + egress allowlist
+│   └── test-userscript.mjs    19 checks, headless (node:vm, no browser)
+└── p2p/                       NEW: multiplayer with no server in the back
+    ├── protocol.js            frame codec, chunking, blob signalling, room codes
+    ├── transport.js           Peer: one data channel, reliable + unreliable streams
+    ├── netcode.js             host-authoritative snapshots, prediction, reconciliation
+    ├── demo.html / demo.js    browser demo: paste two blobs, move with WASD
+    ├── test/run-tests.mjs     20 checks, two real peers over real ICE/DTLS/SCTP
+    └── package.json           npm test / npm run demo
 ```
 
 ## The catch, stated plainly
@@ -71,7 +95,20 @@ python3 tools/audit-scan.py             # rewrites inventory/audit-scan.json
 
 # 4. get byte-exact sources and verify them (not possible in the sandbox)
 python3 tools/mirror-site.py --output ~/bo1z-src
+
+# 5. test the hardening userscript (no browser needed)
+node hardening/test-userscript.mjs      # 19 passed, 0 failed
+
+# 6. test the serverless multiplayer stack, then play it
+cd p2p && npm install && npm test       # 20 passed, 0 failed
+npm run demo                            # → http://localhost:8080/demo.html, open twice
 ```
+
+Steps 5 and 6 need nothing but Node; step 6's `npm install` pulls
+[`node-datachannel`](https://github.com/murat-dogan/node-datachannel) **for the
+tests only**, so the suite can exercise a real ICE/DTLS/SCTP handshake instead of a
+mock. Nothing in `p2p/` depends on it at runtime — the browser path uses the
+platform's own `RTCPeerConnection`.
 
 ## What is deliberately not here
 

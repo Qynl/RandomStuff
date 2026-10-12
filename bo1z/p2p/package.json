@@ -1,0 +1,14 @@
+{
+  "name": "bo1z-p2p",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Serverless WebRTC transport and host-authoritative netcode prototype for vel.gg/bo1z co-op research. Browser code has zero dependencies; node-datachannel is a test-only backend so the transport can be exercised with real ICE/DTLS in CI or locally.",
+  "scripts": {
+    "test": "node test/run-tests.mjs",
+    "demo": "python3 -m http.server 8080 --bind 0.0.0.0"
+  },
+  "devDependencies": {
+    "node-datachannel": "^0.33.4"
+  }
+}

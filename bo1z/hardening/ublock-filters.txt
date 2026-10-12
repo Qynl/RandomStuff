@@ -1,0 +1,50 @@
+! Title:       vel.gg/bo1z hardening
+! Version:     2026-10-12
+! Description: Blocks the one privacy finding in the bo1z security review.
+!              Paste into uBlock Origin > Dashboard > "My filters" > Apply changes.
+!              Works identically in AdGuard as a custom filter.
+!
+! ---------------------------------------------------------------------------
+! What this does, and why it is the only rule you need
+! ---------------------------------------------------------------------------
+! The security review (../SECURITY-AUDIT.md) found no tracker, no analytics, no
+! ad network and no third-party script anywhere in the site's code. Its egress
+! surface is exactly two first-party origins: vel.gg (pages, manifests, videos)
+! and cdn.vel.gg (an R2 bucket, CORS-locked to https://vel.gg).
+!
+! The single finding is a same-origin diagnostics endpoint at /bo1z/telemetry
+! that POSTs your GPU vendor/renderer string, screen geometry, device memory,
+! hardware concurrency, frame-time histograms, the last 300 console lines and up
+! to 20 error stacks with full stack traces.
+!
+! telemetry.js:177 runs one GET probe of that endpoint at start-up. Sends happen
+! only if the probe answers { "enabled": true } - if the probe fails for any
+! reason, `enabled` becomes false and every queued record is dropped, never
+! posted (telemetry.js:180-192). So blocking the endpoint below switches the
+! whole module off from the outside, without editing the site's code.
+!
+! Every send path swallows its own errors (`.catch(() => {})` at telemetry.js:158,
+! `.catch(() => null)` at :181, sendBeacon's return value checked at :148), so a
+! blocked request cannot break the game.
+
+||vel.gg/bo1z/telemetry^
+||vel.gg/telemetry^
+
+! ---------------------------------------------------------------------------
+! Belt-and-braces: the same thing from the other direction
+! ---------------------------------------------------------------------------
+! ?telemetry=0 (or =off) is read first, at telemetry.js:115, before anything is
+! built or sent - see ../hardening/HARDENING.md for the bookmarklet. Use both:
+! the URL knob stops all POSTs, this filter additionally stops the one empty GET
+! probe. Neither alone leaks payload data; together they are silent.
+
+! ---------------------------------------------------------------------------
+! Deliberately NOT blocked
+! ---------------------------------------------------------------------------
+! cdn.vel.gg     - the asset CDN. Blocking it breaks every map download. It is
+!                  first-party (Cloudflare R2, same operators) and every byte it
+!                  serves is SHA-256-verified against a validated manifest
+!                  before it is written to OPFS.
+! vel.gg         - the site itself.
+! No wildcard rules are included: the review found nothing else to block, and a
+! broad ||vel.gg^ rule would break the game for no gain.

@@ -1,3 +1,4 @@
 # byte-exact mirror output from tools/mirror-site.py — large, scraped, and reproducible
 mirror/
 __pycache__/
+node_modules/
