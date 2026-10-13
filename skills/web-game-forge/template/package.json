@@ -1,0 +1,10 @@
+{
+  "name": "{{SLUG}}",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "{{TITLE}} - a browser game",
+  "scripts": {
+    "start": "python3 -m http.server 8080 --bind 0.0.0.0"
+  }
+}
