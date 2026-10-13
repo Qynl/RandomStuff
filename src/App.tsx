@@ -1,55 +1,69 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { CosmicNoiseGenerator } from './lib/cosmicNoise';
-import { voidChatEngine } from './lib/chatEngine';
+import { voidSearchEngine, SearchDocument } from './lib/searchEngine';
 import { audioSonifier } from './lib/audioSonifier';
-import { ChatMessage, CosmicSourceType } from './types';
+import { CosmicSourceType } from './types';
 
-import { ChatHeader } from './components/ChatHeader';
-import { ChatFeed } from './components/ChatFeed';
-import { ChatInput } from './components/ChatInput';
-import { SplitChatView } from './components/SplitChatView';
-import { MessageInspectorModal } from './components/MessageInspectorModal';
+import { SearchHeader } from './components/SearchHeader';
+import { SearchHome } from './components/SearchHome';
+import { SearchResults } from './components/SearchResults';
+import { DocumentReaderModal } from './components/DocumentReaderModal';
+import { IndexDocumentModal } from './components/IndexDocumentModal';
 import { TelemetryDrawer } from './components/TelemetryDrawer';
 import { ProtocolSpecModal } from './components/ProtocolSpecModal';
 import { CliDemoModal } from './components/CliDemoModal';
 
 export function App() {
-  // Cosmic Carrier State
+  // Navigation & Search State
+  const [isHome, setIsHome] = useState(true);
+  const [query, setQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [searchResults, setSearchResults] = useState<Array<{ doc: SearchDocument; score: number }>>([]);
+  const [executionTimeMs, setExecutionTimeMs] = useState(0);
+
+  // Document Reader & Modal State
+  const [selectedDoc, setSelectedDoc] = useState<SearchDocument | null>(null);
+  const [isIndexModalOpen, setIsIndexModalOpen] = useState(false);
+  const [isSpecOpen, setIsSpecOpen] = useState(false);
+  const [isCliOpen, setIsCliOpen] = useState(false);
+
+  // Cosmic Carrier & Audio State
   const [currentSource, setCurrentSource] = useState<CosmicSourceType>('cmb');
   const cosmicGenRef = useRef<CosmicNoiseGenerator>(new CosmicNoiseGenerator());
   const [samples, setSamples] = useState<Float32Array>(() => new Float32Array(2048));
+  const [audioActive, setAudioActive] = useState(false);
+  const [isTelemetryOpen, setIsTelemetryOpen] = useState(false);
 
-  // Chat State
-  const [messages, setMessages] = useState<ChatMessage[]>(() => voidChatEngine.getMessages());
-  const [activeIdentity, setActiveIdentity] = useState<'alice' | 'bob' | 'charlie'>('alice');
-  const [viewMode, setViewMode] = useState<'chat' | 'split'>('chat');
-  const [activeKey, setActiveKey] = useState<string>(() => voidChatEngine.getActiveKey());
-  const [inspectedMessage, setInspectedMessage] = useState<ChatMessage | null>(null);
+  // Execute Search
+  const performSearch = (searchQuery: string, category: string = categoryFilter) => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setIsHome(true);
+      return;
+    }
 
-  // Audio State
-  const [audioActive, setAudioActive] = useState<boolean>(false);
+    const { results, executionTimeMs: timeMs } = voidSearchEngine.search(q, category);
+    setSearchResults(results);
+    setExecutionTimeMs(timeMs);
+    setIsHome(false);
+  };
 
-  // Telemetry & DSP state
-  const [isTransmitting, setIsTransmitting] = useState<boolean>(false);
-  const [currentSnrDb, setCurrentSnrDb] = useState<number>(-20);
-  const [chipsPerBit, setChipsPerBit] = useState<number>(512);
-  const [correlationValues, setCorrelationValues] = useState<number[]>([0.02, -0.01, 0.28, -0.02]);
-  const [peakCorrelation, setPeakCorrelation] = useState<number>(0.28);
+  // Category filter changes
+  const handleSelectCategory = (cat: string) => {
+    setCategoryFilter(cat);
+    performSearch(query, cat);
+  };
 
-  // Modals
-  const [isSpecOpen, setIsSpecOpen] = useState<boolean>(false);
-  const [isCliOpen, setIsCliOpen] = useState<boolean>(false);
+  // Cosmic Random (Feeling Lucky)
+  const handleFeelingLucky = () => {
+    const allDocs = voidSearchEngine.getAllDocuments();
+    const randomDoc = allDocs[Math.floor(Math.random() * allDocs.length)];
+    if (randomDoc) {
+      setSelectedDoc(randomDoc);
+    }
+  };
 
-  // Subscribe to void chat engine
-  useEffect(() => {
-    const unsubscribe = voidChatEngine.subscribe((newMsg) => {
-      setMessages([...voidChatEngine.getMessages()]);
-      setPeakCorrelation(newMsg.peakCorrelation);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // Periodic ambient cosmic noise buffer generation
+  // Periodic ambient noise loop for live DSP
   useEffect(() => {
     const interval = setInterval(() => {
       const buffer = cosmicGenRef.current.generateBuffer(currentSource, 2048);
@@ -58,118 +72,106 @@ export function App() {
     return () => clearInterval(interval);
   }, [currentSource]);
 
-  // Transmit Message handler
-  const handleSendMessage = async (
-    text: string,
-    snrDb: number,
-    chips: number,
-    acousticBeam: boolean
-  ) => {
-    setIsTransmitting(true);
-    setCurrentSnrDb(snrDb);
-    setChipsPerBit(chips);
-
-    const msg = await voidChatEngine.transmitMessage(
-      activeIdentity,
-      text,
-      snrDb,
-      chips,
-      currentSource,
-      activeKey,
-      acousticBeam
-    );
-
-    setPeakCorrelation(msg.peakCorrelation);
-    setTimeout(() => {
-      setIsTransmitting(false);
-    }, 500);
-  };
-
-  // Rotate Key
-  const handleRotateKey = () => {
-    const chars = '0123456789abcdef';
-    let newKey = '';
-    for (let i = 0; i < 32; i++) {
-      newKey += chars[Math.floor(Math.random() * chars.length)];
-    }
-    setActiveKey(newKey);
-    voidChatEngine.setActiveKey(newKey);
-  };
-
   // Toggle WebAudio Sonifier
   const handleToggleAudio = () => {
     const active = audioSonifier.toggle(samples);
     setAudioActive(active);
   };
 
+  // Document indexed callback
+  const handleDocumentIndexed = (newDoc: SearchDocument) => {
+    setSelectedDoc(newDoc);
+    if (!isHome) {
+      performSearch(query);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-void-950 text-slate-100 flex flex-col font-mono selection:bg-cyan-500/30 selection:text-cyan-200">
-      {/* Chat Navigation Bar */}
-      <ChatHeader
+      {/* Search Header */}
+      <SearchHeader
+        isHome={isHome}
+        query={query}
+        onQueryChange={setQuery}
+        onSearch={(q) => performSearch(q)}
+        onGoHome={() => {
+          setIsHome(true);
+          setQuery('');
+        }}
         currentSource={currentSource}
         onSelectSource={setCurrentSource}
-        activeIdentity={activeIdentity}
-        onSelectIdentity={setActiveIdentity}
-        viewMode={viewMode}
-        onToggleViewMode={setViewMode}
-        activeKey={activeKey}
-        onRotateKey={handleRotateKey}
         audioActive={audioActive}
         onToggleAudio={handleToggleAudio}
-        onOpenSpec={() => setIsSpecOpen(true)}
-        onOpenCli={() => setIsCliOpen(true)}
+        onOpenIndexModal={() => setIsIndexModalOpen(true)}
+        onToggleTelemetry={() => setIsTelemetryOpen(!isTelemetryOpen)}
+        isTelemetryOpen={isTelemetryOpen}
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col max-w-7xl w-full mx-auto overflow-hidden">
-        {viewMode === 'chat' ? (
-          <div className="flex-1 flex flex-col justify-between overflow-hidden">
-            {/* Scrollable Chat Feed */}
-            <ChatFeed
-              messages={messages}
-              onInspectMessage={setInspectedMessage}
-            />
-
-            {/* Chat Input & Transmission Controls */}
-            <ChatInput
-              onSendMessage={handleSendMessage}
-              activeIdentity={activeIdentity}
-              currentSource={currentSource}
-            />
-          </div>
+      <main className="flex-1 flex flex-col justify-between overflow-hidden">
+        {isHome ? (
+          <SearchHome
+            query={query}
+            onQueryChange={setQuery}
+            onSearch={(q) => performSearch(q)}
+            onFeelingLucky={handleFeelingLucky}
+          />
         ) : (
-          /* Dual-Node Matrix (Split View: Alice | Wiretap | Bob) */
-          <div className="flex-1 flex flex-col justify-between overflow-hidden">
-            <SplitChatView
-              messages={messages}
-              onSendMessage={handleSendMessage}
-              activeKey={activeKey}
-            />
-            <ChatInput
-              onSendMessage={handleSendMessage}
-              activeIdentity={activeIdentity}
-              currentSource={currentSource}
-            />
-          </div>
+          <SearchResults
+            query={query}
+            results={searchResults}
+            executionTimeMs={executionTimeMs}
+            categoryFilter={categoryFilter}
+            onSelectCategory={handleSelectCategory}
+            onOpenDocument={(doc) => setSelectedDoc(doc)}
+            onOpenIndexModal={() => setIsIndexModalOpen(true)}
+          />
         )}
 
-        {/* Collapsible RF & DSP Telemetry Drawer */}
+        {/* Telemetry Drawer */}
         <TelemetryDrawer
           samples={samples}
           currentSource={currentSource}
-          isTransmitting={isTransmitting}
-          snrDb={currentSnrDb}
-          chipsPerBit={chipsPerBit}
+          isTransmitting={false}
+          snrDb={-22}
+          chipsPerBit={512}
           lockStatus="LOCKED"
-          correlationValues={correlationValues}
-          peakCorrelation={peakCorrelation}
+          correlationValues={[0.02, 0.28, -0.01, 0.04]}
+          peakCorrelation={0.28}
         />
       </main>
 
-      {/* Message Forensics & Wiretap Modal */}
-      <MessageInspectorModal
-        message={inspectedMessage}
-        onClose={() => setInspectedMessage(null)}
+      {/* Footer */}
+      <footer className="border-t border-slate-900 bg-void-950/90 px-4 py-2 text-center text-[11px] text-slate-500 font-mono">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
+          <div>
+            VOID-SEARCH // The Sovereign Cosmic Search Engine // 100% In-Browser // Zero Backend
+          </div>
+          <div className="flex items-center space-x-3 text-slate-400">
+            <button onClick={() => setIsSpecOpen(true)} className="hover:text-cyan-300">
+              Protocol Spec
+            </button>
+            <span>•</span>
+            <button onClick={() => setIsCliOpen(true)} className="hover:text-emerald-300">
+              CLI & SDK
+            </button>
+            <span>•</span>
+            <span>External Packets: <strong className="text-emerald-400">0</strong></span>
+          </div>
+        </div>
+      </footer>
+
+      {/* Document Reader Modal */}
+      <DocumentReaderModal
+        document={selectedDoc}
+        onClose={() => setSelectedDoc(null)}
+      />
+
+      {/* Index Document Modal */}
+      <IndexDocumentModal
+        isOpen={isIndexModalOpen}
+        onClose={() => setIsIndexModalOpen(false)}
+        onDocumentIndexed={handleDocumentIndexed}
       />
 
       {/* Protocol Whitepaper Modal */}
@@ -178,11 +180,11 @@ export function App() {
         onClose={() => setIsSpecOpen(false)}
       />
 
-      {/* CLI & SDK Integration Modal */}
+      {/* CLI Modal */}
       <CliDemoModal
         isOpen={isCliOpen}
         onClose={() => setIsCliOpen(false)}
-        activeKey={activeKey}
+        activeKey="e4a9f201d4c88319a0bf23847591cde4"
       />
     </div>
   );
