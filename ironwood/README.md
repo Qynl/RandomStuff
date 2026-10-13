@@ -63,17 +63,36 @@ send inputs at 30 Hz and run local prediction for their own soldier.
 Touch controls (dual sticks, fire, ADS, crouch, reload) appear automatically on
 touch devices.
 
+## Verification
+
+The browser is the real target, but most of the game is pure logic, so it is
+tested head-less in Node (a stub texture bakery stands in for the canvas one):
+
+```
+node tools/smoke-test.mjs    # 23 checks: world, nav graph, bridges, physics,
+                             # weapons, bot firefights, match rules, netcode
+node tools/nav-check.mjs     # connectivity report: components, landmarks, routes
+node tools/nav-probe.mjs x,z # why is this spot (not) walkable?
+node tools/check-modules.mjs # every import resolves
+```
+
+`smoke-test.mjs` boots the world, drops two bot teams into each other, and fails
+the build if nobody shoots, if a bridge cannot be walked, if a body can climb a
+cliff or wade into deep water, or if the spawns end up disconnected.
+
 ## Status / roadmap
 
 - [x] Project scaffold, vendored three.js, dev server, module checker
 - [x] Procedural texture library + post processing + sky/lighting
-- [x] World generation (terrain, ruins, jungle, nav grid, minimap data)
-- [ ] FX layer (tracers, impacts, decals, smoke, explosions)
-- [ ] Soldier rigs + animation
-- [ ] Weapon system + procedural viewmodels
-- [ ] Player controller, bot AI, match rules
-- [ ] HUD + menus + matchmaking flow
-- [ ] Multiplayer wiring (host authoritative + pairing UI)
+- [x] World generation (terrain, river crossings, ruins, jungle, minimap data)
+- [x] Navigation: wading/steepness rules, island stitching, one connected graph
+- [x] FX layer (tracers, impacts, decals, smoke, explosions)
+- [x] Soldier rigs + animation
+- [x] Weapon system + procedural viewmodels
+- [x] Player controller, bot AI, match rules
+- [x] HUD + menus + matchmaking flow
+- [x] Multiplayer wiring (host authoritative + pairing UI)
+- [ ] Stage 3 polish: audio pass, more cover geometry, sniper scope FX, damage model tuning
 
 ## Legal
 
