@@ -45,9 +45,19 @@ const jsFiles = files.filter((f) => f.endsWith('.js'));
 for (const f of jsFiles) {
   const src = fs.readFileSync(f, 'utf8');
   const rel = path.relative(dir, f);
-  for (const m of src.matchAll(/(?:import|export)\s[^'"]*?from\s+['"](\.{1,2}\/[^'"]+)['"]/g)) {
-    const target = path.resolve(path.dirname(f), m[1]);
-    if (!fs.existsSync(target)) fail(`${rel}: import "${m[1]}" does not resolve`);
+  for (const m of src.matchAll(/(?:import|export)\s[^'"]*?from\s+['"]([^'"]+)['"]/g)) {
+    const spec = m[1];
+    if (spec.startsWith('.') || spec.startsWith('/')) {
+      const target = path.resolve(path.dirname(f), spec);
+      if (!fs.existsSync(target)) fail(`${rel}: import "${spec}" does not resolve`);
+    } else {
+      // Bare package import (for example "three"): must be installed locally.
+      const parts = spec.split('/');
+      const pkg = spec.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
+      if (!fs.existsSync(path.join(dir, 'node_modules', pkg))) {
+        fail(`${rel}: package "${pkg}" is not installed (run npm install in ${dir})`);
+      }
+    }
   }
   const syntax = spawnSync(process.execPath, ['--check', f], { encoding: 'utf8' });
   if (syntax.status !== 0) fail(`${rel}: syntax error\n${syntax.stderr.trim()}`);

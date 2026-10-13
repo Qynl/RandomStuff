@@ -1,4 +1,4 @@
-# Engine API (template/src/engine)
+# Engine API (template-2d/src/engine, 2D tier)
 
 All modules are plain ES modules. Import them with relative paths.
 

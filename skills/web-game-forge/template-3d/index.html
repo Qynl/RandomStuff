@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>{{TITLE}}</title>
+  <!-- Resolves the bare "three" imports to the locally installed package (npm install). -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./node_modules/three/build/three.module.js",
+      "three/addons/": "./node_modules/three/examples/jsm/"
+    }
+  }
+  </script>
+  <style>
+    :root {
+      --ink: #eef2ff;
+      --dim: #9aa6c7;
+      --steel: #7fb8c9;
+      --ember: #ffb347;
+      --blood: #ff3d7f;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #05060a; overflow: hidden; color: var(--ink);
+      font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif; }
+    canvas#game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; }
+
+    /* ---------- HUD ---------- */
+    #hud { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity .4s; }
+    #hud.show { opacity: 1; }
+    .panel { position: absolute; }
+    #vitals { left: 28px; bottom: 26px; width: min(360px, 44vw); }
+    .hp-row { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+    #hp-text { font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; text-shadow: 0 2px 10px rgba(0,0,0,.6); }
+    .label { font-size: 11px; letter-spacing: .24em; text-transform: uppercase; color: var(--dim); }
+    .bar { position: relative; height: 12px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); border-radius: 2px; overflow: hidden; }
+    .bar > i { position: absolute; inset: 0; transform-origin: left center; transition: transform .12s linear; }
+    #hp-fill { background: linear-gradient(90deg, #ff3d7f, #ff8a5c); box-shadow: 0 0 14px rgba(255,61,127,.5); }
+    #st { height: 6px; margin-top: 10px; }
+    #st-fill { background: linear-gradient(90deg, #7fb8c9, #bff3ff); }
+    #st-fill.low { background: #ff5c5c; animation: blink .5s steps(2) infinite; }
+    @keyframes blink { 50% { opacity: .3; } }
+    #hint { margin-top: 12px; font-size: 12px; color: var(--dim); letter-spacing: .06em; }
+    #hint b { color: var(--ink); font-weight: 600; }
+
+    #top { left: 50%; top: 22px; transform: translateX(-50%); text-align: center; }
+    #wave { font-size: 13px; letter-spacing: .32em; text-transform: uppercase; color: var(--ember); text-shadow: 0 0 12px rgba(255,179,71,.5); }
+    #time { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; margin-top: 4px; }
+
+    #right { right: 28px; top: 24px; text-align: right; }
+    #kills { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+    #boss { left: 50%; top: 84px; transform: translateX(-50%); width: min(620px, 70vw); opacity: 0; transition: opacity .4s; }
+    #boss.show { opacity: 1; }
+    #boss .name { text-align: center; font-size: 14px; letter-spacing: .4em; color: var(--ember); margin-bottom: 8px; text-shadow: 0 0 14px rgba(255,179,71,.45); }
+    #boss .bar { height: 14px; border-color: rgba(255,179,71,.35); }
+    #boss-fill { background: linear-gradient(90deg, #ffb347, #ff3d7f); }
+
+    #banner { position: absolute; left: 50%; top: 36%; transform: translate(-50%, -50%); text-align: center; opacity: 0; pointer-events: none; }
+    #banner.show { animation: banner 2.4s ease forwards; }
+    #banner-title { font-size: clamp(38px, 6vw, 84px); font-weight: 900; letter-spacing: .08em; text-transform: uppercase;
+      text-shadow: 0 0 24px rgba(255,179,71,.45), 0 4px 18px rgba(0,0,0,.7); }
+    #banner-sub { margin-top: 8px; font-size: 16px; letter-spacing: .12em; color: var(--dim); }
+    @keyframes banner {
+      0% { opacity: 0; transform: translate(-50%, -40%) scale(1.15); filter: blur(6px); }
+      12% { opacity: 1; transform: translate(-50%, -50%) scale(1); filter: blur(0); }
+      78% { opacity: 1; }
+      100% { opacity: 0; transform: translate(-50%, -58%); }
+    }
+
+    #flash { position: fixed; inset: 0; background: radial-gradient(ellipse at center, rgba(255,61,127,0) 35%, rgba(255,61,127,.9) 100%); opacity: 0; }
+    #dmg { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+    .pop { position: absolute; transform: translate(-50%, -50%); font-weight: 800; text-shadow: 0 2px 8px rgba(0,0,0,.8);
+      animation: pop .9s ease-out forwards; font-variant-numeric: tabular-nums; }
+    @keyframes pop {
+      0% { transform: translate(-50%, -50%) scale(.6); opacity: 0; }
+      15% { transform: translate(-50%, -70%) scale(1.15); opacity: 1; }
+      100% { transform: translate(-50%, -150%) scale(1); opacity: 0; }
+    }
+
+    /* ---------- Overlays ---------- */
+    .overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column;
+      background: radial-gradient(ellipse at center, rgba(5,6,10,.35), rgba(5,6,10,.92)); backdrop-filter: blur(3px); }
+    .overlay.show { display: flex; animation: fade .5s ease; }
+    @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+    .title { font-size: clamp(54px, 9vw, 130px); font-weight: 900; letter-spacing: .06em; line-height: .9; text-align: center; text-transform: uppercase;
+      background: linear-gradient(180deg, #ffffff 10%, #ffb347 75%, #ff3d7f); -webkit-background-clip: text; background-clip: text; color: transparent;
+      filter: drop-shadow(0 6px 30px rgba(255,179,71,.25)); }
+    .tagline { margin-top: 14px; color: var(--dim); letter-spacing: .18em; text-transform: uppercase; font-size: 13px; }
+    .btn { margin-top: 36px; padding: 16px 38px; font: inherit; font-weight: 800; letter-spacing: .22em; text-transform: uppercase; color: #0b0c10;
+      background: linear-gradient(90deg, #ffb347, #ff8a5c); border: 0; border-radius: 2px; cursor: pointer;
+      box-shadow: 0 0 0 1px rgba(255,255,255,.2), 0 10px 40px rgba(255,140,80,.35); transition: transform .15s, box-shadow .15s; }
+    .btn:hover { transform: translateY(-2px); box-shadow: 0 0 0 1px rgba(255,255,255,.4), 0 14px 50px rgba(255,140,80,.5); }
+    .controls { margin-top: 36px; display: grid; grid-template-columns: repeat(2, auto); gap: 8px 28px; font-size: 14px; color: var(--dim); }
+    .controls b { color: var(--ink); font-weight: 700; margin-right: 8px; }
+    .headline { font-size: clamp(40px, 6vw, 80px); font-weight: 900; text-transform: uppercase; letter-spacing: .08em; }
+    .headline.lose { color: var(--blood); text-shadow: 0 0 30px rgba(255,61,127,.4); }
+    .headline.win { color: var(--ember); text-shadow: 0 0 30px rgba(255,179,71,.4); }
+    #stats { margin-top: 14px; color: var(--dim); letter-spacing: .12em; font-size: 15px; font-variant-numeric: tabular-nums; }
+    .hint { margin-top: 18px; color: var(--dim); font-size: 13px; letter-spacing: .14em; }
+    .hidden-when-no-js { display: none; }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud">
+    <div id="top" class="panel">
+      <div id="wave">WAVE 1</div>
+      <div id="time">0:00</div>
+    </div>
+    <div id="right" class="panel"><div id="kills">Kills 0</div></div>
+    <div id="vitals" class="panel">
+      <div class="hp-row"><span class="label">Health</span><span id="hp-text">100</span></div>
+      <div class="bar"><i id="hp-fill"></i></div>
+      <div class="bar" id="st"><i id="st-fill"></i></div>
+      <div id="hint"><b>LMB</b> strike · <b>RMB</b> guard · <b>SPACE</b> dodge · <b>ESC</b> pause</div>
+    </div>
+    <div id="boss" class="panel">
+      <div class="name">THE WARDEN</div>
+      <div class="bar"><i id="boss-fill"></i></div>
+    </div>
+    <div id="banner"><div id="banner-title"></div><div id="banner-sub"></div></div>
+  </div>
+  <div id="dmg"></div>
+  <div id="flash"></div>
+
+  <div id="menu" class="overlay show">
+    <div class="title">The Warden</div>
+    <div class="tagline">A courtyard · three waves · one guardian</div>
+    <button class="btn" id="start">Enter the courtyard</button>
+    <div class="controls">
+      <div><b>WASD</b>move</div><div><b>Mouse</b>look</div>
+      <div><b>LMB</b>strike (3-hit combo)</div><div><b>RMB</b>guard</div>
+      <div><b>SPACE</b>dodge (i-frames)</div><div><b>ESC</b>pause</div>
+    </div>
+  </div>
+
+  <div id="pause" class="overlay">
+    <div class="headline">Paused</div>
+    <button class="btn" id="resume">Resume</button>
+    <div class="hint">Click the button, or click the game, to continue</div>
+  </div>
+
+  <div id="dead" class="overlay">
+    <div class="headline lose">You fell</div>
+    <div id="stats-dead" class="hint" style="margin-top:6px"></div>
+    <button class="btn" id="retry-dead">Try again</button>
+  </div>
+
+  <div id="won" class="overlay">
+    <div class="headline win">The Warden falls</div>
+    <div id="stats"></div>
+    <button class="btn" id="retry-won">Play again</button>
+  </div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
