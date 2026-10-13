@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { CosmicNoiseGenerator, COSMIC_SOURCES } from './lib/cosmicNoise';
 import {
   encodePayloadToChips,
@@ -18,6 +18,8 @@ import { CrossCorrelationDisplay } from './components/CrossCorrelationDisplay';
 import { TransceiverPanel } from './components/TransceiverPanel';
 import { ReceiverPanel } from './components/ReceiverPanel';
 import { DpiSurveillancePanel } from './components/DpiSurveillancePanel';
+import { EntropyHistogramDisplay } from './components/EntropyHistogramDisplay';
+import { ShannonBenchmarkLab } from './components/ShannonBenchmarkLab';
 import { SwarmMap } from './components/SwarmMap';
 import { ProtocolSpecModal } from './components/ProtocolSpecModal';
 import { CliDemoModal } from './components/CliDemoModal';
@@ -40,8 +42,8 @@ export function App() {
   // Transceiver State
   const [activeKey, setActiveKey] = useState<string>('e4a9f201d4c88319a0bf23847591cde4');
   const [bobKey, setBobKey] = useState<string>('e4a9f201d4c88319a0bf23847591cde4');
-  const [currentSnrDb, setCurrentSnrDb] = useState<number>(-24);
-  const [chipsPerBit, setChipsPerBit] = useState<number>(256);
+  const [currentSnrDb, setCurrentSnrDb] = useState<number>(-20);
+  const [chipsPerBit, setChipsPerBit] = useState<number>(512);
   const [isTransmitting, setIsTransmitting] = useState<boolean>(false);
 
   // Receiver State
@@ -227,13 +229,23 @@ export function App() {
         </div>
 
         {/* Adversary Deep Packet Inspection & Wiretap Simulator */}
-        <DpiSurveillancePanel
-          dpiResult={dpiResult}
-          isVpnEmulation={isVpnEmulation}
-          onToggleVpnEmulation={setIsVpnEmulation}
-          isTransmitting={isTransmitting}
-          snrDb={currentSnrDb}
-        />
+        <div>
+          <DpiSurveillancePanel
+            dpiResult={dpiResult}
+            isVpnEmulation={isVpnEmulation}
+            onToggleVpnEmulation={setIsVpnEmulation}
+            isTransmitting={isTransmitting}
+            snrDb={currentSnrDb}
+          />
+          {/* Live Byte Entropy & Chi-square Histogram */}
+          <EntropyHistogramDisplay
+            samples={samples}
+            isVpnEmulation={isVpnEmulation}
+          />
+        </div>
+
+        {/* Empirical Monte-Carlo Shannon Capacity Benchmark Lab */}
+        <ShannonBenchmarkLab />
 
         {/* Planetary Cosmic Entropy Swarm Topology */}
         <SwarmMap
