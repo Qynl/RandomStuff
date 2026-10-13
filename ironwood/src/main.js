@@ -36,10 +36,14 @@ const DEFAULT_SETTINGS = {
 };
 
 const FIXED_DT = 1 / 60;
+const QUALITY_LEVELS = ['low', 'medium', 'high', 'ultra'];
+const DIFFICULTY_IDS = ['recruit', 'regular', 'hardened', 'veteran'];
 
 class Game {
   constructor() {
     this.settings = this.loadSettings();
+    // URL overrides: ?quality= &bots= &difficulty= &autostart=1 &diag=1 &photo=1
+    this.applyUrlParams();
     this.canvas = document.getElementById('game-canvas');
     this.renderer = null;
     this.scene = null;
@@ -94,6 +98,188 @@ class Game {
     return { ...DEFAULT_SETTINGS };
   }
 
+  /**
+   * Query-string overrides so a link can configure the whole match:
+   * index.html?quality=high&bots=8&difficulty=veteran&autostart=1&diag=1
+   */
+  applyUrlParams() {
+    let params;
+    try {
+      params = new URLSearchParams(location.search);
+    } catch (err) {
+      void err;
+      return;
+    }
+    const quality = params.get('quality');
+    if (quality && QUALITY_LEVELS.includes(quality)) this.settings.quality = quality;
+    const bots = Number(params.get('bots'));
+    if (Number.isFinite(bots) && bots >= 0 && bots <= 12) this.settings.bots = Math.round(bots);
+    const difficulty = params.get('difficulty');
+    if (difficulty && DIFFICULTY_IDS.includes(difficulty)) this.settings.difficulty = difficulty;
+    const fov = Number(params.get('fov'));
+    if (Number.isFinite(fov) && fov >= 60 && fov <= 110) this.settings.fov = fov;
+    const sens = Number(params.get('sens'));
+    if (Number.isFinite(sens) && sens > 0) this.settings.sensitivity = sens;
+    const volume = Number(params.get('volume'));
+    if (Number.isFinite(volume)) this.settings.masterVolume = clamp(volume, 0, 1);
+    const name = params.get('name');
+    if (name) this.settings.name = name.slice(0, 15);
+    if (params.get('adapt') === '0') this.settings.adapt = false;
+    this.autoStart = params.get('autostart') === '1' || params.get('play') === '1';
+    this.photoMode = params.get('photo') === '1';
+    this.diagMode = params.get('diag') === '1' || this.photoMode;
+  }
+
+  /**
+   * Console + on-screen diagnostics. Everything here exists so a problem in a
+   * real browser is visible and reportable instead of a black screen:
+   *   window.ironwood.diag()      -> a JSON-able snapshot of the render state
+   *   window.ironwood.teleport()  -> place the player for screenshots
+   *   window.ironwood.setSimulate(false) -> freeze the match, keep rendering
+   */
+  setupDiagnostics() {
+    this.errors = [];
+    const record = (kind, message, stack) => {
+      const entry = { kind, message: String(message).slice(0, 500), stack: String(stack || '').slice(0, 1200), at: Date.now() };
+      this.errors.push(entry);
+      if (this.errors.length > 40) this.errors.shift();
+      const box = document.getElementById('iw-error-box');
+      if (box) {
+        box.style.display = 'block';
+        box.textContent = `⚠ ${kind}: ${entry.message}`;
+      }
+    };
+    window.addEventListener('error', (ev) => record('error', ev.message ?? ev.error, ev.error?.stack));
+    window.addEventListener('unhandledrejection', (ev) => record('promise', ev.reason?.message ?? ev.reason, ev.reason?.stack));
+
+    // a lost GL context (driver reset, software renderer dying, tab throttling)
+    // used to look like a frozen black screen - now it is loud and recoverable
+    const canvas = document.getElementById('game-canvas');
+    if (canvas) {
+      canvas.addEventListener('webglcontextlost', (ev) => {
+        ev.preventDefault();
+        this.contextLost = true;
+        record('webgl', 'graphics context lost - the renderer needs to reload');
+        const warn = document.getElementById('loading-warning');
+        if (warn) {
+          warn.innerHTML = '<b>Graphics context lost.</b><br>Your GPU driver reset (or the browser dropped the context). Reload the page to continue.';
+          warn.classList.add('show');
+        }
+      }, false);
+      canvas.addEventListener('webglcontextrestored', () => {
+        this.contextLost = false;
+        this.hud?.notify('Graphics context restored');
+      }, false);
+    }
+
+    if (typeof document === 'undefined') return;
+    const style = document.createElement('style');
+    style.textContent = `
+      #iw-error-box{position:fixed;left:10px;right:10px;bottom:10px;z-index:9000;display:none;
+        font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;color:#ffd9d9;background:rgba(70,12,12,.92);
+        border:1px solid rgba(255,120,120,.5);border-radius:8px;padding:8px 10px;white-space:pre-wrap;pointer-events:none}
+      #iw-diag{position:fixed;left:10px;top:10px;z-index:9001;font:11px/1.5 ui-monospace,Menlo,Consolas,monospace;
+        color:#cfe8ff;background:rgba(8,14,20,.72);border:1px solid rgba(140,200,255,.25);border-radius:8px;
+        padding:7px 9px;white-space:pre;pointer-events:none;letter-spacing:.2px}`;
+    document.head.appendChild(style);
+    const err = document.createElement('div');
+    err.id = 'iw-error-box';
+    document.body.appendChild(err);
+    if (this.diagMode) {
+      const diag = document.createElement('div');
+      diag.id = 'iw-diag';
+      diag.textContent = 'diagnostics…';
+      document.body.appendChild(diag);
+      this.diagEl = diag;
+    }
+    if (this.photoMode) {
+      this.simulateEnabled = false;
+      setTimeout(() => this.hud?.setHudVisible(false), 2000);
+    }
+  }
+
+  /** Snapshot of everything worth knowing when something looks wrong. */
+  diag() {
+    const info = this.renderer?.info;
+    const player = this.match?.local;
+    const gl = this.renderer?.getContext?.();
+    let gpu = 'n/a';
+    try {
+      const dbg = gl?.getExtension('WEBGL_debug_renderer_info');
+      gpu = dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl?.getParameter(gl.RENDERER);
+    } catch (err) {
+      void err;
+    }
+    return {
+      ready: !!window.__IRONWOOD_READY__,
+      quality: this.settings.quality,
+      fps: Math.round(this.fps * 10) / 10,
+      inMatch: this.inMatch,
+      paused: this.paused,
+      simulate: this.simulateEnabled !== false,
+      contextLost: !!this.contextLost,
+      gpu: String(gpu).slice(0, 120),
+      softwareRenderer: !!this.rendererClass?.software,
+      webgl2: !!gl,
+      draws: info?.render.calls ?? 0,
+      triangles: info?.render.triangles ?? 0,
+      programs: info?.programs?.length ?? 0,
+      textures: info?.memory?.textures ?? 0,
+      geometries: info?.memory?.geometries ?? 0,
+      player: player ? { x: +player.position.x.toFixed(2), y: +player.position.y.toFixed(2), z: +player.position.z.toFixed(2), yaw: +player.yaw.toFixed(2), pitch: +player.pitch.toFixed(2), hp: player.health, alive: player.alive, stance: player.stance } : null,
+      bots: this.match ? [...this.match.bots.values()].map((b) => `${b.team}:${b.state}:${b.alive ? 'up' : 'down'}`).join(',') : '',
+      scores: this.match ? { ...this.match.scores } : null,
+      colliders: this.world?.colliders?.length ?? 0,
+      walkways: this.world?.walkways?.length ?? 0,
+      errors: this.errors.slice(-8),
+    };
+  }
+
+  /** Place the player (and camera) - used by the screenshot harness. */
+  teleport(x, z, yaw = 0, pitch = 0, height = 1.0) {
+    const player = this.match?.local;
+    if (!player) return null;
+    const y = (this.world?.supportHeight(x, z, 400) ?? 0) + 0.02;
+    player.position.set(x, y + height * 0, z);
+    player.velocity.set(0, 0, 0);
+    player.yaw = yaw;
+    player.pitch = pitch;
+    return { x, y, z };
+  }
+
+  setSimulate(on) {
+    this.simulateEnabled = !!on;
+  }
+
+  /** Aim the local soldier (radians) - handy for scripted screenshots. */
+  setLook(yaw, pitch = 0) {
+    const player = this.match?.local;
+    if (!player) return false;
+    if (Number.isFinite(yaw)) player.yaw = yaw;
+    if (Number.isFinite(pitch)) player.pitch = clamp(pitch, -1.5, 1.5);
+    return true;
+  }
+
+  /** Point the soldier's yaw at a world position. */
+  lookAt(x, z, pitch = 0) {
+    const player = this.match?.local;
+    if (!player) return false;
+    const dx = x - player.position.x;
+    const dz = z - player.position.z;
+    // the game's forward is -Z rotated by yaw
+    return this.setLook(Math.atan2(-dx, -dz), pitch);
+  }
+
+  updateDiagBadge() {
+    if (!this.diagEl) return;
+    const d = this.diag();
+    this.diagEl.textContent = [
+      `${d.fps.toFixed(0)} fps · ${d.quality} · ${d.inMatch ? 'match' : 'menu'}`,
+      `${d.draws} draws · ${(d.triangles / 1000).toFixed(0)}k tris · ${d.programs} prog`,
+      `errors: ${this.errors.length}${d.errors.length ? ' ⚠ ' + d.errors[d.errors.length - 1].message.slice(0, 60) : ''}`,
+    ].join('\n');
+  }
+
   saveSettings() {
     try {
       localStorage.setItem('ironwood.settings', JSON.stringify(this.settings));
@@ -107,6 +293,7 @@ class Game {
   /* ------------------------------------------------------------------ */
 
   async init() {
+    this.setupDiagnostics();
     const hudHooks = {
       onAction: (action) => this.handleMenuAction(action),
       onSettingChange: (key, value) => this.applySetting(key, value),
@@ -147,6 +334,17 @@ class Game {
       this.hud.showLoadingWarning(`Could not start WebGL: ${err.message}`);
       return;
     }
+    // software rasterisers (SwiftShader/llvmpipe: no GPU at all, remote desktops)
+    // cannot chew through 4x MSAA plus 2048 shadow maps - adapt before baking
+    if (this.settings.adapt !== false) {
+      const info = this.detectRendererClass();
+      if (info.software) {
+        const was = this.settings.quality;
+        this.settings.quality = 'low';
+        this.hud.notify(`Software renderer detected (${info.name.slice(0, 40)}) - quality set to LOW`, { type: 'warn', duration: 6000 });
+        if (was !== 'low') console.info('[ironwood] software renderer, dropping quality from', was, 'to low');
+      }
+    }
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
     this.renderer.setSize(window.innerWidth, window.innerHeight, false);
     this.renderer.shadowMap.enabled = true;
@@ -176,8 +374,8 @@ class Game {
     // --- lighting + post ----------------------------------------------
     this.hud.setLoadingProgress(0.9, 'Lighting the valley…');
     this.sky = new Sky(this.scene, {
-      shadowMapSize: this.settings.quality === 'ultra' ? 4096 : this.settings.quality === 'low' ? 1024 : 2048,
-      shadowRadius: this.settings.quality === 'low' ? 28 : 42,
+      shadowMapSize: this.settings.quality === 'ultra' ? 4096 : 2048,
+      shadowRadius: this.settings.quality === 'low' ? 34 : 42,
     });
     this.postfx = new PostFX(this.renderer, { quality: this.settings.quality });
     this.postfx.setQuality(this.settings.quality);
@@ -216,6 +414,30 @@ class Game {
 
     this.running = true;
     requestAnimationFrame((t) => this.loop(t));
+
+    // a machine readable "we made it" signal for tests and the diag badge
+    window.__IRONWOOD__ = this;
+    window.__IRONWOOD_READY__ = true;
+    console.info('[ironwood] ready', this.diag().gpu);
+    if (this.autoStart) {
+      this.hud.showMenu('sp');
+      setTimeout(() => this.startSinglePlayer(), 250);
+    }
+  }
+
+  /** Which GPU (or software rasteriser) are we on? */
+  detectRendererClass() {
+    let name = 'unknown';
+    try {
+      const gl = this.renderer?.getContext?.() ?? document.createElement('canvas').getContext('webgl2');
+      const dbg = gl?.getExtension?.('WEBGL_debug_renderer_info');
+      name = String(dbg ? gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL) : gl?.getParameter?.(gl.RENDERER) ?? 'unknown');
+    } catch (err) {
+      void err;
+    }
+    const software = /swiftshader|llvmpipe|software|basic render|mesa offscreen/i.test(name);
+    this.rendererClass = { name, software };
+    return this.rendererClass;
   }
 
   checkGraphics() {
@@ -739,12 +961,34 @@ class Game {
     const avg = this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length;
     this.fps = avg > 0 ? 1 / avg : 60;
 
-    const simRunning = this.inMatch && !this.paused;
+    if (this.diagEl) this.updateDiagBadge();
+    if (this.renderer) {
+      this.renderer.info.autoReset = false;
+      this.renderer.info.reset();
+    }
+    const simRunning = this.inMatch && !this.paused && this.simulateEnabled !== false;
     if (simRunning) {
       this.accumulator += rawDt;
       let steps = 0;
       while (this.accumulator >= FIXED_DT && steps < 5) {
-        this.simulate(FIXED_DT);
+        // one broken subsystem must never freeze the whole game: report it in
+        // the diag badge, keep rendering, and drop the frame's remaining work
+        try {
+          this.simulate(FIXED_DT);
+        } catch (err) {
+          this.simErrors = (this.simErrors || 0) + 1;
+          if (this.simErrors < 6 || this.simErrors % 240 === 0) {
+            this.errors?.push({ kind: 'simulate', message: String(err.message ?? err), stack: String(err.stack || '').slice(0, 1200), at: Date.now() });
+            console.error('[ironwood] simulate error', err);
+            const box = document.getElementById('iw-error-box');
+            if (box) {
+              box.style.display = 'block';
+              box.textContent = `⚠ simulate: ${err.message} (x${this.simErrors})`;
+            }
+          }
+          this.accumulator = 0;
+          break;
+        }
         this.accumulator -= FIXED_DT;
         steps++;
       }
@@ -896,9 +1140,44 @@ class Game {
   /* Rendering                                                           */
   /* ------------------------------------------------------------------ */
 
+  /**
+   * Front-end camera: a slow cinematic drift over the valley so the menu is a
+   * window into the world instead of a black screen.
+   */
+  menuCamera(dt, now) {
+    const t = now * 0.001;
+    const shot = Math.floor(t / 26) % 3;
+    const spots = [
+      { x: 52, z: -52, r: 46, h: 26, look: { x: 52, z: -52 }, speed: 0.05 },   // temple ruins
+      { x: -62, z: 34, r: 38, h: 18, look: { x: -56, z: 36 }, speed: -0.045 }, // village + bridge
+      { x: 2, z: -2, r: 54, h: 30, look: { x: 2, z: -2 }, speed: 0.038 },      // crossroads basin
+    ];
+    const spot = spots[shot];
+    const ang = t * spot.speed + shot * 1.7;
+    const cx = spot.x + Math.cos(ang) * spot.r;
+    const cz = spot.z + Math.sin(ang) * spot.r;
+    const ground = this.world?.supportHeight?.(cx, cz, 400) ?? 0;
+    const cy = ground + spot.h + Math.sin(t * 0.11) * 1.6;
+    this.camera.position.set(
+      damp(this.camera.position.x || cx, cx, 1.6, dt),
+      damp(this.camera.position.y || cy, cy, 1.6, dt),
+      damp(this.camera.position.z || cz, cz, 1.6, dt)
+    );
+    this.camera.lookAt(spot.look.x, (this.world?.supportHeight?.(spot.look.x, spot.look.z, 400) ?? 0) + 7, spot.look.z);
+    this.camera.fov = damp(this.camera.fov, 62, 1.2, dt);
+    this.camera.updateProjectionMatrix();
+    this.fx?.setCamera(this.camera);
+    this.audio.setListener(this.camera.position, this.camDir.set(0, 0, -1).applyQuaternion(this.camera.quaternion));
+  }
+
   render(dt) {
+    if (this.contextLost) return;
     const player = this.match?.local;
     const weapon = this.weapon;
+
+    if (!player && this.world) {
+      this.menuCamera(dt, performance.now());
+    }
 
     if (player) {
       // --- camera transform ------------------------------------------
@@ -962,9 +1241,9 @@ class Game {
       suppress: this.suppressAmount * 0.6,
       sunScreen: this.sunScreen,
       sunVisible: this.sunScreen.behind !== 1,
-      exposure: 1.05,
-      bloom: this.scopeAmount > 0.5 ? 0.32 : 0.62,
-      vignette: this.scopeAmount > 0.5 ? 0.12 : 0.34,
+      exposure: 0.92,
+      bloom: this.scopeAmount > 0.5 ? 0.3 : 0.44,
+      vignette: this.scopeAmount > 0.5 ? 0.14 : 0.44,
       overlay: (renderer) => {
         if (!this.viewmodel || this.scopeAmount > 0.85) return;
         renderer.clearDepth();
@@ -1072,6 +1351,7 @@ async function copyText(text) {
 const game = new Game();
 game.init().catch((err) => {
   console.error(err);
+  game.errors?.push({ kind: 'boot', message: String(err.message ?? err), stack: String(err.stack || '').slice(0, 2000), at: Date.now() });
   const warn = document.getElementById('loading-warning');
   if (warn) {
     warn.innerHTML = `<b>Startup failed.</b><br>${String(err.message ?? err)}`;

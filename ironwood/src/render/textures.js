@@ -240,8 +240,8 @@ const MAT_DEFS = {
       const grain = fbmTiled(u * 3 + plank * 3.1, v * 26, 26, { octaves: 3, seed: 71 + plank });
       const seam = Math.min(fy, 1 - fy);
       const dark = saturate(1 - seam * 12);
-      const base = mix([0.34, 0.24, 0.14], [0.55, 0.42, 0.26], saturate(grain * 0.7 + 0.5));
-      return mix(base, [0.14, 0.09, 0.05], dark * 0.9);
+      const base = mix([0.21, 0.18, 0.14], [0.34, 0.30, 0.24], saturate(grain * 0.7 + 0.5));
+      return mix(base, [0.10, 0.085, 0.065], dark * 0.9);
     },
     height: (u, v) => {
       const fy = v * 4 - Math.floor(v * 4);
@@ -254,7 +254,7 @@ const MAT_DEFS = {
     color: (u, v) => {
       const ridge = Math.abs(fbmTiled(u * 9, v * 3, 9, { octaves: 4, seed: 81 }));
       const n = fbmTiled(u * 20, v * 20, 20, { octaves: 3, seed: 82 });
-      const base = mix([0.12, 0.10, 0.08], [0.36, 0.30, 0.22], saturate(ridge * 1.6));
+      const base = mix([0.09, 0.085, 0.07], [0.28, 0.25, 0.20], saturate(ridge * 1.6));
       const moss = saturate(fbmTiled(u * 4, v * 4, 4, { octaves: 4, seed: 83 }) * 1.4 - 0.4);
       return mix(mix(base, base.map((c) => c * 0.6 + n * 0.06), 0.5), [0.13, 0.22, 0.10], moss * 0.55);
     },
@@ -398,8 +398,8 @@ const MAT_DEFS = {
       const pebbles = saturate((fbmTiled(u * 40, v * 40, 40, { octaves: 2, seed: 193 }) - 0.62) * 5);
       const dirt = saturate(fbmTiled(u * 17, v * 17, 17, { octaves: 3, seed: 194 }) * 1.6 + 0.1);
       let l = 0.72 + patches * 0.22 + blades * 0.18;
-      l = mix(l, 0.62, dirt * 0.7);
-      l = mix(l, 0.86, pebbles * 0.5);
+      l = lerp(l, 0.62, dirt * 0.7);
+      l = lerp(l, 0.86, pebbles * 0.5);
       const warm = 1 + patches * 0.06;
       return [l * warm, l, l * (1 - patches * 0.05)];
     },
@@ -424,10 +424,10 @@ const SPRITES = {
   leafCluster: (ctx, s) => {
     const rng = makeRng(7);
     ctx.clearRect(0, 0, s, s);
-    for (let i = 0; i < 46; i++) {
-      const x = s * (0.5 + (rng() - 0.5) * 0.86);
-      const y = s * (0.5 + (rng() - 0.5) * 0.86);
-      const r = s * (0.06 + rng() * 0.1);
+    for (let i = 0; i < 34; i++) {
+      const x = s * (0.5 + (rng() - 0.5) * 0.92);
+      const y = s * (0.5 + (rng() - 0.5) * 0.94);
+      const r = s * (0.045 + rng() * 0.085);
       const rot = rng() * TAU;
       const g = ctx.createRadialGradient(x, y, 0, x, y, r);
       const light = 0.5 + rng() * 0.5;
@@ -443,6 +443,42 @@ const SPRITES = {
       ctx.arc(0, 0, r, 0, TAU);
       ctx.fill();
       ctx.restore();
+    }
+  },
+
+  treeSilhouette: (ctx, s) => {
+    const rng = makeRng(23);
+    ctx.clearRect(0, 0, s, s);
+    // trunk
+    const trunkW = s * 0.055;
+    const g = ctx.createLinearGradient(s * 0.5 - trunkW, 0, s * 0.5 + trunkW, 0);
+    g.addColorStop(0, 'rgba(30,32,22,0.95)');
+    g.addColorStop(0.5, 'rgba(48,50,34,0.98)');
+    g.addColorStop(1, 'rgba(26,28,18,0.95)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(s * 0.5 - trunkW * 1.4, s);
+    ctx.quadraticCurveTo(s * 0.5 - trunkW * 0.6, s * 0.5, s * 0.5 + trunkW * 0.4, s * 0.06);
+    ctx.lineTo(s * 0.5 + trunkW * 1.2, s * 0.08);
+    ctx.quadraticCurveTo(s * 0.5 + trunkW * 0.4, s * 0.5, s * 0.5 + trunkW * 1.4, s);
+    ctx.closePath();
+    ctx.fill();
+    // canopy blobs form a ragged crown
+    for (let i = 0; i < 30; i++) {
+      const a = rng() * TAU;
+      const rad = Math.pow(rng(), 0.7);
+      const cx = s * 0.5 + Math.cos(a) * rad * s * 0.36;
+      const cy = s * 0.3 + Math.sin(a) * rad * s * 0.24;
+      const r = s * (0.07 + rng() * 0.11) * (1 - rad * 0.35);
+      const shade = 0.6 + rng() * 0.4;
+      const rg = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+      rg.addColorStop(0, `rgba(${Math.floor(34 * shade)},${Math.floor(56 * shade)},${Math.floor(28 * shade)},0.95)`);
+      rg.addColorStop(0.75, `rgba(${Math.floor(20 * shade)},${Math.floor(36 * shade)},${Math.floor(18 * shade)},0.8)`);
+      rg.addColorStop(1, 'rgba(12,22,12,0)');
+      ctx.fillStyle = rg;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, TAU);
+      ctx.fill();
     }
   },
 

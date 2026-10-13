@@ -74,10 +74,14 @@ void main() {
   vec2 coord = vUv;
   float illum = 1.0;
   vec3 acc = vec3(0.0);
+  // only bright things near the sun's screen position should bleed into shafts,
+  // otherwise a sunlit jungle floor turns the whole frame into a flare
+  float sunFade = 1.0 - smoothstep(0.18, 0.85, distance(vUv, uSunPos));
+  float accept = mix(0.18, 1.0, sunFade);
   for (int i = 0; i < 24; i++) {
     coord -= delta;
     vec3 s = texture2D(tBright, clamp(coord, 0.0, 1.0)).rgb;
-    acc += s * illum * uWeight;
+    acc += min(s, vec3(2.5)) * illum * uWeight * accept;
     illum *= uDecay;
   }
   gl_FragColor = vec4(acc / 24.0, 1.0);
@@ -357,6 +361,9 @@ export class PostFX {
       high: { mips: 3, samples: 4, shafts: true, scale: 1.0 },
       ultra: { mips: 3, samples: 4, shafts: true, scale: 1.15 },
     }[level] || { mips: 3, samples: 4, shafts: true, scale: 1.0 };
+    // software rasterisers cannot do multisampled resolves reliably
+    const gpu = String(this.renderer?.getContext?.()?.getParameter?.(this.renderer.getContext().RENDERER) ?? '');
+    if (/swiftshader|llvmpipe|software/i.test(gpu)) cfg.samples = 0;
     this.cfg = cfg;
     this.params.shafts = cfg.shafts ? 0.5 : 0;
     const dpr = Math.min(window.devicePixelRatio || 1, cfg.scale * 1.5);
@@ -477,7 +484,11 @@ export class PostFX {
       const sp = opts.sunScreen || { x: 0.5, y: 0.9 };
       sm.uSunPos.value.set(clamp(sp.x, -0.4, 1.4), clamp(sp.y, -0.4, 1.4));
       sm.uDensity.value = 1.05;
-      sm.uWeight.value = 0.42 * (opts.sunVisible === false ? 0.15 : 1);
+      // shafts are a "looking into the sun" effect: fade them out as the sun
+      // approaches or leaves the edge of the frame
+      const sunOff = Math.hypot(sp.x - 0.5, sp.y - 0.5);
+      const frameFactor = 1 - clamp((sunOff - 0.42) / 0.6, 0, 1);
+      sm.uWeight.value = 0.4 * frameFactor * (opts.sunVisible === false ? 0.1 : 1);
       this.shaftPass.render(renderer, this.shaftRT);
     }
 

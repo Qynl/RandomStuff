@@ -1,6 +1,6 @@
 {
   "name": "ironwood",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "IRONWOOD - an original browser tactical shooter (three.js + WebGL2). Procedural art, bot matches, backend-free multiplayer.",
@@ -8,6 +8,13 @@
   "scripts": {
     "start": "node tools/serve.mjs",
     "dev": "node tools/serve.mjs",
-    "check": "node tools/check-modules.mjs"
+    "check": "node tools/check-modules.mjs",
+    "test": "node tools/smoke-test.mjs",
+    "test:nav": "node tools/nav-check.mjs",
+    "test:browser": "node tools/browser-test.mjs",
+    "shots": "node tools/browser-test.mjs --quality=low --bots=4 --shots=menu,scope --out=shots"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.13.0"
   }
 }

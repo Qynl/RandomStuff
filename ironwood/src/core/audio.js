@@ -674,11 +674,31 @@ export class Audio {
         }, rand(200, 900));
       }
     }
-    if (camera) this.setListener(camera.position, camera.forward);
+    if (camera) {
+      // three cameras expose worldPositionLookAt/matrixWorld, not .forward
+      const forward = this._listenerForward || (this._listenerForward = { x: 0, y: 0, z: -1 });
+      const m = camera.matrixWorld?.elements;
+      if (m) {
+        forward.x = -m[8];
+        forward.y = -m[9];
+        forward.z = -m[10];
+      } else if (camera.forward) {
+        forward.x = camera.forward.x;
+        forward.y = camera.forward.y;
+        forward.z = camera.forward.z;
+      }
+      const position = camera.position || camera.worldPosition;
+      if (position) this.setListener(position, forward);
+    }
   }
 
   setListener(position, forward, up = { x: 0, y: 1, z: 0 }) {
     if (!this.ctx || !this.listener) return;
+    if (!position || !forward) return;
+    const fx = Number.isFinite(forward.x) ? forward.x : 0;
+    const fy = Number.isFinite(forward.y) ? forward.y : 0;
+    const fz = Number.isFinite(forward.z) ? forward.z : -1;
+    forward = { x: fx, y: fy, z: fz };
     const l = this.listener;
     if (l.positionX) {
       l.positionX.value = position.x;

@@ -107,7 +107,7 @@ export class Sky {
     this.zenithColor = new THREE.Color(0x2a63b8);
     this.horizonColor = new THREE.Color(0xc8d7d0);
     this.sunColor = new THREE.Color(0xfff2d8);
-    this.fogColor = new THREE.Color(0xb9c8bd);
+    this.fogColor = new THREE.Color(0x8ea79c);
 
     const geo = new THREE.SphereGeometry(900, 32, 20);
     this.material = new THREE.ShaderMaterial({
@@ -132,7 +132,7 @@ export class Sky {
     scene.add(this.mesh);
 
     // --- lighting -------------------------------------------------
-    this.sun = new THREE.DirectionalLight(0xfff1d6, 2.35);
+    this.sun = new THREE.DirectionalLight(0xffe9c4, 2.15);
     this.sun.position.copy(this.sunDir).multiplyScalar(120);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(opts.shadowMapSize ?? 2048, opts.shadowMapSize ?? 2048);
@@ -152,7 +152,7 @@ export class Sky {
     scene.add(this.sunTarget);
     this.sun.target = this.sunTarget;
 
-    this.hemi = new THREE.HemisphereLight(0xbcd6ff, 0x4a5138, 0.85);
+    this.hemi = new THREE.HemisphereLight(0x9fc0e8, 0x4a5537, 0.84);
     scene.add(this.hemi);
 
     // subtle bounce from the warm ground to fill the shadow side of soldiers
@@ -161,8 +161,10 @@ export class Sky {
     scene.add(this.fill);
 
     // --- fog ------------------------------------------------------
-    scene.fog = new THREE.FogExp2(this.fogColor.getHex(), opts.fogDensity ?? 0.0085);
-    this.fogDensity = opts.fogDensity ?? 0.0085;
+    // thinner fog: enough aerial perspective to sell the scale, not enough to
+    // wash the jungle out
+    scene.fog = new THREE.FogExp2(this.fogColor.getHex(), opts.fogDensity ?? 0.0038);
+    this.fogDensity = opts.fogDensity ?? 0.0038;
 
     // --- distant ridge silhouette ---------------------------------
     this.ridge = this._buildRidge();

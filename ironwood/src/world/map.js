@@ -418,7 +418,7 @@ export class World {
     const seg = this.quality === 'low' ? 96 : this.quality === 'medium' ? 128 : MAP.segments;
     const visualSeg = Math.min(seg, 128);
     // One plane covering the visual skirmish area, refined inside the play area.
-    const geo = new THREE.PlaneGeometry(MAP.visualHalf * 2, MAP.visualHalf * 2, visualSeg * 2, visualSeg * 2);
+    const geo = new THREE.PlaneGeometry(MAP.visualHalf * 2, MAP.visualHalf * 2, visualSeg * 3, visualSeg * 3);
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position;
     const colors = new Float32Array(pos.count * 3);
@@ -443,9 +443,14 @@ export class World {
       const pathD = pathDistance(x, z);
       const onPath = smoothstep(4.4, 2.0, pathD);
 
-      let r = lerp(0.30, 0.52, macro);
-      let g = lerp(0.46, 0.62, macro * 0.9 + moist * 0.1);
-      let b = lerp(0.16, 0.26, macro * 0.7);
+      let r = lerp(0.20, 0.36, macro);
+      let g = lerp(0.32, 0.47, macro * 0.85 + moist * 0.15);
+      let b = lerp(0.15, 0.23, macro * 0.7);
+      // wet hollows and dry rises break up the repeating texture grid
+      const wet = saturate(fbm(x * 0.09, z * 0.09, { octaves: 3, seed: 515 }) * 1.5 + 0.2);
+      r = lerp(r * 0.72, r, wet);
+      g = lerp(g * 0.78, g, wet);
+      b = lerp(b * 0.85, b, wet);
       // dry patches
       const dry = saturate(macro * 1.5 - 0.75);
       r = lerp(r, 0.52, dry * 0.5);
@@ -491,11 +496,11 @@ export class World {
     const geo = new THREE.PlaneGeometry(MAP.visualHalf * 2, MAP.visualHalf * 2, 1, 1);
     geo.rotateX(-Math.PI / 2);
     const mat = new THREE.MeshStandardMaterial({
-      color: new THREE.Color(0x1d2a22),
+      color: new THREE.Color(0x364a38),
       transparent: true,
-      opacity: 0.82,
-      roughness: 0.08,
-      metalness: 0.42,
+      opacity: 0.74,
+      roughness: 0.13,
+      metalness: 0.3,
       normalMap: this.textures.tiled(this.textures.normal('waterNormal'), 14),
       normalScale: new THREE.Vector2(0.45, 0.45),
       depthWrite: false,
@@ -1173,17 +1178,20 @@ export class World {
     const cardMat = new THREE.MeshStandardMaterial({
       map: this.textures.sprite('leafCluster'),
       transparent: false,
-      alphaTest: 0.35,
+      alphaTest: 0.32,
       side: THREE.DoubleSide,
-      roughness: 0.86,
+      roughness: 0.88,
       metalness: 0,
-      color: new THREE.Color(0xa8c98a),
+      // a whisper of self-lit green keeps card undersides from going black
+      emissive: new THREE.Color(0x14240f),
+      emissiveIntensity: 1,
+      color: new THREE.Color(0xb4d194),
     });
     cardMat.userData.surface = 'leaf';
     applyWind(cardMat, 0.16, 0.14);
     this.windMaterials.push(cardMat);
 
-    const candidates = this.quality === 'low' ? 150 : this.quality === 'medium' ? 260 : 360;
+    const candidates = this.quality === 'low' ? 240 : this.quality === 'medium' ? 330 : 420;
     const trees = [];
     const minDist = 4.2;
     let guard = 0;
@@ -1220,32 +1228,40 @@ export class World {
     const p = new THREE.Vector3();
     const color = new THREE.Color();
 
-    const cardsPerTree = this.quality === 'low' ? 3 : 5;
+    const cardsPerTree = this.quality === 'low' ? 16 : this.quality === 'medium' ? 22 : 30;
     const cards = [];
-    const cardGeo = new THREE.PlaneGeometry(6.2, 6.2, 1, 1);
+    const cardGeo = new THREE.PlaneGeometry(5.6, 5.6, 1, 1);
 
     trees.forEach((t, i) => {
       const y = terrainHeight(t.x, t.z) - 0.4;
       p.set(t.x, y, t.z);
       e.set(rand(-0.06, 0.06), t.lean, rand(-0.06, 0.06));
       q.setFromEuler(e);
-      s.set(t.scale * 1.0, t.scale * rand(0.9, 1.25), t.scale * 1.0);
+      s.set(t.scale * 1.0, t.scale * rand(0.7, 0.95), t.scale * 1.0);
       m.compose(p, q, s);
       trunkMesh.setMatrixAt(i, m);
       const shade = 0.8 + rng() * 0.4;
       color.setRGB(shade, shade * 0.98, shade * 0.92);
       trunkMesh.setColorAt(i, color);
       const topY = y + 11 * s.y;
+      // Crown = mostly *horizontal* leaf layers (seen from below, which is where
+      // a player lives) plus a few near-vertical cards around the rim so the
+      // silhouette has edges. Vertical-only cards read as bare poles.
+      const layers = Math.max(5, Math.round(cardsPerTree * 0.62));
+      const spread = rand(2.6, 4.2);
       for (let c = 0; c < cardsPerTree; c++) {
-        const ang = (c / cardsPerTree) * TAU + rng() * 1.2;
-        const rad = rand(1.2, 3.6) * t.scale;
+        const layer = c < layers;
+        const ang = rng() * TAU;
+        const rad = (layer ? rand(0.2, spread) : rand(spread * 0.7, spread * 1.25)) * t.scale;
+        const hi = layer ? rand(0.2, 6.4) : rand(2.2, 7.6);
         cards.push({
           x: t.x + Math.cos(ang) * rad,
-          y: topY - rand(0.6, 3.4) * t.scale,
+          y: topY - hi * t.scale,
           z: t.z + Math.sin(ang) * rad,
-          rot: ang + Math.PI / 2 + rand(-0.5, 0.5),
-          tilt: rand(-0.5, 0.1),
-          scale: t.scale * rand(0.85, 1.5),
+          rot: layer ? rng() * TAU : ang + Math.PI / 2 + rand(-0.7, 0.7),
+          tilt: layer ? rand(-1.5, -0.75) : rand(-0.7, -0.05),
+          scale: t.scale * (layer ? rand(0.85, 1.35) : rand(0.7, 1.1)),
+          tone: rand(0.6, 1.0),
         });
       }
       if (Math.hypot(t.x, t.z) < MAP.half + 8) {
@@ -1268,38 +1284,59 @@ export class World {
       s.set(c.scale, c.scale, c.scale);
       m.compose(p, q, s);
       cardMesh.setMatrixAt(i, m);
-      const shade = 0.72 + rng() * 0.5;
-      color.setRGB(shade * 0.95, shade, shade * 0.82);
+      // darker undersides, sunnier tops: cheap but very effective depth cue
+      const shade = 0.62 + (c.tone ?? 0.8) * 0.5;
+      color.setRGB(shade * 0.92, shade, shade * 0.74);
       cardMesh.setColorAt(i, color);
     });
     cardMesh.instanceMatrix.needsUpdate = true;
     if (cardMesh.instanceColor) cardMesh.instanceColor.needsUpdate = true;
     this.group('trees').add(cardMesh);
 
-    // distant silhouette ring so the horizon is never empty
-    const farGeo = new THREE.PlaneGeometry(11, 13);
-    const farMat = cardMat.clone();
+    // horizon: real tree silhouettes standing on the ridge, in three depth
+    // bands, so the distance reads as jungle instead of floating leaf blobs
+    const farGeo = new THREE.PlaneGeometry(14, 18);
+    const farMat = new THREE.MeshStandardMaterial({
+      map: this.textures.sprite('treeSilhouette'),
+      transparent: true,
+      alphaTest: 0.32,
+      side: THREE.DoubleSide,
+      roughness: 1,
+      metalness: 0,
+      color: new THREE.Color(0x93b18d),
+    });
     farMat.userData.surface = 'leaf';
-    const farCount = 220;
-    const farMesh = new THREE.InstancedMesh(farGeo, farMat, farCount);
+    const bands = [
+      { from: MAP.visualHalf * 0.45, to: MAP.visualHalf * 0.62, count: 170, scale: [1.5, 2.4], tone: 0.72 },
+      { from: MAP.visualHalf * 0.6, to: MAP.visualHalf * 0.8, count: 170, scale: [2.0, 3.2], tone: 0.55 },
+      { from: MAP.visualHalf * 0.78, to: MAP.visualHalf * 1.05, count: 160, scale: [2.6, 4.2], tone: 0.42 },
+    ];
+    let farTotal = 0;
+    for (const b of bands) farTotal += b.count;
+    const farMesh = new THREE.InstancedMesh(farGeo, farMat, farTotal);
     farMesh.castShadow = false;
     farMesh.receiveShadow = false;
-    for (let i = 0; i < farCount; i++) {
-      const a = (i / farCount) * TAU + rng() * 0.05;
-      const r = rand(MAP.visualHalf * 0.52, MAP.visualHalf * 0.86);
-      const x = Math.cos(a) * r;
-      const z = Math.sin(a) * r;
-      const y = terrainHeight(x, z) + rand(4, 12);
-      p.set(x, y, z);
-      e.set(rand(-0.2, 0.2), -a + Math.PI / 2, rand(-0.2, 0.2));
-      q.setFromEuler(e);
-      const sc = rand(1.4, 2.6);
-      s.set(sc, sc, sc);
-      m.compose(p, q, s);
-      farMesh.setMatrixAt(i, m);
-      const shade = 0.6 + rng() * 0.3;
-      color.setRGB(shade * 0.9, shade, shade * 0.85);
-      farMesh.setColorAt(i, color);
+    let farIndex = 0;
+    for (const band of bands) {
+      for (let i = 0; i < band.count; i++) {
+        const a = rng() * TAU;
+        const r = rand(band.from, band.to);
+        const x = Math.cos(a) * r;
+        const z = Math.sin(a) * r;
+        const sc = rand(band.scale[0], band.scale[1]);
+        // half a card into the ground so no gap shows under the trunk
+        const y = terrainHeight(x, z) + sc * 9 - sc * 0.7;
+        p.set(x, y, z);
+        e.set(0, -a + rand(-0.5, 0.5), 0);
+        q.setFromEuler(e);
+        s.set(sc * rand(0.9, 1.15), sc * rand(0.9, 1.2), sc);
+        m.compose(p, q, s);
+        farMesh.setMatrixAt(farIndex, m);
+        const shade = band.tone * (0.85 + rng() * 0.3);
+        color.setRGB(shade * 0.94, shade, shade * 0.9);
+        farMesh.setColorAt(farIndex, color);
+        farIndex++;
+      }
     }
     farMesh.instanceMatrix.needsUpdate = true;
     if (farMesh.instanceColor) farMesh.instanceColor.needsUpdate = true;
@@ -1389,7 +1426,7 @@ export class World {
   buildUndergrowth() {
     const rng = this.rng;
     const quality = this.quality;
-    const grassCount = quality === 'low' ? 1800 : quality === 'medium' ? 4200 : 7200;
+    const grassCount = quality === 'low' ? 2600 : quality === 'medium' ? 6200 : 9500;
     const grassGeo = (() => {
       const g1 = new THREE.PlaneGeometry(1.0, 1.0);
       const g2 = g1.clone();
@@ -1431,11 +1468,13 @@ export class World {
       const y = terrainHeight(x, z);
       const n = terrainNormal(x, z, new THREE.Vector3());
       if (n.y < 0.72) continue;
-      const scale = rand(0.6, 1.5) * (1 + d);
-      p.set(x, y - 0.05, z);
-      e.set(0, rng() * TAU, rand(-0.08, 0.08));
+      // knee-high clumps: a 1 m quad scaled ~0.45-0.95 m reads as grass,
+      // anything taller looks like reeds in first person
+      const scale = rand(0.42, 0.95) * (0.85 + d * 0.4);
+      p.set(x, y - 0.04, z);
+      e.set(0, rng() * TAU, rand(-0.06, 0.06));
       q.setFromEuler(e);
-      s.set(scale, scale * rand(0.8, 1.4), scale);
+      s.set(scale, scale * rand(0.75, 1.2), scale);
       m.compose(p, q, s);
       grass.setMatrixAt(placed, m);
       const t = 0.7 + rng() * 0.55;
@@ -1462,7 +1501,7 @@ export class World {
     fernMat.userData.surface = 'leaf';
     applyWind(fernMat, 0.1, 0.5);
     this.windMaterials.push(fernMat);
-    const fernCount = quality === 'low' ? 260 : 620;
+    const fernCount = quality === 'low' ? 700 : quality === 'medium' ? 1200 : 1500;
     const ferns = new THREE.InstancedMesh(fernGeo, fernMat, fernCount);
     ferns.castShadow = true;
     ferns.receiveShadow = true;
@@ -1475,7 +1514,7 @@ export class World {
       if (riverDistance(x, z) < RIVER_WIDTH * 0.6) continue;
       if (noise2(x * 0.05, z * 0.05, 44) < 0.4 && rng() < 0.6) continue;
       const y = terrainHeight(x, z);
-      const scale = rand(0.7, 1.5);
+      const scale = rand(0.85, 1.9);
       p.set(x, y - 0.1, z);
       e.set(0, rng() * TAU, rand(-0.06, 0.06));
       q.setFromEuler(e);
@@ -1511,7 +1550,7 @@ export class World {
     bushMat.userData.surface = 'leaf';
     applyWind(bushMat, 0.12, 0.6);
     this.windMaterials.push(bushMat);
-    const bushCount = quality === 'low' ? 150 : 340;
+    const bushCount = quality === 'low' ? 420 : quality === 'medium' ? 760 : 950;
     const bushes = new THREE.InstancedMesh(bushGeo, bushMat, bushCount);
     bushes.castShadow = true;
     bushes.receiveShadow = true;
