@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<meta name="theme-color" content="#0b0f0a" />
+<title>IRONWOOD</title>
+<style>
+  :root {
+    --amber: #ffb457;
+    --green: #9fd46a;
+    --blood: #d94a3a;
+    --panel: rgba(9, 12, 9, 0.86);
+    --panel-edge: rgba(255, 180, 87, 0.28);
+    --ink: #e8e6dd;
+    --mono: ui-monospace, "SF Mono", "Roboto Mono", Menlo, Consolas, monospace;
+    --stencil: "Arial Narrow", "Helvetica Neue Condensed", Impact, system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #05070a; color: var(--ink);
+    font-family: var(--mono);
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  canvas.game { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
+  canvas#hud-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+
+  /* ---------------- HUD ---------------- */
+  #hud { position: fixed; inset: 0; z-index: 6; pointer-events: none; display: none; }
+  #hud.active { display: block; }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-edge);
+    border-radius: 3px;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(0,0,0,0.4);
+  }
+
+  #top-bar {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 14px; align-items: center; padding: 6px 14px;
+    font-family: var(--stencil); letter-spacing: 1.5px; font-size: 15px;
+    text-transform: uppercase;
+  }
+  #top-bar .score { font-size: 20px; font-weight: 700; }
+  #top-bar .score.us { color: var(--green); }
+  #top-bar .score.opfor { color: var(--blood); }
+  #match-timer { font-variant-numeric: tabular-nums; min-width: 52px; text-align: center; }
+  #match-mode { opacity: 0.7; font-size: 11px; letter-spacing: 2px; }
+
+  #killfeed {
+    position: absolute; top: 54px; right: 14px; display: flex; flex-direction: column;
+    gap: 4px; align-items: flex-end; font-size: 12px; max-width: 46vw;
+  }
+  .kf-row {
+    padding: 3px 8px; background: rgba(6,8,6,0.72); border-left: 3px solid var(--blood);
+    animation: kfIn 0.22s ease-out; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .kf-row.mine { border-left-color: var(--amber); }
+  .kf-row .att { color: var(--green); }
+  .kf-row .vic { color: var(--blood); }
+  .kf-row .wep { color: #b9b6ab; font-size: 11px; }
+  .kf-row .hs { color: var(--amber); }
+  @keyframes kfIn { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+
+  #notifications {
+    position: absolute; top: 96px; left: 50%; transform: translateX(-50%);
+    display: flex; flex-direction: column; gap: 5px; align-items: center;
+  }
+  .notif {
+    padding: 5px 12px; background: rgba(6,8,6,0.8); border: 1px solid var(--panel-edge);
+    font-size: 12px; letter-spacing: 1.2px; text-transform: uppercase; font-family: var(--stencil);
+    animation: notifIn 0.25s ease-out;
+  }
+  .notif.warn { border-color: rgba(217,74,58,0.6); color: #ffc3ba; }
+  .notif.good { border-color: rgba(159,212,106,0.6); color: #d6f0b8; }
+  @keyframes notifIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; } }
+
+  #objective-banner {
+    position: absolute; top: 132px; left: 50%; transform: translateX(-50%);
+    font-family: var(--stencil); letter-spacing: 3px; font-size: 13px; color: var(--amber);
+    text-transform: uppercase; opacity: 0; transition: opacity 0.4s;
+  }
+  #objective-banner.show { opacity: 0.92; }
+
+  #bottom-left {
+    position: absolute; left: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 6px;
+    width: 210px;
+  }
+  #health-row { display: flex; align-items: center; gap: 8px; }
+  #health-bar { flex: 1; height: 12px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.18); position: relative; }
+  #health-bar-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #6fbf4a, #a5d86a); transition: width 0.15s; }
+  #health-bar-fill.low { background: linear-gradient(90deg, #b33424, #e05a3a); }
+  #health-value { font-family: var(--stencil); font-size: 18px; min-width: 34px; text-align: right; }
+  #stamina-bar { height: 4px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.12); }
+  #stamina-bar-fill { height: 100%; width: 100%; background: #cfa25a; }
+  #stance-icons { display: flex; gap: 6px; font-size: 11px; color: #b9b6ab; letter-spacing: 1px; }
+  #stance-icons span.on { color: var(--amber); }
+
+  #bottom-right {
+    position: absolute; right: 16px; bottom: 16px; text-align: right;
+    display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  }
+  #weapon-name { font-family: var(--stencil); font-size: 22px; letter-spacing: 2px; text-transform: uppercase; }
+  #ammo-line { font-family: var(--stencil); font-size: 34px; line-height: 1; letter-spacing: 1px; }
+  #ammo-mag { color: #fff; }
+  #ammo-reserve { color: #9c9a90; font-size: 20px; }
+  #ammo-line.low #ammo-mag { color: #ff6a52; }
+  #fire-mode { font-size: 11px; letter-spacing: 2px; color: #b9b6ab; }
+  #grenades { display: flex; gap: 10px; margin-top: 6px; font-size: 12px; }
+  .nade { display: flex; align-items: center; gap: 4px; color: #cfcbc0; }
+  .nade .dots { display: flex; gap: 3px; }
+  .nade .dot { width: 6px; height: 10px; background: #55524a; }
+  .nade .dot.on { background: var(--amber); }
+
+  #streak-icons { position: absolute; right: 16px; top: 60px; font-size: 11px; color: var(--amber); text-align: right; letter-spacing: 1.5px; }
+
+  #respawn-overlay {
+    position: absolute; inset: 0; background: rgba(20, 4, 2, 0.55); backdrop-filter: blur(2px);
+    display: none; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+  }
+  #respawn-overlay.show { display: flex; }
+  #respawn-title { font-family: var(--stencil); font-size: 40px; letter-spacing: 6px; color: #ffb0a2; text-transform: uppercase; }
+  #respawn-sub { font-size: 13px; color: #d8cfc9; letter-spacing: 1px; }
+  #respawn-timer { font-family: var(--stencil); font-size: 26px; color: #fff; }
+
+  #net-status {
+    position: absolute; left: 16px; top: 12px; font-size: 11px; color: #9c9a90;
+    display: flex; gap: 10px; letter-spacing: 1px;
+  }
+  #chat-log {
+    position: absolute; left: 16px; bottom: 92px; display: flex; flex-direction: column;
+    gap: 3px; font-size: 12px; max-width: 40vw; color: #d5d2c8;
+  }
+  #chat-log .chat-line { background: rgba(6,8,6,0.6); padding: 2px 6px; }
+  #chat-input-row {
+    position: absolute; left: 16px; bottom: 60px; display: none; pointer-events: auto;
+  }
+  #chat-input-row.show { display: block; }
+  #chat-input {
+    background: rgba(6,8,6,0.85); border: 1px solid var(--panel-edge); color: var(--ink);
+    padding: 6px 10px; width: 320px; font-family: var(--mono); font-size: 13px; outline: none;
+  }
+
+  /* ---------------- scoreboard ---------------- */
+  #scoreboard {
+    position: absolute; inset: 8vh 12vw auto 12vw; display: none; padding: 14px 16px 18px;
+    background: rgba(6,8,6,0.9); border: 1px solid var(--panel-edge);
+  }
+  #scoreboard.show { display: block; }
+  #scoreboard h2 { margin: 0 0 10px; font-family: var(--stencil); letter-spacing: 4px; font-size: 16px; color: var(--amber); text-transform: uppercase; }
+  #scoreboard table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  #scoreboard th { text-align: left; font-weight: 500; color: #a9a69b; font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; padding-bottom: 4px; }
+  #scoreboard td { padding: 3px 4px; border-top: 1px solid rgba(255,255,255,0.07); }
+  #scoreboard tr.me { color: #ffe6b8; }
+  #scoreboard .team-us { color: var(--green); }
+  #scoreboard .team-opfor { color: var(--blood); }
+  #scoreboard .sb-scores { display: flex; justify-content: space-between; font-family: var(--stencil); font-size: 26px; margin-bottom: 8px; }
+
+  /* ---------------- menus ---------------- */
+  #menu {
+    position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;
+    background:
+      radial-gradient(circle at 30% 20%, rgba(80, 110, 60, 0.25), transparent 60%),
+      radial-gradient(circle at 75% 70%, rgba(140, 90, 40, 0.22), transparent 55%),
+      linear-gradient(180deg, #0a0f0b 0%, #06080a 100%);
+  }
+  #menu.hidden { display: none; }
+  .screen { display: none; width: min(880px, 92vw); max-height: 88vh; overflow: auto; padding: 26px 30px 30px; }
+  .screen.active { display: block; }
+  .title { font-family: var(--stencil); font-size: 54px; letter-spacing: 12px; margin: 0 0 2px; text-transform: uppercase; }
+  .title .accent { color: var(--amber); }
+  .subtitle { font-size: 12px; letter-spacing: 4px; color: #9c9a90; text-transform: uppercase; margin-bottom: 22px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .col { display: flex; flex-direction: column; gap: 12px; }
+  button {
+    font-family: var(--stencil); font-size: 15px; letter-spacing: 2px; text-transform: uppercase;
+    padding: 11px 18px; background: rgba(255,255,255,0.04); color: var(--ink);
+    border: 1px solid rgba(255,255,255,0.18); cursor: pointer; transition: 0.15s;
+  }
+  button:hover:not(:disabled) { background: rgba(255, 180, 87, 0.14); border-color: var(--amber); color: #fff; }
+  button:disabled { opacity: 0.4; cursor: default; }
+  button.primary { background: rgba(255, 180, 87, 0.16); border-color: var(--amber); color: #ffd9a5; }
+  button.small { font-size: 12px; padding: 7px 12px; }
+  label { font-size: 12px; letter-spacing: 1px; color: #b9b6ab; text-transform: uppercase; }
+  input[type="text"], input[type="number"], select, textarea {
+    background: rgba(0,0,0,0.45); border: 1px solid rgba(255,255,255,0.16); color: var(--ink);
+    padding: 9px 11px; font-family: var(--mono); font-size: 13px; outline: none; width: 100%;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--amber); }
+  input[type="range"] { width: 100%; accent-color: var(--amber); }
+  textarea { min-height: 74px; resize: vertical; font-size: 11px; word-break: break-all; }
+  .field { display: flex; flex-direction: column; gap: 5px; flex: 1 1 190px; }
+  .card { border: 1px solid rgba(255,255,255,0.12); padding: 14px 16px; background: rgba(0,0,0,0.28); }
+  .card h3 { margin: 0 0 8px; font-family: var(--stencil); font-size: 14px; letter-spacing: 2px; color: var(--amber); text-transform: uppercase; }
+  .hint { font-size: 11px; color: #8f8d84; line-height: 1.5; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+  .tabs button.active { background: rgba(255,180,87,0.18); border-color: var(--amber); }
+  .kv { display: flex; justify-content: space-between; font-size: 12px; padding: 2px 0; color: #cfcbc0; }
+  .status { font-size: 12px; color: var(--amber); min-height: 16px; }
+  .weapon-choice { display: flex; flex-direction: column; gap: 6px; }
+  .weapon-choice button.selected { border-color: var(--amber); background: rgba(255,180,87,0.12); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } .title { font-size: 34px; letter-spacing: 6px; } }
+
+  /* ---------------- loading ---------------- */
+  #loading {
+    position: fixed; inset: 0; z-index: 40; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 14px;
+    background: linear-gradient(180deg, #0a1008 0%, #05070a 100%);
+  }
+  #loading.hidden { display: none; }
+  #loading h1 { font-family: var(--stencil); font-size: 44px; letter-spacing: 14px; margin: 0; }
+  #loading .tag { font-size: 11px; letter-spacing: 5px; color: #9c9a90; text-transform: uppercase; }
+  #loading-bar { width: min(520px, 76vw); height: 6px; background: rgba(255,255,255,0.09); }
+  #loading-bar-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #7fae4a, var(--amber)); transition: width 0.18s; }
+  #loading-label { font-size: 12px; color: #b9b6ab; letter-spacing: 1px; min-height: 16px; }
+  #loading-warning { display: none; max-width: 560px; text-align: center; font-size: 13px; color: #ffc3ba; line-height: 1.6; }
+  #loading-warning.show { display: block; }
+  #loading-hint { font-size: 11px; color: #6f6d66; letter-spacing: 1px; }
+
+  /* ---------------- touch controls ---------------- */
+  #touch-controls { position: fixed; inset: 0; z-index: 8; display: none; pointer-events: none; }
+  #touch-controls.on { display: block; }
+  .stick {
+    position: absolute; width: 132px; height: 132px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.18); background: rgba(0,0,0,0.22); pointer-events: auto;
+  }
+  #stick-left { left: 22px; bottom: 26px; }
+  #stick-right { right: 22px; bottom: 26px; }
+  .stick .knob {
+    position: absolute; left: 50%; top: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px;
+    border-radius: 50%; background: rgba(255,255,255,0.22); border: 1px solid rgba(255,255,255,0.3);
+  }
+  .tbtn {
+    position: absolute; pointer-events: auto; width: 62px; height: 62px; border-radius: 50%;
+    background: rgba(0,0,0,0.34); border: 1px solid rgba(255,255,255,0.22);
+    color: #e8e6dd; font-family: var(--stencil); font-size: 12px; letter-spacing: 1px;
+    display: flex; align-items: center; justify-content: center; text-transform: uppercase;
+  }
+  .tbtn.on { background: rgba(255,180,87,0.3); border-color: var(--amber); }
+  #tb-fire { right: 176px; bottom: 40px; width: 78px; height: 78px; }
+  #tb-ads { right: 168px; bottom: 130px; }
+  #tb-jump { right: 40px; bottom: 158px; }
+  #tb-crouch { right: 112px; bottom: 196px; }
+  #tb-reload { right: 26px; bottom: 96px; }
+  #tb-swap { right: 96px; bottom: 262px; }
+</style>
+</head>
+<body>
+<canvas id="game-canvas" class="game"></canvas>
+<canvas id="hud-canvas"></canvas>
+
+<!-- ------------------------------- HUD ------------------------------- -->
+<div id="hud">
+  <div id="net-status"><span id="fps">-- FPS</span><span id="ping"></span><span id="netmode"></span></div>
+
+  <div id="top-bar" class="panel">
+    <span class="score us" id="score-us">0</span>
+    <span id="match-timer">10:00</span>
+    <span class="score opfor" id="score-opfor">0</span>
+    <span id="match-mode">TDM</span>
+  </div>
+
+  <div id="streak-icons"></div>
+  <div id="killfeed"></div>
+  <div id="notifications"></div>
+  <div id="objective-banner"></div>
+
+  <div id="bottom-left">
+    <div id="health-row">
+      <div id="health-bar"><div id="health-bar-fill"></div></div>
+      <span id="health-value">100</span>
+    </div>
+    <div id="stamina-bar"><div id="stamina-bar-fill"></div></div>
+    <div id="stance-icons">
+      <span data-stance="stand" class="on">STAND</span><span data-stance="crouch">CROUCH</span><span data-stance="prone">PRONE</span>
+    </div>
+  </div>
+
+  <div id="bottom-right">
+    <div id="weapon-name">M4A1</div>
+    <div id="ammo-line"><span id="ammo-mag">30</span><span id="ammo-reserve"> / 240</span></div>
+    <div id="fire-mode">AUTO</div>
+    <div id="grenades">
+      <div class="nade" data-nade="frag">FRAG <span class="dots" id="dots-frag"></span></div>
+      <div class="nade" data-nade="flash">FLASH <span class="dots" id="dots-flash"></span></div>
+    </div>
+  </div>
+
+  <div id="chat-log"></div>
+  <div id="chat-input-row"><input id="chat-input" type="text" maxlength="90" placeholder="Say something (Enter)" /></div>
+
+  <div id="respawn-overlay">
+    <div id="respawn-title">You are down</div>
+    <div id="respawn-sub" id="respawn-killer"></div>
+    <div id="respawn-timer">5</div>
+    <div class="hint">Change your loadout while you wait</div>
+  </div>
+
+  <div id="scoreboard">
+    <h2>Scoreboard</h2>
+    <div class="sb-scores"><span class="team-us" id="sb-us">US 0</span><span class="team-opfor" id="sb-opfor">0 OPFOR</span></div>
+    <table>
+      <thead><tr><th>Operator</th><th>Team</th><th>K</th><th>D</th><th>Ping</th></tr></thead>
+      <tbody id="scoreboard-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ---------------------------- touch layer --------------------------- -->
+<div id="touch-controls">
+  <div class="stick" id="stick-left"><div class="knob" id="knob-left"></div></div>
+  <div class="stick" id="stick-right"><div class="knob" id="knob-right"></div></div>
+  <div class="tbtn" id="tb-fire">Fire</div>
+  <div class="tbtn" id="tb-ads">ADS</div>
+  <div class="tbtn" id="tb-jump">Jump</div>
+  <div class="tbtn" id="tb-crouch">Crouch</div>
+  <div class="tbtn" id="tb-reload">Reload</div>
+  <div class="tbtn" id="tb-swap">Swap</div>
+</div>
+
+<!-- ------------------------------- menus ------------------------------ -->
+<div id="menu">
+  <!-- main -->
+  <section class="screen active" id="screen-main">
+    <h1 class="title">Iron<span class="accent">wood</span></h1>
+    <div class="subtitle">Global Flashpoint · Jungle Ruins · Backend-free multiplayer</div>
+    <div class="row">
+      <button class="primary" data-action="goto-sp">Single Player</button>
+      <button data-action="goto-mp">Multiplayer</button>
+      <button data-action="goto-loadout">Loadout</button>
+      <button data-action="goto-settings">Settings</button>
+    </div>
+    <div class="row" style="margin-top:18px">
+      <div class="field">
+        <label for="input-name">Player name</label>
+        <input id="input-name" type="text" maxlength="15" value="Operator" />
+      </div>
+    </div>
+    <p class="hint" style="margin-top:18px">
+      Everything you see is generated by code: terrain, ruins, textures, weapon models,
+      soldier animation and every sound. No downloads, no accounts, no game files required.
+      Multiplayer links browsers directly — either between tabs on this machine, or
+      peer-to-peer with a pairing code you can paste to a friend.
+    </p>
+  </section>
+
+  <!-- single player -->
+  <section class="screen" id="screen-sp">
+    <h2 class="title" style="font-size:30px;letter-spacing:6px">Single Player</h2>
+    <div class="subtitle">Team Deathmatch against bots</div>
+    <div class="grid2">
+      <div class="card">
+        <h3>Match setup</h3>
+        <div class="field">
+          <label for="opt-difficulty">Bot difficulty</label>
+          <select id="opt-difficulty">
+            <option value="recruit">Recruit</option>
+            <option value="regular" selected>Regular</option>
+            <option value="hardened">Hardened</option>
+            <option value="veteran">Veteran</option>
+          </select>
+        </div>
+        <div class="field" style="margin-top:10px">
+          <label for="opt-bots">Bots per side</label>
+          <select id="opt-bots">
+            <option value="4">4 (small)</option>
+            <option value="6" selected>6</option>
+            <option value="8">8</option>
+            <option value="10">10 (chaos)</option>
+          </select>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Map: Ruins of Vinh Long</h3>
+        <div class="kv"><span>Temple courtyard</span><span>south ridge</span></div>
+        <div class="kv"><span>Ruined village</span><span>river crossing</span></div>
+        <div class="kv"><span>Crash site</span><span>map centre</span></div>
+        <div class="kv"><span>Rules</span><span>75 kills / 10 min</span></div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:18px">
+      <button class="primary" data-action="start-sp">Deploy</button>
+      <button data-action="back">Back</button>
+    </div>
+  </section>
+
+  <!-- multiplayer -->
+  <section class="screen" id="screen-mp">
+    <h2 class="title" style="font-size:30px;letter-spacing:6px">Multiplayer</h2>
+    <div class="subtitle">No servers. No accounts. Just browsers talking to each other.</div>
+    <div class="tabs">
+      <button id="tab-host" class="active">Host a party</button>
+      <button id="tab-join">Join a party</button>
+    </div>
+
+    <div class="grid2">
+      <div class="card" id="panel-transport">
+        <h3>Connection</h3>
+        <div class="field">
+          <label for="opt-transport">Link type</label>
+          <select id="opt-transport">
+            <option value="tab" selected>Same-device tabs (instant)</option>
+            <option value="rtc">Peer-to-peer (WebRTC, pairing code)</option>
+          </select>
+        </div>
+        <p class="hint" id="transport-hint">
+          Tabs: perfect for testing or split-screen-on-one-PC — everyone in the same
+          browser. Peer-to-peer: works across the internet, you exchange two short codes.
+        </p>
+      </div>
+      <div class="card" id="panel-party">
+        <h3>Party</h3>
+        <div class="kv"><span>Room code</span><span id="host-room-code">—</span></div>
+        <div class="kv"><span>Players</span><span id="host-player-count">0</span></div>
+        <div id="host-players" class="hint">Nobody yet.</div>
+        <div class="row" style="margin-top:10px">
+          <button class="small" data-action="host-create">Create party</button>
+          <button class="small" data-action="copy-room">Copy room code</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:14px">
+      <div class="card" id="card-host-code">
+        <h3>Invite a friend (peer-to-peer)</h3>
+        <div class="field">
+          <label for="host-invite">1 · Send this invite code</label>
+          <textarea id="host-invite" readonly placeholder="Click 'Generate invite' to make a code…"></textarea>
+        </div>
+        <div class="row" style="margin:8px 0">
+          <button class="small" data-action="host-invite-gen">Generate invite</button>
+          <button class="small" data-action="copy-invite">Copy invite</button>
+        </div>
+        <div class="field">
+          <label for="host-answer">2 · Paste their answer code</label>
+          <textarea id="host-answer" placeholder="Paste the answer code your friend sends back…"></textarea>
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button class="small primary" data-action="host-accept">Connect guest</button>
+          <button class="small" data-action="host-start">Start match</button>
+        </div>
+        <div class="status" id="host-status"></div>
+      </div>
+
+      <div class="card" id="card-join">
+        <h3>Join</h3>
+        <div class="field">
+          <label for="join-code">Room code (tabs)</label>
+          <input id="join-code" type="text" maxlength="6" placeholder="ABCD" />
+        </div>
+        <div class="row" style="margin:8px 0">
+          <button class="small" data-action="join-tab">Join same-device party</button>
+        </div>
+        <div class="field">
+          <label for="join-invite">Invite code (peer-to-peer)</label>
+          <textarea id="join-invite" placeholder="Paste the invite code the host sent you…"></textarea>
+        </div>
+        <div class="row" style="margin:8px 0">
+          <button class="small" data-action="join-rtc">Generate answer</button>
+          <button class="small" data-action="copy-answer">Copy answer</button>
+        </div>
+        <div class="field">
+          <label for="join-answer">Answer code to send back</label>
+          <textarea id="join-answer" readonly placeholder="Your answer code appears here…"></textarea>
+        </div>
+        <div class="status" id="join-status"></div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:16px">
+      <button data-action="back">Back</button>
+    </div>
+  </section>
+
+  <!-- loadout -->
+  <section class="screen" id="screen-loadout">
+    <h2 class="title" style="font-size:30px;letter-spacing:6px">Loadout</h2>
+    <div class="subtitle">Pick what you carry into the jungle</div>
+    <div class="grid2">
+      <div class="card">
+        <h3>Primary</h3>
+        <div class="weapon-choice" id="choice-primary">
+          <button data-weapon="m4a1" class="selected">M4A1 — 30 rnd, red dot, 800 rpm</button>
+          <button data-weapon="mp5">MP5 — 30 rnd, close quarters, 900 rpm</button>
+          <button data-weapon="intervention">Intervention — bolt action .50, 6× scope</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Secondary</h3>
+        <div class="weapon-choice" id="choice-secondary">
+          <button data-weapon="m9" class="selected">M9 — 15 rnd semi-auto</button>
+        </div>
+        <h3 style="margin-top:14px">Equipment</h3>
+        <div class="hint">2 × Frag grenade · 1 × Flashbang<br />Knife melee on MMB or V.</div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:18px"><button data-action="back">Back</button></div>
+  </section>
+
+  <!-- settings -->
+  <section class="screen" id="screen-settings">
+    <h2 class="title" style="font-size:30px;letter-spacing:6px">Settings</h2>
+    <div class="subtitle">Saved in this browser</div>
+    <div class="grid2">
+      <div class="card">
+        <h3>Controls</h3>
+        <div class="field"><label for="opt-sens">Mouse sensitivity <span id="val-sens"></span></label><input id="opt-sens" type="range" min="0.0006" max="0.006" step="0.0001" /></div>
+        <div class="field" style="margin-top:10px"><label for="opt-fov">Field of view <span id="val-fov"></span></label><input id="opt-fov" type="range" min="60" max="100" step="1" /></div>
+        <label style="display:flex;gap:8px;align-items:center;margin-top:12px">
+          <input id="opt-invert" type="checkbox" /> Invert vertical look
+        </label>
+      </div>
+      <div class="card">
+        <h3>Graphics &amp; audio</h3>
+        <div class="field">
+          <label for="opt-quality">Quality preset</label>
+          <select id="opt-quality">
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high" selected>High</option>
+            <option value="ultra">Ultra</option>
+          </select>
+        </div>
+        <div class="field" style="margin-top:10px"><label for="opt-mastervol">Master volume <span id="val-mastervol"></span></label><input id="opt-mastervol" type="range" min="0" max="1" step="0.05" /></div>
+        <div class="field" style="margin-top:10px"><label for="opt-sfxvol">Effects <span id="val-sfxvol"></span></label><input id="opt-sfxvol" type="range" min="0" max="1" step="0.05" /></div>
+        <div class="field" style="margin-top:10px"><label for="opt-ambvol">Ambience <span id="val-ambvol"></span></label><input id="opt-ambvol" type="range" min="0" max="1" step="0.05" /></div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:18px">
+      <button data-action="reset-settings">Reset to defaults</button>
+      <button data-action="back">Back</button>
+    </div>
+  </section>
+
+  <!-- pause -->
+  <section class="screen" id="screen-pause">
+    <h2 class="title" style="font-size:30px;letter-spacing:6px">Paused</h2>
+    <div class="subtitle" id="pause-sub">Match paused</div>
+    <div class="col" style="max-width:340px">
+      <button class="primary" data-action="resume">Resume</button>
+      <button data-action="pause-settings">Settings</button>
+      <button data-action="pause-loadout">Loadout</button>
+      <button data-action="leave">Leave match</button>
+    </div>
+  </section>
+
+  <!-- end of match -->
+  <section class="screen" id="screen-end">
+    <h2 class="title" style="font-size:34px;letter-spacing:8px" id="end-title">Match over</h2>
+    <div class="subtitle" id="end-sub"></div>
+    <div class="card" id="end-stats"></div>
+    <div class="row" style="margin-top:18px">
+      <button class="primary" data-action="rematch">Rematch</button>
+      <button data-action="leave">Back to menu</button>
+    </div>
+  </section>
+</div>
+
+<!-- ------------------------------ loading ----------------------------- -->
+<div id="loading">
+  <h1>IRONWOOD</h1>
+  <div class="tag">Generating jungle · weapons · soldiers</div>
+  <div id="loading-bar"><div id="loading-bar-fill"></div></div>
+  <div id="loading-label">Booting…</div>
+  <div id="loading-warning"></div>
+  <div id="loading-hint">Click anywhere to enable audio</div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.min.js",
+    "three/": "./vendor/"
+  }
+}
+</script>
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>

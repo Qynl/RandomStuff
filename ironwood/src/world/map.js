@@ -55,6 +55,57 @@ const RIVER = [
 ];
 const RIVER_WIDTH = 8.5;
 
+/**
+ * Where the trails meet the flooded valley the ground is raised into a gravel
+ * causeway and the deep channel is spanned by a timber bridge. Each site is
+ * derived from the road splines: `span` is the deck length across the deep
+ * water, `reach` how far the raised embankment shoulders run past the
+ * abutments, `ang` the road heading.
+ */
+const BRIDGES = [
+  { x: -68.5, z: 55.8, ang: -1.071, span: 22, reach: 12 }, // village road
+  { x: -24.8, z: 9.1, ang: -0.427, span: 16, reach: 11 }, // crossroads road
+  { x: 24.7, z: -20.7, ang: -0.757, span: 18, reach: 11 }, // temple approach
+  { x: 26.0, z: 6.0, ang: 0.115, span: 36, reach: 13 }, // long link crossing
+  { x: 78.5, z: -39.4, ang: -1.342, span: 15, reach: 11 }, // ridge road
+];
+/** Deck surface height above the water plane. */
+const BRIDGE_DECK = MAP.waterLevel + 2.0;
+/** Embankment shoulder sits 0.15 below the deck so the step up is walkable. */
+const CAUSEWAY_TOP = BRIDGE_DECK - 0.15;
+/** Half width of the raised causeway bed (the deck is slightly narrower). */
+const CAUSEWAY_HALF = 3.5;
+const CAUSEWAY_FALLOFF = 4.2;
+
+/** Navigation tuning: wading depth, slope limit and trail clearing radius. */
+const NAV_WATER_LIMIT = 1.6; // deeper than this needs a bridge
+const NAV_SLOPE_LIMIT = 0.5; // cos(~60 deg) - only real cliffs block a route
+const NAV_ROAD_RADIUS = 2.8; // trails are cleared, so steep ground is fine
+
+function causewayInfluence(x, z) {
+  let w = 0;
+  let target = CAUSEWAY_TOP;
+  for (const b of BRIDGES) {
+    const dx = x - b.x;
+    const dz = z - b.z;
+    const ca = Math.cos(b.ang);
+    const sa = Math.sin(b.ang);
+    const along = Math.abs(dx * ca + dz * sa);
+    const across = Math.abs(-dx * sa + dz * ca);
+    const abutment = b.span * 0.5;
+    if (along > abutment + b.reach) continue;
+    if (across > CAUSEWAY_HALF + CAUSEWAY_FALLOFF) continue;
+    const alongW = along <= abutment - 0.6 ? 0 : smoothstep(abutment + b.reach, abutment + b.reach * 0.35, along);
+    const acrossW = smoothstep(CAUSEWAY_HALF + CAUSEWAY_FALLOFF, CAUSEWAY_HALF, across);
+    const k = alongW * acrossW;
+    if (k > w) {
+      w = k;
+      target = CAUSEWAY_TOP;
+    }
+  }
+  return { w, target };
+}
+
 /** Path splines: village road, temple approach, crossroads link. */
 const PATH_SPLINES = [
   [
@@ -136,6 +187,10 @@ export function terrainHeight(x, z) {
   const channel = smoothstep(RIVER_WIDTH * 1.7, RIVER_WIDTH * 0.15, rd);
   h = lerp(h, MAP.waterLevel - 1.8, channel * 0.96);
 
+  // gravel causeway embankments carrying the trails over the flooded valley
+  const cw = causewayInfluence(x, z);
+  if (cw.w > 0.001) h = Math.max(h, lerp(h, cw.target, cw.w));
+
   return h;
 }
 
@@ -207,6 +262,7 @@ export class World {
     this.staticMeshes = [];
     this.treeInstances = [];
     this.buildingRects = [];
+    this.walkways = [];
     this.waterMesh = null;
     this.terrain = null;
     this.minimap = null;
@@ -235,7 +291,49 @@ export class World {
 
   addBoxCollider(x, y, z, sx, sy, sz, surface = 'stone', ref = null, opts = {}) {
     const box = AABB.fromCenter(x, y + sy / 2, z, sx, sy, sz);
-    return this.addCollider({ type: 'box', box, surface, ref, climbable: !!opts.climbable, tag: opts.tag || null });
+    return this.addCollider({
+      type: 'box', box, surface, ref,
+      climbable: !!opts.climbable,
+      deck: !!opts.deck,
+      tag: opts.tag || null,
+    });
+  }
+
+  /* ---------------- walkways (bridge decks) ---------------- */
+
+  /**
+   * Register a walkable surface: a straight, optionally sloped strip between
+   * two points. Decks feed navigation, ground support and the railing clamp,
+   * so a bridge works for the player and the bots alike.
+   */
+  addWalkway(ax, az, bx, bz, halfWidth, yA, yB, opts = {}) {
+    const wk = {
+      ax, az, bx, bz, halfWidth,
+      yA, yB,
+      railed: opts.railed !== false,
+      tag: opts.tag || 'deck',
+    };
+    this.walkways.push(wk);
+    return wk;
+  }
+
+  /** Highest walkway surface covering (x,z), or null. */
+  walkwayAt(x, z) {
+    let best = null;
+    for (const wk of this.walkways) {
+      const vx = wk.bx - wk.ax;
+      const vz = wk.bz - wk.az;
+      const len2 = vx * vx + vz * vz || 1;
+      const t = saturate(((x - wk.ax) * vx + (z - wk.az) * vz) / len2);
+      const cx = wk.ax + vx * t;
+      const cz = wk.az + vz * t;
+      const dx = x - cx;
+      const dz = z - cz;
+      if (dx * dx + dz * dz > wk.halfWidth * wk.halfWidth) continue;
+      const y = lerp(wk.yA, wk.yB, t);
+      if (!best || y > best.y) best = { y, t, walkway: wk };
+    }
+    return best;
   }
 
   addCylCollider(x, z, radius, y0, y1, surface = 'wood', ref = null, tag = null) {
@@ -250,16 +348,18 @@ export class World {
     if (opts.rotY) mesh.rotation.y = opts.rotY;
     mesh.castShadow = opts.castShadow !== false;
     mesh.receiveShadow = opts.receiveShadow !== false;
-    if (opts.rotY) {
-      // rotated boxes use an oriented collider approximated by a slightly
-      // larger axis aligned one (cheap and invisible in practice)
-      const c = Math.abs(Math.cos(opts.rotY));
-      const s = Math.abs(Math.sin(opts.rotY));
-      const ex = sx * c + sz * s;
-      const ez = sx * s + sz * c;
-      this.addBoxCollider(x, y, z, ex, sy, ez, opts.surface || 'stone', mesh, opts);
-    } else if (opts.collide !== false) {
-      this.addBoxCollider(x, y, z, sx, sy, sz, opts.surface || 'stone', mesh, opts);
+    if (opts.collide !== false) {
+      if (opts.rotY) {
+        // rotated boxes use an oriented collider approximated by a slightly
+        // larger axis aligned one (cheap and invisible in practice)
+        const c = Math.abs(Math.cos(opts.rotY));
+        const s = Math.abs(Math.sin(opts.rotY));
+        const ex = sx * c + sz * s;
+        const ez = sx * s + sz * c;
+        this.addBoxCollider(x, y, z, ex, sy, ez, opts.surface || 'stone', mesh, opts);
+      } else {
+        this.addBoxCollider(x, y, z, sx, sy, sz, opts.surface || 'stone', mesh, opts);
+      }
     }
     (opts.parent || this.group(opts.group || 'structures')).add(mesh);
     this.staticMeshes.push(mesh);
@@ -922,46 +1022,78 @@ export class World {
   }
 
   buildBridge() {
-    const p = { x: -56, z: 36 };
-    const a = { x: -70, z: 48 };
-    const b = { x: -42, z: 24 };
-    const dirX = b.x - a.x;
-    const dirZ = b.z - a.z;
-    const len = Math.hypot(dirX, dirZ);
-    const ang = Math.atan2(dirZ, dirX);
     const wood = this.woodMat(2);
     const stoneSt = this.stoneMat(1.2);
-    const y = MAP.waterLevel + 1.6;
-    // piers
-    for (const t of [0.28, 0.72]) {
-      const px = lerp(a.x, b.x, t);
-      const pz = lerp(a.z, b.z, t);
-      this.cylinder(0.9, 1.0, y - (MAP.waterLevel - 2.2), px, MAP.waterLevel - 2.2, pz, stoneSt, { segments: 12, surface: 'stone' });
-    }
-    // deck
-    this.box(len, 0.3, 4.2, p.x, y, p.z, wood, { group: 'bridge', rotY: ang, surface: 'wood', tag: 'cover' });
-    // planks detail
-    const planks = Math.floor(len / 0.55);
-    for (let i = 0; i < planks; i++) {
-      const t = i / (planks - 1);
-      const px = lerp(a.x, b.x, t);
-      const pz = lerp(a.z, b.z, t);
-      this.box(0.5, 0.1, 4.3, px, y + 0.3, pz, wood, { group: 'bridge', rotY: ang, surface: 'wood', tag: 'decor', collide: false });
-    }
-    // rails
-    for (const side of [-1, 1]) {
-      const ox = Math.cos(ang + Math.PI / 2) * 2.0 * side;
-      const oz = Math.sin(ang + Math.PI / 2) * 2.0 * side;
-      for (let i = 0; i <= 8; i++) {
-        const t = i / 8;
-        const px = lerp(a.x, b.x, t) + ox;
-        const pz = lerp(a.z, b.z, t) + oz;
-        this.box(0.14, 1.1, 0.14, px, y + 0.3, pz, wood, { group: 'bridge', tag: 'decor', collide: false });
+    const stoneCap = this.stoneMat(1.6);
+    const width = CAUSEWAY_HALF * 2 - 0.6;
+    for (const site of BRIDGES) {
+      const dirX = Math.cos(site.ang);
+      const dirZ = Math.sin(site.ang);
+      const half = site.span * 0.5;
+      const a = { x: site.x - dirX * half, z: site.z - dirZ * half };
+      const b = { x: site.x + dirX * half, z: site.z + dirZ * half };
+      const deckY = BRIDGE_DECK;
+
+      // piers down into the channel
+      const pierCount = site.span > 28 ? 3 : 2;
+      for (let i = 1; i <= pierCount; i++) {
+        const t = i / (pierCount + 1);
+        const px = lerp(a.x, b.x, t);
+        const pz = lerp(a.z, b.z, t);
+        const base = MAP.waterLevel - 2.6;
+        this.cylinder(0.85, 1.0, deckY - 0.4 - base, px, base, pz, stoneSt, {
+          segments: 12, surface: 'stone', tag: 'decor',
+        });
+        this.cylinder(1.15, 1.15, 0.5, px, deckY - 0.9, pz, stoneCap, {
+          segments: 12, surface: 'stone', tag: 'decor',
+        });
       }
-      this.box(len, 0.1, 0.1, p.x + ox, y + 1.35, p.z + oz, wood, { group: 'bridge', rotY: ang, tag: 'decor', collide: false });
+
+      // deck slab (collidable for bullets, walkable through the walkway table)
+      this.box(site.span, 0.4, width, site.x, deckY - 0.4, site.z, wood, {
+        group: 'bridge', rotY: site.ang, surface: 'wood', tag: 'cover', deck: true,
+      });
+      // kerb beams
+      for (const side of [-1, 1]) {
+        const ox = Math.cos(site.ang + Math.PI / 2) * (width * 0.5 - 0.18) * side;
+        const oz = Math.sin(site.ang + Math.PI / 2) * (width * 0.5 - 0.18) * side;
+        this.box(site.span, 0.34, 0.36, site.x + ox, deckY + 0.02, site.z + oz, stoneSt, {
+          group: 'bridge', rotY: site.ang, surface: 'stone', tag: 'decor', collide: false,
+        });
+      }
+      // plank detail
+      const planks = Math.max(6, Math.floor(site.span / 0.62));
+      for (let i = 0; i < planks; i++) {
+        const t = (i + 0.5) / planks;
+        const px = lerp(a.x, b.x, t);
+        const pz = lerp(a.z, b.z, t);
+        this.box(0.52, 0.09, width - 0.5, px, deckY + 0.02, pz, wood, {
+          group: 'bridge', rotY: site.ang, surface: 'wood', tag: 'decor', collide: false,
+        });
+      }
+      // railings: posts every ~2 m with two rails, kept solid so nobody falls in
+      const posts = Math.max(4, Math.round(site.span / 2));
+      for (const side of [-1, 1]) {
+        const ox = Math.cos(site.ang + Math.PI / 2) * (width * 0.5 - 0.12) * side;
+        const oz = Math.sin(site.ang + Math.PI / 2) * (width * 0.5 - 0.12) * side;
+        for (let i = 0; i <= posts; i++) {
+          const t = i / posts;
+          const px = lerp(a.x, b.x, t) + ox;
+          const pz = lerp(a.z, b.z, t) + oz;
+          this.box(0.16, 1.15, 0.16, px, deckY, pz, wood, {
+            group: 'bridge', tag: 'decor', collide: false,
+          });
+        }
+        for (const railY of [deckY + 0.55, deckY + 1.05]) {
+          this.box(site.span, 0.12, 0.12, site.x + ox, railY, site.z + oz, wood, {
+            group: 'bridge', rotY: site.ang, tag: 'decor', collide: false,
+          });
+        }
+      }
+
+      // the deck is the walkway: ramps live in the causeway terrain
+      this.addWalkway(a.x, a.z, b.x, b.z, width * 0.5, deckY, deckY, { tag: 'bridge' });
     }
-    // rope sag for looks
-    this.smokeEmitters.length = this.smokeEmitters.length;
   }
 
   buildRocks() {
@@ -1456,7 +1588,6 @@ export class World {
 
   buildBounds() {
     const B = MAP.half + BOUNDS_PADDING;
-    const h = 30;
     const mat = new THREE.MeshBasicMaterial({ visible: false });
     const walls = [
       { x: 0, z: -B, sx: B * 2, sz: 2 },
@@ -1464,6 +1595,9 @@ export class World {
       { x: -B, z: 0, sx: 2, sz: B * 2 },
       { x: B, z: 0, sx: 2, sz: B * 2 },
     ];
+    // tall enough to stay above the ridge line even where the heightfield
+    // climbs to ~60 m just outside the play area
+    const h = MAP.half + 40;
     for (const w of walls) {
       const m = new THREE.Mesh(new THREE.BoxGeometry(w.sx, h, w.sz), mat);
       m.position.set(w.x, h / 2 - 4, w.z);
@@ -1478,13 +1612,18 @@ export class World {
   supportHeight(x, z, feetY) {
     let best = terrainHeight(x, z);
     for (const col of this.colliders) {
-      if (col.type !== 'box') continue;
+      if (col.type !== 'box' || col.deck) continue;
       const b = col.box;
       if (b.max.y > feetY + 0.62) continue;
       if (b.max.y < best) continue;
       if (x < b.min.x - 0.25 || x > b.max.x + 0.25) continue;
       if (z < b.min.z - 0.25 || z > b.max.z + 0.25) continue;
       best = Math.max(best, b.max.y);
+    }
+    // bridge decks and other walkways are walkable surfaces too
+    if (this.walkways.length) {
+      const wk = this.walkwayAt(x, z);
+      if (wk && wk.y > best && wk.y <= feetY + 0.62) best = wk.y;
     }
     return best;
   }
@@ -1494,6 +1633,51 @@ export class World {
     return Math.max(0, MAP.waterLevel + 0.35 - h);
   }
 
+  /**
+   * Clamp a horizontal velocity so nothing walks up a cliff face or wades into
+   * water deeper than chest height. Returns the adjusted { x, z } velocity.
+   */
+  clampGroundMove(x, z, vx, vz, opts = {}) {
+    let rvx = vx;
+    let rvz = vz;
+    const speed = Math.hypot(rvx, rvz);
+    if (speed < 0.05) return { x: rvx, z: rvz };
+    const limit = opts.slope ?? NAV_SLOPE_LIMIT - 0.06;
+    const dx = rvx / speed;
+    const dz = rvz / speed;
+    // deep water is a wall for a soldier on foot
+    const ahead = opts.lookahead ?? 0.55;
+    if (this.waterDepth(x + dx * ahead, z + dz * ahead) > NAV_WATER_LIMIT) {
+      const testX = x + dx * ahead * 0.4;
+      const testZ = z + dz * ahead * 0.4;
+      if (this.waterDepth(testX, testZ) > NAV_WATER_LIMIT) {
+        // slide along the shoreline instead of walking in
+        const probe = 0.6;
+        const sideX = -dz;
+        const sideZ = dx;
+        const leftOk = this.waterDepth(x + sideX * probe, z + sideZ * probe) <= NAV_WATER_LIMIT;
+        const rightOk = this.waterDepth(x - sideX * probe, z - sideZ * probe) <= NAV_WATER_LIMIT;
+        if (leftOk && !rightOk) return { x: sideX * speed * 0.6, z: sideZ * speed * 0.6 };
+        if (rightOk && !leftOk) return { x: -sideX * speed * 0.6, z: -sideZ * speed * 0.6 };
+        return { x: 0, z: 0 };
+      }
+    }
+    const n = terrainNormal(x + dx * ahead, z + dz * ahead, this._slopeNormal || (this._slopeNormal = new THREE.Vector3()));
+    if (n.y >= limit) return { x: rvx, z: rvz };
+    const gl = Math.hypot(n.x, n.z);
+    if (gl < 1e-4) return { x: rvx, z: rvz };
+    const gx = n.x / gl;
+    const gz = n.z / gl; // downhill
+    const uphill = dx * gx + dz * gz;
+    if (uphill >= 0) return { x: rvx, z: rvz }; // heading down, fine
+    const tx = dx - gx * uphill;
+    const tz = dz - gz * uphill;
+    const tl = Math.hypot(tx, tz);
+    if (tl < 1e-3) return { x: gx * speed * 0.45, z: gz * speed * 0.45 }; // straight into the wall: slide down
+    const k = speed / tl;
+    return { x: tx * k, z: tz * k };
+  }
+
   /** Resolve a capsule-ish player volume against the world, moving `pos`. */
   resolveCollisions(pos, radius, height) {
     let grounded = false;
@@ -1501,6 +1685,9 @@ export class World {
     const head = pos.y + height;
     for (const col of this.colliders) {
       if (col.type === 'box') {
+        // bridge decks are surfaces, not obstacles: the walkway table grounds
+        // whoever stands on them, so walking under a span stays possible
+        if (col.deck) continue;
         const b = col.box;
         if (head < b.min.y || feet > b.max.y - 0.02) continue;
         const cx = clamp(pos.x, b.min.x, b.max.x);
@@ -1540,6 +1727,29 @@ export class World {
         const push = rr - d;
         pos.x += (dx / d) * push;
         pos.z += (dz / d) * push;
+      }
+    }
+    // railings: anything standing on a walkway is kept inside its width
+    for (const wk of this.walkways) {
+      if (!wk.railed) continue;
+      const vx = wk.bx - wk.ax;
+      const vz = wk.bz - wk.az;
+      const len2 = vx * vx + vz * vz || 1;
+      const t0 = ((pos.x - wk.ax) * vx + (pos.z - wk.az) * vz) / len2;
+      if (t0 < 0.04 || t0 > 0.96) continue; // abutments are open ground
+      const t = saturate(t0);
+      const cx = wk.ax + vx * t;
+      const cz = wk.az + vz * t;
+      const deckY = lerp(wk.yA, wk.yB, t);
+      if (pos.y < deckY - 0.7 || pos.y > deckY + 1.7) continue;
+      const dx = pos.x - cx;
+      const dz = pos.z - cz;
+      const dist = Math.hypot(dx, dz);
+      const limit = Math.max(0.2, wk.halfWidth - Math.max(radius, 0.4));
+      if (dist > limit && dist > 1e-4) {
+        const k = limit / dist;
+        pos.x = cx + dx * k;
+        pos.z = cz + dz * k;
       }
     }
     return grounded;
@@ -1722,18 +1932,27 @@ export class World {
     const originX = -MAP.half;
     const originZ = -MAP.half;
     const walkable = new Uint8Array(size * size);
-    const slopeLimit = 0.62; // cos of ~52 degrees
+    const cost = new Float32Array(size * size).fill(1);
+    const slopeLimit = NAV_SLOPE_LIMIT; // cos(~60 deg) - only cliffs block a route
+    const normal = new THREE.Vector3();
     for (let gz = 0; gz < size; gz++) {
       for (let gx = 0; gx < size; gx++) {
+        const i = gz * size + gx;
         const x = originX + (gx + 0.5) * cell;
         const z = originZ + (gz + 0.5) * cell;
         const h = terrainHeight(x, z);
-        if (this.waterDepth(x, z) > 0.8) continue;
-        const n = terrainNormal(x, z, new THREE.Vector3());
-        if (n.y < slopeLimit) continue;
-        // blocked by colliders?
+        const depth = Math.max(0, MAP.waterLevel + 0.35 - h);
+        const onRoad = pathDistance(x, z) < NAV_ROAD_RADIUS;
+        // bridge decks and raised causeways are floors, not walls
+        const wk = this.walkways.length ? this.walkwayAt(x, z) : null;
+        const onDeck = !!wk && wk.y > MAP.waterLevel + 0.5;
+        const floor = onDeck ? Math.max(h, wk.y) : h;
+        const ny = terrainNormal(x, z, normal).y;
+
+        // blocked by a wall or trunk standing on that floor?
         let blocked = false;
         for (const col of this.colliders) {
+          if (col.deck) continue;
           if (col.tag === 'tree') {
             if ((x - col.x) ** 2 + (z - col.z) ** 2 < (col.r + 0.5) ** 2) {
               blocked = true;
@@ -1743,19 +1962,41 @@ export class World {
           }
           if (col.type === 'box') {
             const b = col.box;
-            if (b.max.y - h < 0.55) continue; // low enough to walk over
+            if (b.max.y - floor < 0.55) continue; // low enough to step over
+            if (b.min.y > floor + 1.9) continue; // high enough to walk under
             if (x > b.min.x - 0.42 && x < b.max.x + 0.42 && z > b.min.z - 0.42 && z < b.max.z + 0.42) {
               blocked = true;
               break;
             }
-          } else if ((x - col.x) ** 2 + (z - col.z) ** 2 < (col.r + 0.42) ** 2 && col.y1 - h > 0.55) {
+          } else if ((x - col.x) ** 2 + (z - col.z) ** 2 < (col.r + 0.42) ** 2 && col.y1 - floor > 0.55 && col.y0 < floor + 1.9) {
             blocked = true;
             break;
           }
         }
-        if (!blocked) walkable[gz * size + gx] = 1;
+        if (blocked) continue;
+
+        // walkable when the floor is dry enough and not a cliff - trails are
+        // maintained, so a steep road bed still counts as a route
+        if (onDeck) {
+          walkable[i] = 1;
+          cost[i] = 1;
+          continue;
+        }
+        if (depth > NAV_WATER_LIMIT) continue;
+        if (ny < slopeLimit && !onRoad) continue;
+        walkable[i] = 1;
+
+        // A* cost: prefer dry, gentle, cleared ground
+        let c = 1;
+        if (depth > 0.35) c += 0.9 + Math.min(1.6, depth * 0.8); // wading is slow
+        if (ny < 0.74) c += (0.74 - ny) * 3.4; // steep ground is slow
+        if (onRoad) c -= 0.14; // trails are the natural route
+        cost[i] = Math.max(0.6, c);
       }
     }
+
+    // one connected graph: stitch islands the river and ridges strand
+    const stitched = this._stitchNav(walkable, cost, size, originX, originZ, cell);
 
     const isWalkable = (x, z) => {
       const gx = Math.floor((x - originX) / cell);
@@ -1783,9 +2024,11 @@ export class World {
       originX,
       originZ,
       walkable,
+      cost,
+      stitched,
       isWalkable,
       nearestWalkable,
-      findPath: (ax, az, bx, bz, limit = 6000) => this._astar(ax, az, bx, bz, limit),
+      findPath: (ax, az, bx, bz, limit = 14000) => this._astar(ax, az, bx, bz, limit),
       smoothPath: (path) => this._smoothPath(path),
       randomWalkable: (rng = Math.random, nearX = 0, nearZ = 0, radius = MAP.half) => {
         for (let i = 0; i < 400; i++) {
@@ -1797,12 +2040,17 @@ export class World {
         }
         return null;
       },
+      floorAt: (x, z) => {
+        const wk = this.walkways.length ? this.walkwayAt(x, z) : null;
+        const h = terrainHeight(x, z);
+        return wk && wk.y > h ? wk.y : h;
+      },
     };
 
-    // cover points: walkable cells hugging a collider, with a crouch-friendly height
+    // cover points: walkable cells hugging a collider, crouch height included
     const covers = [];
     for (const col of this.colliders) {
-      if (!col.tag || col.tag === 'bounds' || col.tag === 'decor') continue;
+      if (!col.tag || col.tag === 'bounds' || col.tag === 'decor' || col.tag === 'tree') continue;
       const px = col.type === 'box' ? (col.box.min.x + col.box.max.x) / 2 : col.x;
       const pz = col.type === 'box' ? (col.box.min.z + col.box.max.z) / 2 : col.z;
       const extent = col.type === 'box'
@@ -1818,6 +2066,103 @@ export class World {
     }
     this.coverPoints = covers;
     this.navReady = true;
+  }
+
+  /**
+   * The river and the ridge line leave pieces of walkable ground stranded from
+   * the main graph. Every decent-sized island gets a carved connector back to
+   * the mainland (never across deep water) so bots always have a route between
+   * spawns, objectives and cover.
+   */
+  _stitchNav(walkable, cost, size, originX, originZ, cell) {
+    const total = size * size;
+    const comp = new Int32Array(total).fill(-1);
+    const sizes = [];
+    const stack = [];
+    let count = 0;
+    for (let start = 0; start < total; start++) {
+      if (!walkable[start] || comp[start] >= 0) continue;
+      const id = count++;
+      let n = 0;
+      stack.length = 0;
+      stack.push(start);
+      comp[start] = id;
+      while (stack.length) {
+        const c = stack.pop();
+        n++;
+        const gx = c % size;
+        const gz = (c / size) | 0;
+        if (gx > 0 && walkable[c - 1] && comp[c - 1] < 0) { comp[c - 1] = id; stack.push(c - 1); }
+        if (gx < size - 1 && walkable[c + 1] && comp[c + 1] < 0) { comp[c + 1] = id; stack.push(c + 1); }
+        if (gz > 0 && walkable[c - size] && comp[c - size] < 0) { comp[c - size] = id; stack.push(c - size); }
+        if (gz < size - 1 && walkable[c + size] && comp[c + size] < 0) { comp[c + size] = id; stack.push(c + size); }
+      }
+      sizes[id] = n;
+    }
+    if (count <= 1) return 0;
+
+    let main = 0;
+    for (let id = 1; id < count; id++) if (sizes[id] > sizes[main]) main = id;
+
+    // breadth-first outward from the main graph across every cell
+    const dist = new Int32Array(total).fill(-1);
+    const from = new Int32Array(total).fill(-1);
+    const queue = new Int32Array(total);
+    let head = 0;
+    let tail = 0;
+    for (let i = 0; i < total; i++) {
+      if (comp[i] === main) {
+        dist[i] = 0;
+        queue[tail++] = i;
+      }
+    }
+    while (head < tail) {
+      const c = queue[head++];
+      const gx = c % size;
+      const gz = (c / size) | 0;
+      if (gx > 0 && dist[c - 1] < 0) { dist[c - 1] = dist[c] + 1; from[c - 1] = c; queue[tail++] = c - 1; }
+      if (gx < size - 1 && dist[c + 1] < 0) { dist[c + 1] = dist[c] + 1; from[c + 1] = c; queue[tail++] = c + 1; }
+      if (gz > 0 && dist[c - size] < 0) { dist[c - size] = dist[c] + 1; from[c - size] = c; queue[tail++] = c - size; }
+      if (gz < size - 1 && dist[c + size] < 0) { dist[c + size] = dist[c] + 1; from[c + size] = c; queue[tail++] = c + size; }
+    }
+
+    const MIN_SIZE = 40; // ~60 m2 - smaller pockets are ledges and interiors
+    const MAX_GAP = 26; // cells (~32 m); wider gaps are real terrain, not stitching
+    let stitched = 0;
+    for (let id = 0; id < count; id++) {
+      if (id === main || sizes[id] < MIN_SIZE) continue;
+      let bestCell = -1;
+      let bestDist = Infinity;
+      for (let i = 0; i < total; i++) {
+        if (comp[i] !== id || dist[i] < 0) continue;
+        if (dist[i] < bestDist) {
+          bestDist = dist[i];
+          bestCell = i;
+        }
+      }
+      if (bestCell < 0 || bestDist > MAX_GAP) continue;
+      const corridor = [];
+      let node = bestCell;
+      let blocked = false;
+      while (node >= 0 && dist[node] > 0) {
+        const gx = node % size;
+        const gz = (node / size) | 0;
+        const x = originX + (gx + 0.5) * cell;
+        const z = originZ + (gz + 0.5) * cell;
+        if (this.waterDepth(x, z) > NAV_WATER_LIMIT) { blocked = true; break; }
+        corridor.push(node);
+        node = from[node];
+      }
+      if (blocked || !corridor.length) continue;
+      for (const c of corridor) {
+        if (!walkable[c]) {
+          walkable[c] = 1;
+          cost[c] = 1.4; // usable, but never the preferred route
+        }
+      }
+      stitched++;
+    }
+    return stitched;
   }
 
   _astar(ax, az, bx, bz, limit) {
@@ -1856,15 +2201,27 @@ export class World {
       [1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1],
       [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2],
     ];
+    let bestNode = s;
+    let bestH = h(s);
+    const weights = nav.cost;
     while (heap.size && expanded < limit) {
       const current = heap.pop();
-      if (current === g) break;
+      if (current === g) {
+        bestNode = g;
+        bestH = 0;
+        break;
+      }
       if (closed[current]) continue;
       closed[current] = 1;
       expanded++;
+      const ch = h(current);
+      if (ch < bestH) {
+        bestH = ch;
+        bestNode = current;
+      }
       const cgx = gx(current);
       const cgz = gz(current);
-      for (const [dx, dz, cost] of neighbours) {
+      for (const [dx, dz, step] of neighbours) {
         const nx = cgx + dx;
         const nz = cgz + dz;
         if (nx < 0 || nz < 0 || nx >= size || nz >= size) continue;
@@ -1874,25 +2231,31 @@ export class World {
         if (dx !== 0 && dz !== 0) {
           if (!nav.walkable[cgz * size + nx] || !nav.walkable[nz * size + cgx]) continue;
         }
-        const tentative = gScore[current] + cost;
+        const terrain = (weights[current] + weights[ni]) * 0.5;
+        const tentative = gScore[current] + step * terrain;
         if (tentative < gScore[ni]) {
           gScore[ni] = tentative;
-          fScore[ni] = tentative + h(ni);
+          fScore[ni] = tentative + h(ni) * 1.04;
           cameFrom[ni] = current;
           heap.push(ni, fScore[ni]);
         }
       }
     }
-    if (cameFrom[g] === -1) return null;
+    // Unreachable goal: hand back the best-effort march toward it instead of
+    // nothing, so a bot never freezes when a pocket is not fully stitched.
+    const reached = cameFrom[g] !== -1;
+    const end = reached ? g : bestNode;
+    if (end === s) return null;
     const path = [];
-    let node = g;
+    let node = end;
     while (node !== -1 && path.length < 4096) {
       path.push({ x: originX + (gx(node) + 0.5) * cell, z: originZ + (gz(node) + 0.5) * cell });
       node = cameFrom[node];
       if (node === s) break;
     }
     path.reverse();
-    return path;
+    if (!reached && path.length > 2) path[path.length - 1].partial = true;
+    return path.length > 1 ? path : null;
   }
 
   _smoothPath(path) {

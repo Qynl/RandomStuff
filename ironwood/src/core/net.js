@@ -161,21 +161,37 @@ class TabTransport extends Emitter {
     this.roomCode = roomCode;
     this.channel = new BroadcastChannel(`ironwood:${roomCode}`);
     this.closed = false;
+    this.known = new Set();
     this.channel.onmessage = (ev) => {
       const m = ev.data;
       if (!m || m.__ironwood !== 1) return;
       if (m.from === this.id) return;
       if (m.to && m.to !== this.id) return;
       if (m.t === 'hello') {
-        this.emit('peer', { id: m.from, name: m.name, meta: m.meta });
+        if (!this.known.has(m.from)) {
+          this.known.add(m.from);
+          this.emit('peer', { id: m.from, name: m.name, meta: m.meta });
+          // answer the newcomer so it learns about everyone already here
+          this.announce(this.isHost ? { host: true } : { host: false });
+        }
         return;
       }
       if (m.t === 'bye') {
-        this.emit('peerLeave', { id: m.from });
+        if (this.known.delete(m.from)) this.emit('peerLeave', { id: m.from });
         return;
+      }
+      if (!this.known.has(m.from)) {
+        // traffic from someone whose hello we missed: treat it as a join
+        this.known.add(m.from);
+        this.emit('peer', { id: m.from, name: m.name, meta: null });
       }
       this.emit('message', m.payload, m.from);
     };
+    // keep the room fresh so a tab that opened late still finds the host
+    this.heartbeat = setInterval(() => {
+      if (!this.closed) this.announce(this.isHost ? { host: true } : { host: false });
+    }, 2000);
+    this.heartbeat?.unref?.();
   }
   send(payload, to) {
     if (this.closed) return;
@@ -194,6 +210,7 @@ class TabTransport extends Emitter {
   }
   close() {
     this.closed = true;
+    if (this.heartbeat) clearInterval(this.heartbeat);
     this.leave();
     try {
       this.channel.close();

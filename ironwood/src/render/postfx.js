@@ -424,11 +424,17 @@ export class PostFX {
     const h = this.sceneRT.height;
     const u = this.compositePass.material.uniforms;
 
-    // 1) scene -> HDR target (MSAA)
+    // 1) scene -> HDR target (MSAA), then an optional depth-cleared overlay
+    // (the weapon viewmodel is drawn here so it can never clip into walls but
+    // still receives the full post processing chain)
     renderer.setRenderTarget(this.sceneRT);
     renderer.setClearColor(0x000000, 0);
     renderer.clear(true, true, false);
     renderer.render(scene, camera);
+    if (typeof opts.overlay === 'function') {
+      renderer.clearDepth();
+      opts.overlay(renderer);
+    }
 
     // 2) bright pass
     this.brightPass.material.uniforms.tDiffuse.value = this.sceneRT.texture;
