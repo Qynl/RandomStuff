@@ -7,7 +7,7 @@ Use this tier when the user asks for a 3D game, or for something that "looks lik
 - Renderer: ACES tone mapping, PCF soft shadows, multisampled HDR target, bloom, and a sky gradient with fog.
 - Arena: procedural stone textures (no downloads), pillars, cover, lit torches with flicker, a directional sun with shadows.
 - Character: a jointed humanoid built from primitives. The rig has a procedural locomotion layer (idle breathing, run cycle, footfall bob) and a keyframed clip layer (combo strikes, spin, dodge roll, hurt, death, slam). Joints ease toward targets every frame, so transitions blend instead of snapping.
-- Combat: a three-hit combo with explicit damage windows, dodge with invulnerability frames, block with a stamina cost and guard break, poise-based staggers, and melee aim assist.
+- Combat: a three-hit combo with explicit damage windows, dodge with invulnerability frames, block with a stamina cost and guard break, poise-based staggers, and melee aim assist. A strike needs its stamina cost up front, and the combo stops when stamina runs out, so button-mashing can't attack for free.
 - AI: enemies are a readable state machine (spawn → chase → windup → strike → recover, plus stagger and death). Enemies never hit without a red ground telegraph first.
 - Boss: four patterns (ground slam on a marked spot, charge that can stun on a pillar, three-hit combo, and a phase-2 shockwave), plus a phase-2 roar at half health.
 - Feel: hit-stop, trauma shake, sparks on the GPU, procedural sound, a sprint FOV kick, an over-the-shoulder camera that pulls in around cover, and a DOM HUD.

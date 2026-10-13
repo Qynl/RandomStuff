@@ -72,7 +72,13 @@ export class Arena {
     for (let i = 0; i < 6; i++) {
       const a = 0.4 + (i / 6) * Math.PI * 2;
       const rad = 12 + (i % 2) * 3;
-      addPillar(Math.cos(a) * rad, Math.sin(a) * rad, 2 + this.rng() * 2.5, 0.7);
+      const x = Math.cos(a) * rad;
+      const z = Math.sin(a) * rad;
+      // Heights are drawn even when skipped, so the layout stays stable across tweaks.
+      const h = 2 + this.rng() * 2.5;
+      // Keep the player's spawn lane clear, or the over-the-shoulder camera gets pinned against it.
+      if (Math.hypot(x, z - 14) < 4.5) continue;
+      addPillar(x, z, h, 0.7);
     }
 
     // Central altar with glowing rune ring.

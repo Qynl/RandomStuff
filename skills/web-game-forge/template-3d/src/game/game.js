@@ -75,7 +75,7 @@ export class Game {
   pause() {
     if (this.state === 'play') {
       this.state = 'paused';
-      this.music.stop?.();
+      this.music.stop();
       this.ui.overlay('pause');
     }
   }
@@ -133,7 +133,7 @@ export class Game {
       if (this.hitStop > 0) this.hitStop -= dt;
       const simDt = this.hitStop > 0 ? 0 : dt * this.timeScale;
       this.timeScale = damp(this.timeScale, this.targetScale, 5, dt);
-      this._simulate(simDt, dt);
+      this._simulate(simDt);
     }
 
     if (this.state === 'dying') {
@@ -150,7 +150,7 @@ export class Game {
     this.ui.update(this, dt);
   }
 
-  _simulate(dt, realDt) {
+  _simulate(dt) {
     this.time += dt;
     this.player.update(dt, this.input, this.cam.yaw);
     for (const e of this.enemies) e.update(dt);
@@ -248,7 +248,7 @@ export class Game {
     this.trauma.add(1);
     this.sound.play('death');
     this.sparks.emit(this.player.pos.x, 1.0, this.player.pos.z, { count: 80, speed: 6, life: 1.0, size: 0.22, color: 0x7df9ff, gravity: 3 });
-    this.music.stop?.();
+    this.music.stop();
   }
 
   onEnemyDied(e) {
@@ -340,7 +340,7 @@ export class Game {
     this.targetScale = 0.25;
     this.sound.play('win');
     this.ui.banner('THE WARDEN FALLS', '', 3000);
-    this.music.stop?.();
+    this.music.stop();
   }
 
   _finish(kind) {

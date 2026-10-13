@@ -105,8 +105,12 @@ export class Player {
       case 'block': {
         const wantBlock = blockHeld && !this.guardBroken && this.stamina > 0;
         if (input.wasPressed('Mouse0') && !wantBlock) {
-          this._startAttack(this.comboT > 0 ? (this.lastCombo + 1) % COMBO.length : 0);
-          break;
+          // A strike needs its stamina up front; otherwise the swing is refused.
+          const next = this.comboT > 0 ? (this.lastCombo + 1) % COMBO.length : 0;
+          if (this.stamina >= COMBO[next].stamina) {
+            this._startAttack(next);
+            break;
+          }
         }
         if (input.wasPressed('Space') && this.stamina >= PLAYER.dodgeCost) {
           this._startDodge(wish);
@@ -241,12 +245,10 @@ export class Player {
   }
 
   _endAttack() {
-    if (this.queued && this.attackIndex < COMBO.length - 1) {
-      this._startAttack(this.attackIndex + 1);
-      return;
-    }
-    if (this.queued) {
-      this._startAttack(0);
+    // Chain the next hit only if the player can pay for it.
+    const next = this.attackIndex < COMBO.length - 1 ? this.attackIndex + 1 : 0;
+    if (this.queued && this.stamina >= COMBO[next].stamina) {
+      this._startAttack(next);
       return;
     }
     this.state = 'free';
