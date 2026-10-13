@@ -1,0 +1,13 @@
+{
+  "name": "ironwood",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "IRONWOOD - an original browser tactical shooter (three.js + WebGL2). Procedural art, bot matches, backend-free multiplayer.",
+  "license": "MIT",
+  "scripts": {
+    "start": "node tools/serve.mjs",
+    "dev": "node tools/serve.mjs",
+    "check": "node tools/check-modules.mjs"
+  }
+}
