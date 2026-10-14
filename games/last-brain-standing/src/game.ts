@@ -353,6 +353,9 @@ export class ArenaGame {
   private lastSnapshot = "";
   private feedId = 0;
   private lastFeedAt = 0;
+
+  /** Fight time of the last "sighting in" callout, so it cannot spam the feed. */
+  private lastSightCall = -Infinity;
   private flash = 0;
   private hitMarker = 0;
   private shake = 0;
@@ -1028,6 +1031,21 @@ export class ArenaGame {
         }
         case "bot-windup": {
           this.playSound("telegraph", 0.6);
+          break;
+        }
+        case "bot-aim": {
+          // The aim-in has its own cue, in the profile's own pitch: a hostile
+          // that lines you up sounds different from one that pulls a trigger,
+          // and the sound tells you which of the ten is doing it.
+          this.playSound("sight", 0.5, PROFILE_PITCH[event.kind]);
+          // The Marksman is the only one that can hit you from anywhere in the
+          // arena, so its aim-in is the one worth saying out loud. Rate limited
+          // against the clock the fight runs on, not the wall clock, so a run
+          // replays identically.
+          if (event.kind === "sniper" && this.world.elapsed - this.lastSightCall > 6) {
+            this.lastSightCall = this.world.elapsed;
+            this.pushFeed("THE MARKSMAN IS SIGHTING IN — BREAK THE LINE.", "warn");
+          }
           break;
         }
         case "bot-windup-cancel": {

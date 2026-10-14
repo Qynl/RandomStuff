@@ -10,6 +10,7 @@ export type SoundName =
   | "player-shot"
   | "bot-shot"
   | "telegraph"
+  | "sight"
   | "impact"
   | "enemy-impact"
   | "elimination"
@@ -110,6 +111,11 @@ export class SoundEngine {
           break;
         case "telegraph":
           this.blip(context, master, { type: "triangle", from: 240 * pitch, to: 520 * pitch, duration: 0.14, gain: 0.035, level });
+          break;
+        case "sight":
+          // A sight sliding on: thin, rising, and quiet, so a hostile lining you
+          // up from across the arena is audible before it is visible.
+          this.blip(context, master, { type: "sine", from: 760 * pitch, to: 1180 * pitch, duration: 0.5, gain: 0.022, level });
           break;
         case "impact":
           this.noiseBurst(context, master, { duration: 0.07, gain: 0.11, filterFrom: 2600, filterTo: 700, level });

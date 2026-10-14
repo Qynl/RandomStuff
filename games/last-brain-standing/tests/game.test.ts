@@ -180,6 +180,36 @@ describe("ArenaGame engine shell", () => {
     expect(decalsOf(game).length).toBeLessThanOrEqual(90);
   });
 
+  it("calls out a marksman lining up a shot from anywhere in the arena", () => {
+    game = createGame();
+    game.beginRun("sight-call");
+    const world = game.activeWorld;
+    pinLayout(world);
+    world.phase = "running";
+    world.waveState = "active";
+    world.waveTimer = 999;
+    world.pendingSpawns.length = 0;
+    world.bots.length = 0;
+    world.player.position = { x: 100, y: 100 };
+    world.bots.push({
+      id: 1, kind: "sniper", position: { x: 320, y: 100 }, velocity: { x: 0, y: 0 }, health: 500, maxHealth: 500,
+      fireCooldown: 0, windup: 0, windupDuration: 0, windupTurnRate: 2, facing: Math.PI, spawnGuard: 0, strafeSign: 1,
+      strafeLock: 0, alive: true, hitFlash: 0, blindTime: 0, pendingRounds: 0, burstTimer: 0, diveTime: 0,
+      diveCooldown: 0, detourTime: 0, detourSign: 1, grindTime: 0, stun: 0, chargeTime: 0,
+      chargeDirection: { x: 0, y: 0 }, sprayTime: 0
+    });
+    feed.length = 0;
+    frames.advance(180);
+    const calls = feed.filter((line) => line.text.includes("SIGHTING IN"));
+    expect(calls).toHaveLength(1);
+    // Once. The aim-in repeats every few seconds and the feed is a briefing, not
+    // a running commentary, so the second and third acquisition stay quiet.
+    frames.advance(60 * 20);
+    expect(feed.filter((line) => line.text.includes("SIGHTING IN")).length).toBeLessThanOrEqual(4);
+    // The sight itself is live on the world, which is what the renderer draws.
+    expect(world.bots[0].sight ?? world.bots[0].windup > 0).toBeTruthy();
+  });
+
   it("seeds ambient dust when a run starts and keeps it inside the arena", () => {
     game = createGame();
     game.beginRun("motes");

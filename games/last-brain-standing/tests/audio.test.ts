@@ -116,6 +116,7 @@ const ALL_SOUNDS: SoundName[] = [
   "player-shot",
   "bot-shot",
   "telegraph",
+  "sight",
   "impact",
   "enemy-impact",
   "elimination",
