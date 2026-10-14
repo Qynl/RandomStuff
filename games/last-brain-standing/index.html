@@ -8,61 +8,7 @@
     <title>LAST BRAIN STANDING</title>
   </head>
   <body>
-    <main class="shell">
-      <header class="topbar">
-        <a class="brand" href="./" aria-label="Last Brain Standing home">
-          <span class="brand-mark">LB<span>/</span>S</span>
-          <span class="brand-copy"><strong>LAST BRAIN</strong><small>STANDING</small></span>
-        </a>
-        <div class="top-status"><span class="live-dot"></span><span>SIMULATION ACTIVE</span><span class="status-divider"></span><span>BUILD 0.1</span></div>
-        <button id="pause-button" class="icon-button" aria-label="Pause game" title="Pause (Esc)">Ⅱ</button>
-      </header>
-
-      <section class="game-layout" aria-label="Game arena">
-        <div class="arena-wrap">
-          <canvas id="game" width="960" height="600" aria-label="Top-down arena. Move with WASD, aim with mouse, fire with click or Space, dash with Shift."></canvas>
-          <div class="arena-vignette"></div>
-          <div class="arena-label"><span class="tiny-square"></span> SECTOR 01 <span class="label-separator">/</span> TEST CHAMBER</div>
-          <div class="arena-bottom"><span id="arena-message">ELIMINATE HOSTILES</span><span>WASD MOVE&nbsp; · &nbsp;MOUSE AIM&nbsp; · &nbsp;CLICK FIRE&nbsp; · &nbsp;SHIFT DASH</span></div>
-          <div id="overlay" class="overlay">
-            <div class="overlay-card">
-              <div class="eyebrow"><span class="live-dot"></span> COMBAT SIMULATION // 001</div>
-              <h1 id="overlay-title">OUTTHINK.<br /><span>OUTLAST.</span></h1>
-              <p id="overlay-copy">Four minds enter. Only one gets to call itself intelligent. The bots have different tactics. Learn their patterns before they learn yours.</p>
-              <button id="start-button" class="primary-button"><span>ENTER THE ARENA</span><span aria-hidden="true">↗</span></button>
-              <div class="overlay-foot"><span>NO LOADOUTS. NO EXCUSES.</span><span>BEST RUN WINS.</span></div>
-            </div>
-          </div>
-        </div>
-
-        <aside class="side-panel">
-          <div class="panel-section run-section">
-            <div class="section-kicker">CURRENT RUN <span class="kicker-line"></span></div>
-            <div class="score-row"><div><span class="stat-label">ELIMINATIONS</span><strong id="kills">00</strong></div><div class="best-stat"><span class="stat-label">BEST</span><strong id="best">00</strong></div></div>
-            <div class="wave-row"><span>THREAT LEVEL</span><strong id="wave">01 <i>/ 05</i></strong></div>
-            <div class="wave-track"><span id="wave-progress"></span></div>
-          </div>
-          <div class="panel-section">
-            <div class="section-kicker">YOUR STATUS <span class="kicker-line"></span></div>
-            <div class="health-heading"><span>INTEGRITY</span><strong id="health-text">100%</strong></div>
-            <div class="health-track"><span id="health-bar"></span></div>
-            <div class="dash-status"><span class="dash-icon">✳</span><span>DASH CHARGE</span><strong id="dash-text">READY</strong></div>
-          </div>
-          <div class="panel-section opponents-section">
-            <div class="section-kicker">OPPONENT PROFILES <span class="kicker-line"></span></div>
-            <div class="opponent" data-bot="hunter"><span class="opponent-symbol hunter-symbol">+</span><div class="opponent-copy"><strong>THE HUNTER</strong><small>DIRECT PRESSURE</small></div><span class="opponent-state" id="state-hunter">WAITING</span></div>
-            <div class="opponent" data-bot="flanker"><span class="opponent-symbol flanker-symbol">◇</span><div class="opponent-copy"><strong>THE FLANKER</strong><small>ANGLE CONTROL</small></div><span class="opponent-state" id="state-flanker">WAITING</span></div>
-            <div class="opponent" data-bot="mirror"><span class="opponent-symbol mirror-symbol">⌁</span><div class="opponent-copy"><strong>THE MIRROR</strong><small>HABIT PUNISHER</small></div><span class="opponent-state" id="state-mirror">WAITING</span></div>
-          </div>
-          <div class="panel-section log-section">
-            <div class="section-kicker">COMBAT FEED <span class="kicker-line"></span></div>
-            <div id="combat-feed" class="combat-feed" aria-live="polite"><p><span>00:00</span> Simulation standing by.</p><p><span>00:00</span> Three distinct AI profiles loaded.</p></div>
-          </div>
-          <div class="panel-footer"><span>AI DOESN'T MEAN OMNISCIENT.</span><span class="footer-signal">● ● ●</span></div>
-        </aside>
-      </section>
-      <footer class="page-footer"><span>LAST BRAIN STANDING <span class="muted">/ A SMALL COMBAT EXPERIMENT</span></span><span>MADE TO BE MASTERED.</span></footer>
-    </main>
-    <script type="module" src="/src/main.ts"></script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
