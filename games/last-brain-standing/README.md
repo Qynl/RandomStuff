@@ -123,9 +123,11 @@ Career score is the sum of your best score on each threat level, so improving an
 - **Unlock ladder** — each weapon, what it costs, and a progress bar toward the next one.
 - **Service record** — nine badges with an explicit requirement each. Locked ones hide their name and show what it takes plus how far along you are: FIRST CONTACT, MARKSMAN (80 % accuracy), CHAIN REACTION (5 eliminations in a row), WIND-UP CUTTER, ARENA TOUR (win in three arenas), FULL SWEEP (win every threat level), UNTOUCHABLE (win without damage), GUNSMITH, CENTURION.
 - **Weapon records** — runs, kills, clears and best score for each of the three weapons separately, so the railgun's row is its own history.
+- **Threat dossier** — per profile: how many you have killed, how many runs it has ended, its signature behaviour and its counterplay line, so the intel you get mid-fight is also something the account remembers.
+- **Recent runs** — the last five finished runs, newest first, each with its seed, threat level, weapon, arena, score and outcome.
 - **Best run per threat level**, so recruit and veteran progress do not overwrite each other.
 
-Everything lives in `localStorage` and nothing leaves the device. The badge rules live in `src/account.ts` as data (requirement text plus a progress function), so the same code decides whether a badge is earned and explains what is missing.
+Everything lives in `localStorage` (the runs, kills, per-weapon records, per-profile kills and the runs each profile has ended) and nothing leaves the device. The badge rules live in `src/account.ts` as data (requirement text plus a progress function), so the same code decides whether a badge is earned and explains what is missing.
 
 ## Scoring
 

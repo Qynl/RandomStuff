@@ -18,15 +18,36 @@ describe("ArenaGame engine shell", () => {
   let canvasProto: ReturnType<typeof installFakeCanvasPrototype>;
 
   /** Drops a lethal bot round on the player through the world surface. */
+  /**
+   * Shoots one hostile of a kind dead through the real pipeline: the engine's
+   * frame loop is what counts a profile's kills, so the test has to let it.
+   */
+  const spawnAndKill = (target: ArenaGame, kind: "hunter" | "flanker" | "mirror", count: number) => {
+    for (let index = 0; index < count; index += 1) {
+      const at = { x: 200 + index * 6, y: 200 };
+      let killed = false;
+      for (let attempt = 0; attempt < 6 && !killed; attempt += 1) {
+        // Waves keep spawning into the same arena, so clear the field, fire one
+        // round and confirm the kill actually landed before moving on.
+        target.activeWorld.bots.length = 0;
+        fireRoundAt(target, at, 400, kind);
+        frames.advance(2);
+        killed = target.activeWorld.bots.every((bot) => !bot.alive);
+      }
+      expect(killed).toBe(true);
+    }
+  };
+
   /** Drops a hostile at a spot and fires a player round straight at it. */
-  const fireRoundAt = (target: ArenaGame, at: { x: number; y: number }, damage = 40) => {
+  const fireRoundAt = (target: ArenaGame, at: { x: number; y: number }, damage = 40, kind: "hunter" | "flanker" | "mirror" = "hunter") => {
     const world = target.activeWorld;
     world.bots.push({
       id: 900,
-      kind: "hunter",
+      kind,
       position: { ...at },
       velocity: { x: 0, y: 0 },
-      health: damage,
+      // Low health so plating cannot accidentally save a test target.
+      health: 5,
       maxHealth: 48,
       fireCooldown: 5,
       windup: 0,
@@ -861,11 +882,51 @@ describe("ArenaGame engine shell", () => {
     game.destroy();
   });
 
+  it("keeps a per-profile dossier of kills and the runs that ended", () => {
+    window.localStorage.clear();
+    game = createGame();
+    game.beginRun("dossier-a");
+    frames.advance(40);
+    // Three hunters and a flanker die the normal way, so the counts come out of
+    // the same event pipeline the game uses.
+    spawnAndKill(game, "hunter", 3);
+    spawnAndKill(game, "flanker", 1);
+    killPlayer(game, "mirror");
+    expect(results[0].endedBy).toBe("mirror");
+
+    let career = game.getCareer();
+    expect(career.killsByKind).toEqual({ hunter: 3, flanker: 1, mirror: 0 });
+    expect(career.deathsByKind).toEqual({ hunter: 0, flanker: 0, mirror: 1 });
+    // The run lands in the recent list, newest first, with its weapon stamped.
+    expect(career.recentRuns).toHaveLength(1);
+    expect(career.recentRuns[0].seed).toBe(game.getSeedLabel());
+    expect(career.recentRuns[0].weapon).toBe("rifle");
+
+    // A second run accumulates on top rather than replacing.
+    game.beginRun("dossier-b");
+    frames.advance(40);
+    spawnAndKill(game, "hunter", 2);
+    killPlayer(game, "hunter");
+    career = game.getCareer();
+    expect(career.killsByKind).toEqual({ hunter: 5, flanker: 1, mirror: 0 });
+    expect(career.deathsByKind).toEqual({ hunter: 1, flanker: 0, mirror: 1 });
+    expect(career.recentRuns.map((run) => run.seed)).toEqual([game.getSeedLabel(), career.recentRuns[1].seed]);
+
+    // And it survives a reload, because the dossier is the account's memory.
+    game.destroy();
+    game = createGame();
+    const restored = game.getCareer();
+    expect(restored.killsByKind.hunter).toBe(5);
+    expect(restored.deathsByKind.mirror).toBe(1);
+  });
+
   it("survives corrupt account data in storage", () => {
     window.localStorage.setItem("lbs-weapon-records", "{not json");
     window.localStorage.setItem("lbs-career-arenas", "not-a-list");
     window.localStorage.setItem("lbs-career-levels", JSON.stringify([1, 2, 3]));
     window.localStorage.setItem("lbs-career-wins", "banana");
+    window.localStorage.setItem("lbs-career-kills-by-kind", "[1,2,3]");
+    window.localStorage.setItem("lbs-career-deaths-by-kind", "{\"hunter\":\"lots\"}");
     game = createGame();
     const career = game.getCareer();
     expect(career.weapons.every((weapon) => weapon.record.runs === 0)).toBe(true);

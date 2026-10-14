@@ -284,3 +284,21 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 
 .opponent-signature{display:block;margin-top:2px;font:8px/1.5 "DM Mono",monospace;letter-spacing:.6px;color:#9aa3ad;font-style:normal}
 .mirror-echo{display:block;margin-bottom:3px;font:8px/1.5 "DM Mono",monospace;letter-spacing:.8px;color:var(--brass);font-style:normal}
+
+.dossier-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
+.dossier-list li{padding:8px 9px;border:1px solid #2f3339;border-left-width:3px;border-radius:6px;background:#1c1f24}
+.dossier-list li[data-bot="hunter"]{border-left-color:#d26e5e}
+.dossier-list li[data-bot="flanker"]{border-left-color:#8fb0cf}
+.dossier-list li[data-bot="mirror"]{border-left-color:#a08ec0}
+.dossier-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.dossier-head strong{font:600 9px "DM Mono",monospace;letter-spacing:1px;color:#e9e3d6}
+.dossier-tally{font:8px "DM Mono",monospace;letter-spacing:.6px;color:#a4abb4;text-align:right}
+.dossier-signature{display:block;margin:4px 0 3px;font:8px/1.5 "DM Mono",monospace;letter-spacing:.5px;color:var(--brass);font-style:normal}
+.dossier-list small{display:block;font:8px/1.5 "DM Mono",monospace;letter-spacing:.4px;color:#9aa3ad}
+.profile-empty{margin:0;font:9px/1.6 "DM Mono",monospace;color:#9aa3ad}
+.recent-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.recent-list li{display:grid;grid-template-columns:70px 1fr auto auto;gap:8px;align-items:baseline;font:8px "DM Mono",monospace;letter-spacing:.5px;color:#a4abb4}
+.recent-list li.won .recent-outcome{color:var(--moss)}
+.recent-seed{color:#e9e3d6;letter-spacing:1px}
+.recent-list strong{color:var(--brass)}
+.recent-outcome{color:#9aa3ad}

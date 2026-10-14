@@ -419,6 +419,16 @@ describe("React app shell", () => {
     expect(weapons).toHaveLength(3);
     expect(weapons.some((row) => row.includes("RIFLE"))).toBe(true);
 
+    // The threat dossier names each profile's signature and counts what it has
+    // done to this account.
+    const dossier = Array.from(container.querySelectorAll(".dossier-list li"));
+    expect(dossier).toHaveLength(3);
+    expect(dossier.map((row) => row.getAttribute("data-bot"))).toEqual(["hunter", "flanker", "mirror"]);
+    expect(text(".dossier-list li[data-bot=\"hunter\"]")).toContain("DOUBLE SALVO");
+    expect(text(".dossier-list li[data-bot=\"flanker\"]")).toContain("PINCER DISCIPLINE");
+    expect(text(".dossier-list li[data-bot=\"mirror\"]")).toContain("COPY OF YOUR OWN WEAPON");
+    expect(text(".dossier-list li[data-bot=\"hunter\"]")).toContain("NEVER ENDED A RUN");
+
     // Back out to the arena.
     click(button("BACK TO THE ARENA"));
     expect(query(".profile-rank")).toBeNull();

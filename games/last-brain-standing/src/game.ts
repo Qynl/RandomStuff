@@ -1,4 +1,4 @@
-import { BOT_PROFILES } from "./ai";
+import { BOT_KINDS, BOT_PROFILES } from "./ai";
 import { volleyFor } from "./signatures";
 import { ARENA_LAYOUTS, firstBlockingFraction, layoutForSeed, rangeScaleForOpenness, WORLD } from "./arena";
 import { BLOCK, BOT_ART, BULLET, FLOOR, PLAYER_ART, STATUS, TELEGRAPH } from "./art";
@@ -124,6 +124,12 @@ export interface CareerSummary {
   badges: BadgeStatus[];
   /** How many badges are earned, for a quick "3/9" line. */
   badgesEarned: number;
+  /** Career eliminations per profile, for the threat dossier. */
+  killsByKind: Record<BotKind, number>;
+  /** How many runs each profile has ended, for the threat dossier. */
+  deathsByKind: Record<BotKind, number>;
+  /** Finished runs, newest first, for the account's recent-run list. */
+  recentRuns: RunRecord[];
 }
 
 export interface RunResult {
@@ -219,11 +225,15 @@ export interface RunRecord {
   elapsed: number;
   /** Arena layout name, absent in records written before layouts existed. */
   arenaName?: string;
+  /** Weapon used, absent in records written before loadouts existed. */
+  weapon?: LoadoutId;
 }
 
 /** How many finished runs are remembered, and how many are shown. */
 const HISTORY_LIMIT = 12;
 const HISTORY_SHOWN = 3;
+/** How many entries the account's recent-run list keeps. */
+const RECENT_RUNS = 5;
 
 const STORAGE = {
   bestKills: "lbs-best-kills",
@@ -245,7 +255,9 @@ const STORAGE = {
   careerAccuracy: "lbs-career-accuracy",
   careerArenas: "lbs-career-arenas",
   careerLevels: "lbs-career-levels",
-  weaponRecords: "lbs-weapon-records"
+  weaponRecords: "lbs-weapon-records",
+  careerKillsByKind: "lbs-career-kills-by-kind",
+  careerDeathsByKind: "lbs-career-deaths-by-kind"
 } as const;
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -343,6 +355,8 @@ export class ArenaGame {
   private careerArenas: string[] = [];
   private careerLevels: string[] = [];
   private weaponRecords: WeaponRecords = emptyWeaponRecords();
+  private careerKillsByKind: Record<BotKind, number> = { hunter: 0, flanker: 0, mirror: 0 };
+  private careerDeathsByKind: Record<BotKind, number> = { hunter: 0, flanker: 0, mirror: 0 };
   private history: RunRecord[] = [];
   private killsByKind: Record<BotKind, number> = { hunter: 0, flanker: 0, mirror: 0 };
   private lastHitBy: BotKind | "unknown" | null = null;
@@ -383,6 +397,8 @@ export class ArenaGame {
     this.careerArenas = this.readStringList(STORAGE.careerArenas);
     this.careerLevels = this.readStringList(STORAGE.careerLevels);
     this.weaponRecords = this.readWeaponRecords();
+    this.careerKillsByKind = this.readKindTotals(STORAGE.careerKillsByKind);
+    this.careerDeathsByKind = this.readKindTotals(STORAGE.careerDeathsByKind);
     this.history = this.readHistory();
     this.world = createWorld({ seed: createRandomSeed(), difficulty });
     this.applyLoadout();
@@ -595,7 +611,10 @@ export class ArenaGame {
         record: { ...this.weaponRecords[id] }
       })),
       badges,
-      badgesEarned: badges.filter((badge) => badge.earned).length
+      badgesEarned: badges.filter((badge) => badge.earned).length,
+      killsByKind: { ...this.careerKillsByKind },
+      deathsByKind: { ...this.careerDeathsByKind },
+      recentRuns: [...this.history].slice(-RECENT_RUNS).reverse()
     };
   }
 
@@ -1094,7 +1113,8 @@ export class ArenaGame {
         kills: stats.kills,
         victory: result === "victory",
         elapsed: stats.elapsed,
-        arenaName: this.world.arenaName
+        arenaName: this.world.arenaName,
+        weapon: this.world.loadout.id
       }
     ].slice(-HISTORY_LIMIT);
     this.write(STORAGE.history, JSON.stringify(this.history));
@@ -1123,6 +1143,13 @@ export class ArenaGame {
     this.write(STORAGE.careerArenas, JSON.stringify(this.careerArenas));
     this.write(STORAGE.careerLevels, JSON.stringify(this.careerLevels));
     this.write(STORAGE.weaponRecords, JSON.stringify(this.weaponRecords));
+    for (const kind of BOT_KINDS) {
+      this.careerKillsByKind[kind] += this.killsByKind[kind];
+    }
+    const runKiller = result === "defeat" ? this.lastHitBy : null;
+    if (runKiller && runKiller !== "unknown") this.careerDeathsByKind[runKiller] += 1;
+    this.write(STORAGE.careerKillsByKind, JSON.stringify(this.careerKillsByKind));
+    this.write(STORAGE.careerDeathsByKind, JSON.stringify(this.careerDeathsByKind));
     this.playSound(result === "victory" ? "victory" : "defeat");
     this.shake = Math.max(this.shake, result === "victory" ? 6 : 13);
     const endedBy = result === "defeat" ? this.lastHitBy : null;
@@ -1363,6 +1390,24 @@ export class ArenaGame {
       return parsed.filter((entry): entry is string => typeof entry === "string" && entry.length > 0).slice(0, 24);
     } catch {
       return [];
+    }
+  }
+
+  /** Reads a stored per-profile total, ignoring junk and clamping to sane values. */
+  private readKindTotals(key: string): Record<BotKind, number> {
+    const totals: Record<BotKind, number> = { hunter: 0, flanker: 0, mirror: 0 };
+    const raw = this.readString(key);
+    if (!raw) return totals;
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return totals;
+      for (const kind of BOT_KINDS) {
+        const value = Number((parsed as Record<string, unknown>)[kind]);
+        totals[kind] = Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+      }
+      return totals;
+    } catch {
+      return totals;
     }
   }
 

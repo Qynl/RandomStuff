@@ -612,6 +612,49 @@ export default function App({ onGameReady }: AppProps = {}) {
                     </ul>
                   </div>
                   <div className="profile-block">
+                    <h2>THREAT DOSSIER</h2>
+                    <ul className="dossier-list">
+                      {BOT_KINDS.map((kind) => {
+                        const profile = BOT_PROFILES[kind];
+                        const ended = career?.deathsByKind[kind] ?? 0;
+                        return (
+                          <li key={kind} data-bot={kind}>
+                            <div className="dossier-head">
+                              <strong>{profile.name}</strong>
+                              <span className="dossier-tally">
+                                {career?.killsByKind[kind] ?? 0} KILLED
+                                {ended > 0 ? ` · ENDED ${ended} RUN${ended === 1 ? "" : "S"}` : " · NEVER ENDED A RUN"}
+                              </span>
+                            </div>
+                            <em className="dossier-signature">{profile.signature}</em>
+                            <small>{profile.counter.toLowerCase()}.</small>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                  <div className="profile-block">
+                    <h2>RECENT RUNS</h2>
+                    {(career?.recentRuns.length ?? 0) === 0 ? (
+                      <p className="profile-empty">Nothing finished yet. The dossier fills itself in as you play.</p>
+                    ) : (
+                      <ul className="recent-list">
+                        {(career?.recentRuns ?? []).map((run, index) => (
+                          <li key={`${run.seed}-${index}`} className={run.victory ? "won" : ""}>
+                            <span className="recent-seed">{run.seed}</span>
+                            <span className="recent-where">
+                              {DIFFICULTIES[run.difficulty].label.toUpperCase()}
+                              {run.weapon ? ` · ${LOADOUTS[run.weapon].kind}` : ""}
+                              {run.arenaName ? ` · ${run.arenaName}` : ""}
+                            </span>
+                            <strong>{run.score}</strong>
+                            <span className="recent-outcome">{run.victory ? "CLEARED" : "TERMINATED"}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  <div className="profile-block">
                     <h2>WEAPON RECORDS</h2>
                     <ul className="weapon-list">
                       {(career?.weapons ?? []).map((weapon) => (
