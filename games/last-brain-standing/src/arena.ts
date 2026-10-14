@@ -9,6 +9,19 @@ export const OBSTACLES: Rect[] = [
   { x: 430, y: 254, w: 100, h: 92 }
 ];
 
+
+/** Minimum distance from a point to a finite line segment. Useful for swept collision checks. */
+export function distanceToSegment(point: Vec2, start: Vec2, end: Vec2): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared < 0.000001) return Math.hypot(point.x - start.x, point.y - start.y);
+  const projection = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared));
+  const closestX = start.x + projection * dx;
+  const closestY = start.y + projection * dy;
+  return Math.hypot(point.x - closestX, point.y - closestY);
+}
+
 export function circleHitsRect(point: Vec2, radius: number, rect: Rect): boolean {
   const nearestX = Math.max(rect.x, Math.min(point.x, rect.x + rect.w));
   const nearestY = Math.max(rect.y, Math.min(point.y, rect.y + rect.h));
