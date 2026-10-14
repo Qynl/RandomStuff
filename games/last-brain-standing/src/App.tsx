@@ -1077,13 +1077,15 @@ function kitState(
         ? { label: `UNSEEN ${snapshot.phaseTime.toFixed(2)}S`, ready: true, meter: snapshot.phaseTime / 0.34 }
         : { label: "DASH BLANKS THEIR AIM", ready: false, meter: 0 };
     case "siege":
-      return { label: "CHARGE TO STAGGER 1.1S", ready: false, meter: 0 };
+      return { label: weapon.traitRule.toUpperCase(), ready: false, meter: 0 };
     case "ignite":
-      return { label: "BURN 3/S · SLOW 15%", ready: false, meter: 0 };
+      // Read from the class data, not from a copy of it, so a retune cannot
+      // leave the run panel advertising a burn the weapon no longer applies.
+      return { label: `BURNING HOSTILES: ${weapon.traitRule.replace("Burning hostiles ", "")}`, ready: false, meter: 0 };
     case "arc":
-      return { label: "SHELLS CLEAR 74 UNITS", ready: false, meter: 0 };
+      return { label: `SHELLS CLEAR ${weapon.shellRadius ?? 0}-UNIT RING`, ready: false, meter: 0 };
     case "steady":
-      return { label: "KILLS RETURN 35% DASH", ready: false, meter: 0 };
+      return { label: weapon.traitRule.toUpperCase(), ready: false, meter: 0 };
     default:
       return { label: weapon.traitRule, ready: false, meter: 0 };
   }

@@ -34,6 +34,41 @@ const SURFACES = [rootVariable("panel"), rootVariable("panel-deep"), "#1f2228"];
  */
 const ON_LIGHT_FILL: Record<string, string> = { "#07121a": rootVariable("brass") };
 
+/**
+ * Light card stock, and the ink allowed on it.
+ *
+ * The arena and the side panel are dark surfaces, so their text is checked
+ * against the panel above. The lobby is a bright screen of its own - cards and
+ * tiles, dark ink on light stock - so it gets the opposite check, keyed by the
+ * stock it is actually printed on. A light surface that is not declared here
+ * fails the test below, which is what stops a new card stock from arriving
+ * without an ink that can be read on it.
+ */
+const LIGHT_STOCK: Record<string, string[]> = {
+  // card stock and the gold "selected" tile
+  "#fbf7ee": ["#2c3138", "#3f4854", "#5b6472", "#7d5f28"],
+  "#ffffff": ["#2c3138", "#3f4854", "#5b6472", "#7d5f28"],
+  "#ffe9b8": ["#2c3138", "#5b6472", "#7d5f28"],
+  "#fff6e0": ["#2c3138", "#5b6472", "#7d5f28"],
+  "#e8f3e6": ["#2c3138"],
+  "#eef3f8": ["#2c3138"],
+  "#eef6fd": ["#2c3138"],
+  "#eaf4fd": ["#2c3138"],
+  "#d4e7f6": ["#2c3138"],
+  "#c2dcf0": ["#2c3138"],
+  "#bcdaf0": ["#2c3138"],
+  "#adcfe8": ["#2c3138"],
+  "#8fbbda": ["#2c3138"],
+  "#e6c37a": ["#2c3138"],
+  "#f4dd9e": ["#2c3138"],
+  "#e0bd6c": ["#2c3138"],
+  // Arena-sheet obstacles: a shape, not a surface, so an empty list is right.
+  "#aab6c4": []
+};
+
+/** Every ink the lobby prints, whichever stock it lands on. */
+const LOBBY_INK = new Set(Object.values(LIGHT_STOCK).flat());
+
 function luminance(color: string): number {
   const hex = color.replace("#", "");
   const full = hex.length === 3 ? hex.split("").map((char) => char + char).join("") : hex;
@@ -56,7 +91,7 @@ describe("panel contrast", () => {
   it("uses only text colours that clear WCAG AA on the panel surfaces", () => {
     const failures: string[] = [];
     for (const color of textColors()) {
-      if (color in ON_LIGHT_FILL) continue;
+      if (color in ON_LIGHT_FILL || LOBBY_INK.has(color)) continue;
       const worst = Math.min(...SURFACES.map((surface) => contrast(color, surface)));
       if (worst < 4.5) failures.push(`${color} is ${worst.toFixed(2)}:1 (needs 4.5:1)`);
     }
@@ -74,13 +109,24 @@ describe("panel contrast", () => {
     expect(contrast("#000000", "#ffffff")).toBeCloseTo(21, 1);
   });
 
-  it("does not hide unreadable text behind a mid-tone surface", () => {
-    // The panel gradients are the only surfaces besides the canvas, so make sure
-    // the stylesheet has not quietly gained a light panel that the rule above
-    // does not know about.
+  it("keeps every light card stock paired with ink that can be read on it", () => {
+    // Any light surface in the stylesheet has to be declared, so a new card
+    // stock cannot arrive without the ink that goes on it being checked.
     const lightBackgrounds = [...CSS.matchAll(/background:\s*(#[0-9a-fA-F]{6})\b/g)]
       .map((match) => match[1].toLowerCase())
       .filter((color) => luminance(color) > 0.35);
-    expect(lightBackgrounds).toEqual([]);
+    const undeclared = [...new Set(lightBackgrounds)].filter((color) => !(color in LIGHT_STOCK));
+    expect(undeclared).toEqual([]);
+
+    const failures: string[] = [];
+    for (const [fill, inks] of Object.entries(LIGHT_STOCK)) {
+      // An empty list means the colour is a shape rather than a surface; there
+      // is no text to check on it.
+      for (const ink of inks) {
+        const ratio = contrast(ink, fill);
+        if (ratio < 4.5) failures.push(`${ink} on ${fill} is ${ratio.toFixed(2)}:1 (needs 4.5:1)`);
+      }
+    }
+    expect(failures).toEqual([]);
   });
 });

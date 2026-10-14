@@ -119,6 +119,35 @@ export default function HomeScreen({
 
   return (
     <div className="home-screen" aria-label="Command screen">
+      <div className="home-top">
+        <button type="button" className="lobby-id" onClick={onProfile} title="Open the operator profile">
+          <span className="lobby-avatar" aria-hidden="true">{career?.rank.insignia ?? "I"}</span>
+          <span className="lobby-name">
+            <strong>{career?.rank.name ?? "RECRUIT"}</strong>
+            <small>
+              {(career?.score ?? 0).toLocaleString()} CAREER · {career?.runs ?? 0} RUNS
+            </small>
+          </span>
+        </button>
+        <div className="lobby-chips">
+          <span className="lobby-chip">
+            <em>KILLS</em>
+            <strong>{career?.kills ?? 0}</strong>
+          </span>
+          <span className="lobby-chip">
+            <em>BADGES</em>
+            <strong>
+              {badgesEarned}
+              <small>/{badgeTotal}</small>
+            </strong>
+          </span>
+          <span className="lobby-chip">
+            <em>BEST CHAIN</em>
+            <strong>×{career?.bestCombo ?? 0}</strong>
+          </span>
+        </div>
+      </div>
+
       <div className="home-body">
         <nav className="home-rail" aria-label="Destinations">
           <button type="button" className="rail-button" onClick={() => setSheet("classes")}>
@@ -190,6 +219,7 @@ export default function HomeScreen({
                   key={id}
                   type="button"
                   className={`loadout-card${selected ? " selected" : ""}`}
+                  style={{ ["--class-ink" as string]: CLASS_INK[id] }}
                   aria-pressed={selected}
                   title={`${weapon.counter} ${weapon.traitName}: ${weapon.traitRule}`}
                   onClick={() => onChooseLoadout(id)}
@@ -212,76 +242,6 @@ export default function HomeScreen({
             PRESS 1–{LOADOUT_ORDER.length} TO SWAP CLASS
           </p>
 
-          <div className="deploy-block">
-            <button type="button" className="daily-card" onClick={() => onStartSeed(daily)}>
-              <span className="daily-tag">TODAY&apos;S SEED</span>
-              <span className="daily-copy">
-                <strong>{daily}</strong>
-                <small>
-                  {dailyArena} · ONE ARENA, ONE FIGHT, EVERYONE
-                </small>
-                {dailyRun ? (
-                  <small className="daily-result">
-                    YOUR RUN: {dailyRun.score} · {dailyRun.victory ? "CLEARED" : "TERMINATED"}
-                  </small>
-                ) : null}
-                <small className="daily-clock">NEW SEED IN {dailySeedCountdown(today)}</small>
-              </span>
-              <span className="daily-play" aria-hidden="true">▶</span>
-            </button>
-            <div className="seed-row">
-              <label htmlFor="seed-input">SEED</label>
-              <input
-                id="seed-input"
-                value={seedInput}
-                placeholder="RANDOM OR PASTE A LINK"
-                maxLength={256}
-                autoComplete="off"
-                spellCheck={false}
-                onChange={(event) => onSeedChange(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    onStart();
-                  }
-                }}
-              />
-            </div>
-            <div className="seed-preview">
-              <button type="button" className="ghost-button compact" title="Pick a fresh random seed" onClick={onRandomSeed}>
-                RANDOM
-              </button>
-              <span className="seed-arena">
-                {seedInput.length > 0 && seedArena
-                  ? `ARENA ${ARENA_LAYOUTS[seedArena].name}`
-                  : "TYPE OR PASTE A SEED TO SEE ITS ARENA"}
-              </span>
-            </div>
-            {shareNotice ? (
-              <p className="share-notice" role="status">
-                {shareNotice}
-              </p>
-            ) : null}
-            <div className="deploy-rank">
-              <span className="deploy-rank-copy">
-                <b>{career?.rank.name ?? "RECRUIT"}</b>
-                <small>{(career?.score ?? 0).toLocaleString()} CAREER</small>
-              </span>
-              <span className="deploy-rank-track" aria-hidden="true">
-                <i style={{ width: `${Math.round((career?.rankProgress ?? 0) * 100)}%` }} />
-              </span>
-              <span className="deploy-rank-next">
-                {career?.nextRank ? `${career.nextRank.threshold.toLocaleString()} → ${career.nextRank.name}` : "TOP RANK"}
-              </span>
-            </div>
-            <button ref={deployRef} className="primary-button deploy-button" type="button" onClick={onStart}>
-              <span>ENTER THE ARENA</span>
-              <span aria-hidden="true">↗</span>
-            </button>
-            <p className="deploy-note">
-              {level.label} THREAT{seedArena ? ` · ${ARENA_LAYOUTS[seedArena].name}` : ""}
-            </p>
-          </div>
         </section>
 
         <aside className="home-side" aria-label="Briefing">
@@ -391,7 +351,82 @@ export default function HomeScreen({
         </aside>
       </div>
 
-      <div className="home-strip">
+      <div className="home-bottom">
+        <section className="bottom-events" aria-label="Featured event">
+            <button type="button" className="daily-card" onClick={() => onStartSeed(daily)}>
+              <span className="daily-tag">TODAY&apos;S SEED</span>
+              <span className="daily-copy">
+                <strong>{daily}</strong>
+                <small>
+                  {dailyArena} · ONE ARENA, ONE FIGHT, EVERYONE
+                </small>
+                {dailyRun ? (
+                  <small className="daily-result">
+                    YOUR RUN: {dailyRun.score} · {dailyRun.victory ? "CLEARED" : "TERMINATED"}
+                  </small>
+                ) : null}
+                <small className="daily-clock">NEW SEED IN {dailySeedCountdown(today)}</small>
+              </span>
+              <span className="daily-play" aria-hidden="true">▶</span>
+            </button>
+        </section>
+
+          <div className="deploy-block">
+            <div className="seed-row">
+              <label htmlFor="seed-input">SEED</label>
+              <input
+                id="seed-input"
+                value={seedInput}
+                placeholder="RANDOM OR PASTE A LINK"
+                maxLength={256}
+                autoComplete="off"
+                spellCheck={false}
+                onChange={(event) => onSeedChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    onStart();
+                  }
+                }}
+              />
+            </div>
+            <div className="seed-preview">
+              <button type="button" className="ghost-button compact" title="Pick a fresh random seed" onClick={onRandomSeed}>
+                RANDOM
+              </button>
+              <span className="seed-arena">
+                {seedInput.length > 0 && seedArena
+                  ? `ARENA ${ARENA_LAYOUTS[seedArena].name}`
+                  : "TYPE OR PASTE A SEED TO SEE ITS ARENA"}
+              </span>
+            </div>
+            {shareNotice ? (
+              <p className="share-notice" role="status">
+                {shareNotice}
+              </p>
+            ) : null}
+            <div className="deploy-rank">
+              <span className="deploy-rank-copy">
+                <b>{career?.rank.name ?? "RECRUIT"}</b>
+                <small>{(career?.score ?? 0).toLocaleString()} CAREER</small>
+              </span>
+              <span className="deploy-rank-track" aria-hidden="true">
+                <i style={{ width: `${Math.round((career?.rankProgress ?? 0) * 100)}%` }} />
+              </span>
+              <span className="deploy-rank-next">
+                {career?.nextRank ? `${career.nextRank.threshold.toLocaleString()} → ${career.nextRank.name}` : "TOP RANK"}
+              </span>
+            </div>
+            <button ref={deployRef} className="primary-button deploy-button" type="button" onClick={onStart}>
+              <span>ENTER THE ARENA</span>
+              <span aria-hidden="true">↗</span>
+            </button>
+            <p className="deploy-note">
+              {level.label} THREAT{seedArena ? ` · ${ARENA_LAYOUTS[seedArena].name}` : ""}
+            </p>
+          </div>
+
+        <div className="home-strip">
         <div className="strip-chip">
           <span className="strip-label">CAREER SCORE</span>
           <strong>{(career?.score ?? 0).toLocaleString()}</strong>
@@ -410,6 +445,7 @@ export default function HomeScreen({
           <span className="strip-label">THREAT LEVELS CLEARED</span>
           <strong>{career?.levelsClearedCount ?? 0} / 3</strong>
           <span className="strip-note">{DIFFICULTIES[difficulty].label} SELECTED</span>
+        </div>
         </div>
       </div>
 

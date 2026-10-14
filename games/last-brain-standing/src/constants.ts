@@ -1,5 +1,32 @@
 import type { DifficultyId } from "./types";
 
+/**
+ * Operative class kit tuning, shared by the simulation and the HUD.
+ *
+ * The simulation is the authority on what these numbers *do*; the HUD is the
+ * authority on what the player is told. Keeping them in one place is what stops
+ * the run panel from advertising a burn the flamethrower no longer applies.
+ */
+export const KIT = {
+  /** The Breacher's charge: how long a knocked-down hostile stays down. */
+  siegeStun: 1.1,
+  /** What the charge itself takes off a hostile it catches. */
+  siegeDashDamage: 8,
+  /** How long a Ghost stays untargetable after a phase dash. */
+  ghostPhase: 0.34,
+  /** Seconds of standing still before a Marksman's shot is focused. */
+  focusTime: 0.7,
+  /** How much heavier a focused round is. */
+  focusDamageScale: 1.6,
+  /** How many extra hostiles a focused round passes through. */
+  focusPierce: 2,
+  /** Damage per second while alight, and how much slower a burning hostile is. */
+  burnDps: 5,
+  burnSlow: 0.78,
+  /** Seconds of burn the flamethrower applies on a hit. */
+  burnDuration: 3
+} as const;
+
 export const PLAYER_RADIUS = 12;
 export const BOT_RADIUS = 12;
 
