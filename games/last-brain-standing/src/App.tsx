@@ -5,8 +5,7 @@ export default function App() {
   useEffect(() => {
     const canvas = document.querySelector<HTMLCanvasElement>("#game");
     if (!canvas) throw new Error("Game canvas was not found.");
-    const game = new ArenaGame(canvas);
-    return () => game.destroy();
+    new ArenaGame(canvas);
   }, []);
 
   return (
