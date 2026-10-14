@@ -44,6 +44,14 @@ export const PLAYER_HIT_INVULNERABILITY = 0.46;
 /** Killing a bot restores a little integrity so a run can recover from a bad wave. */
 export const ELIMINATION_HEAL = 3;
 
+/**
+ * The Vanguard's Resolute trait: share of a full dash handed back per kill.
+ *
+ * The plainest class in the game has no trick shot, so its trait is endurance:
+ * keep killing and you are never the one caught between dashes.
+ */
+export const STEADY_DASH_REFUND = 0.35;
+
 /** Body contact knocks the player away instead of silently melting their health. */
 export const CONTACT_DAMAGE = 7;
 export const CONTACT_KNOCKBACK = 62;

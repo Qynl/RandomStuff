@@ -52,6 +52,7 @@ import {
   DIFFICULTIES,
   DEFAULT_DIFFICULTY,
   ELIMINATION_HEAL,
+  STEADY_DASH_REFUND,
   PLAYER_DASH_INVULNERABILITY,
   PLAYER_HIT_INVULNERABILITY,
   PLAYER_RADIUS,
@@ -539,6 +540,19 @@ function tryDash(world: World): void {
   world.shake = Math.max(world.shake, 4);
   world.stats.dashes += 1;
   world.events.push({ type: "player-dash", from, to: { ...player.position }, blocked: swept.blocked });
+}
+
+/**
+ * Hands the Vanguard part of its dash back.
+ *
+ * Reads the same total `tryDash` charges - the class cooldown, floored by the
+ * difficulty preset - so the refund means the same thing on every threat level.
+ */
+function refundDash(world: World): void {
+  const player = world.player;
+  if (player.dashCooldown <= 0) return;
+  const total = Math.max(world.loadout.dashCooldown, preset(world).dashCooldown);
+  player.dashCooldown = Math.max(0, player.dashCooldown - total * STEADY_DASH_REFUND);
 }
 
 /** Dash follows the movement input, and falls back to the aim direction. */
@@ -1534,6 +1548,10 @@ export function eliminateBot(world: World, bot: AgentState): void {
   if (interrupted) world.stats.interrupts += 1;
   const healed = Math.min(ELIMINATION_HEAL, world.player.maxHealth - world.player.health);
   if (healed > 0) world.player.health += healed;
+  // The Vanguard's Resolute trait. Paid out of the total cooldown rather than
+  // what is left of it, so the first kill of a wave is worth as much as the
+  // fifth and the class can be played on the front foot.
+  if (world.loadout.trait === "steady") refundDash(world);
   world.shake = Math.max(world.shake, 6);
   world.events.push({
     type: "bot-eliminated",

@@ -14,8 +14,8 @@ import {
   unlockProgress,
   unlockedLoadouts
 } from "../src/loadouts";
-import { createWorld, damageBot, emptyInput, resetWorld, setWorldLoadout, stepWorld } from "../src/sim";
-import { PLAYER_FIRE_INTERVAL, PLAYER_SPEED } from "../src/constants";
+import { createWorld, damageBot, eliminateBot, emptyInput, resetWorld, setWorldLoadout, stepWorld } from "../src/sim";
+import { DIFFICULTIES, PLAYER_FIRE_INTERVAL, PLAYER_SPEED } from "../src/constants";
 import { pinLayout } from "./helpers/layout";
 import type { AgentState } from "../src/types";
 
@@ -237,6 +237,37 @@ describe("classes in the simulation", () => {
     expect(events.some((event) => event.type === "bot-windup-cancel")).toBe(true);
     expect(world.player.phaseTime).toBeGreaterThan(0.2);
     expect(bot.windup).toBe(0);
+  });
+
+  it("hands a vanguard a third of its dash back for every kill", () => {
+    const total = Math.max(LOADOUTS.vanguard.dashCooldown, DIFFICULTIES.standard.dashCooldown);
+    const world = start("vanguard");
+    const bot: AgentState = {
+      id: 12, kind: "hunter", position: { x: 560, y: 520 }, velocity: { x: 0, y: 0 }, health: 1, maxHealth: 48,
+      fireCooldown: 99, windup: 0, windupDuration: 0, windupTurnRate: 2, facing: 0, spawnGuard: 0, strafeSign: 1,
+      strafeLock: 0, alive: true, hitFlash: 0, blindTime: 0, pendingRounds: 0, burstTimer: 0, diveTime: 0,
+      diveCooldown: 0, detourTime: 0, detourSign: 1, grindTime: 0, stun: 0, chargeTime: 0,
+      chargeDirection: { x: 0, y: 0 }, sprayTime: 0
+    };
+    world.bots.push(bot);
+    world.player.dashCooldown = total;
+    eliminateBot(world, bot);
+    // Paid out of the whole cooldown, not the remainder: one kill is one third.
+    expect(world.player.dashCooldown).toBeCloseTo(total * 0.65, 4);
+    // And it stops at a full dash rather than running into negative time.
+    world.player.dashCooldown = total * 0.2;
+    world.bots.push({ ...bot, id: 13, alive: true, health: 1 });
+    eliminateBot(world, world.bots[world.bots.length - 1]);
+    expect(world.player.dashCooldown).toBe(0);
+    // No other class gets it for free.
+    for (const id of ["breacher", "marksman", "ghost", "cinder", "sapper"] as const) {
+      const other = start(id);
+      const spare: AgentState = { ...bot, id: 14 };
+      other.bots.push(spare);
+      other.player.dashCooldown = total;
+      eliminateBot(other, spare);
+      expect(other.player.dashCooldown).toBe(total);
+    }
   });
 
   it("lets a marksman bank focus for one heavy piercing round", () => {
