@@ -1,7 +1,7 @@
 import { BOT_PROFILES, chooseBotDirection, distance, normalize, shouldBotFire } from "./ai";
 import { circleHitsRect, moveWithCollisions, OBSTACLES, segmentBlocked, segmentHitsCircle, WORLD } from "./arena";
 import type { AgentState, BotKind, Bullet, PlayerTelemetry, Vec2 } from "./types";
-import { getNextWave, getWaveSpawnCount, MAX_WAVES } from "./progression";
+import { getNextWave, getWaveProgressPercent, getWaveSpawnCount, MAX_WAVES } from "./progression";
 
 interface Particle { position: Vec2; velocity: Vec2; life: number; maxLife: number; color: string; size: number }
 interface FloatingText { position: Vec2; text: string; life: number; color: string }
@@ -418,7 +418,7 @@ export class ArenaGame {
   private updateHud(): void {
     this.ui.kills.textContent = String(this.kills).padStart(2, "0");
     this.ui.wave.innerHTML = String(this.wave).padStart(2, "0") + " <i>/ " + String(MAX_WAVES).padStart(2, "0") + "</i>";
-    this.ui.waveProgress.style.width = (this.kills % 5) * 20 + "%";
+    this.ui.waveProgress.style.width = getWaveProgressPercent(this.wave) + "%";
     this.ui.healthText.textContent = this.health + "%";
     this.ui.healthBar.style.width = this.health + "%";
     this.ui.healthBar.classList.toggle("low", this.health <= 35);
