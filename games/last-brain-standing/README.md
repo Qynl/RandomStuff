@@ -4,7 +4,9 @@ A small, fast top-down arena combat game built around one idea: opponents should
 
 Ten hostile profiles hunt you across five escalating threat levels, and you fly one of six operative classes, each with its own weapon, body and signature kit. Every hostile shot is telegraphed before it happens, so damage is always something you could have read and dodged. A run is fully determined by a seed, which you can replay, share, and use to compare scores with someone else.
 
-The game opens on a **command screen**: your rank and career at the top, the class ribbon and deploy button in the middle with the operative standing on a lit floor, briefing and service record down the side, and a bottom strip with career score, runs/kills and threat levels cleared. Classes, arenas and controls each open a sheet; nothing is more than one tap from the deploy button.
+The game opens on a **command screen**: a bright field with the operative standing on the podium in the middle, destination tiles down both rails — classes and arenas on the left, contracts, record, profile, settings and controls on the right — and a bottom bar carrying today's seed, the deploy console (threat level, aiming mode, the rank ladder and the big deploy button) and the career rewards strip. Every tile opens a sheet; the deploy button is never more than one tap away.
+
+The contract board is the reason a career has somewhere to go between runs: three standing orders are open at a time, drawn in board order, and the next one moves up when one is signed off. Count orders measure work done from the moment they open; milestone orders are judged against the career high and sign themselves off the first time the board reaches them. Whatever a run closes is named on the result card and in the feed, and the whole board is listed in the profile with what is open and what is signed.
 
 ## Play
 
