@@ -51,5 +51,11 @@ Do **not** add new game modes or lots of content. First make the current combat 
 - Do not ask the user to choose among obvious implementation details. Make sound engineering decisions and report trade-offs.
 - Finish by reporting files changed, commands actually run and their outcomes, remaining issues, and the exact next best step.
 
+## Work already added on this branch (verify before building on it)
+- React now returns a cleanup callback from `useEffect`; `ArenaGame.destroy()` cancels its animation frame, aborts event listeners, and clears held input. This prevents duplicate listeners when React remounts the canvas.
+- Projectile collision now sweeps the bullet path for the frame instead of checking only the endpoint. This is intended to stop fast bullets skipping over targets between frames.
+- `src/arena.ts` exports `distanceToSegment` and `segmentHitsCircle`; `tests/arena.test.ts` covers geometry, arena bounds, line-of-sight, swept hits, and near-misses.
+- These changes have been committed, but **their tests/build have not been confirmed yet**. Do not assume they pass.
+
 ## Immediate task
-Start by verifying this React/Vite conversion, then do a short code audit of the existing combat loop and propose/implement only the single highest-impact, testable improvement. Do not implement a second feature until the first passes its tests and build.
+First run `npm install`, `npm test`, and `npm run build` against the current branch state. Fix any failures before adding features. Then inspect the new swept projectile collision and React cleanup carefully, add any missing regression tests, and confirm the changes behave correctly. Only after that passes should you choose the next single highest-impact improvement. Do not claim the commands or a browser playtest ran unless you actually ran them.
