@@ -34,12 +34,8 @@ import {
   DIFFICULTIES,
   DEFAULT_DIFFICULTY,
   ELIMINATION_HEAL,
-  PLAYER_BULLET_DAMAGE,
-  PLAYER_BULLET_LIFE,
-  PLAYER_BULLET_SPEED,
   PLAYER_DASH_DISTANCE,
   PLAYER_DASH_INVULNERABILITY,
-  PLAYER_FIRE_INTERVAL,
   PLAYER_HIT_INVULNERABILITY,
   PLAYER_MAX_HEALTH,
   PLAYER_RADIUS,
@@ -47,6 +43,7 @@ import {
   TELEMETRY_DIRECTION_SAMPLES,
   TELEMETRY_SHOT_SAMPLES
 } from "./constants";
+import { LOADOUTS, resolveLoadout, type Loadout } from "./loadouts";
 import { getWavePlan, MAX_WAVES, type WavePlan } from "./progression";
 import { createRandomSeed, createRng, normalizeSeed, type Rng } from "./rng";
 import type { AimMode, AgentState, Bullet, DifficultyId, PendingSpawn, PlayerTelemetry, Rect, RunStats, SimEvent, Vec2 } from "./types";
@@ -104,6 +101,8 @@ export interface World {
   obstacles: Rect[];
   /** Human-readable name of the current layout, for the HUD. */
   arenaName: string;
+  /** Primary weapon this run is played with. */
+  loadout: Loadout;
   difficulty: DifficultyId;
   rng: Rng;
   phase: SimPhase;
@@ -158,6 +157,7 @@ export function createWorld(options: CreateWorldOptions = {}): World {
     seed: 1,
     obstacles: ARENA_LAYOUTS.quadrant.obstacles,
     arenaName: ARENA_LAYOUTS.quadrant.name,
+    loadout: LOADOUTS.rifle,
     difficulty: options.difficulty ?? DEFAULT_DIFFICULTY,
     rng: createRng(seedValue),
     phase: "standby",
@@ -234,6 +234,15 @@ function applyArenaLayoutForSeed(world: World): void {
   const layoutId = layoutForSeed(world.seed);
   world.obstacles = ARENA_LAYOUTS[layoutId].obstacles;
   world.arenaName = ARENA_LAYOUTS[layoutId].name;
+}
+
+/**
+ * Swaps the primary weapon. Anything unknown or still locked resolves to the
+ * default, so a tampered stored value cannot skip an unlock.
+ */
+export function setWorldLoadout(world: World, id: unknown, career = Number.POSITIVE_INFINITY): Loadout {
+  world.loadout = LOADOUTS[resolveLoadout(id, career)];
+  return world.loadout;
 }
 
 export function resetWorld(world: World, options: { seed?: number | string; difficulty?: DifficultyId } = {}): World {
@@ -431,25 +440,38 @@ export function selectDashDirection(world: World): Vec2 {
 
 function firePlayerBullet(world: World): void {
   const player = world.player;
+  const weapon = world.loadout;
   const direction = normalize(player.aimDirection);
   if (direction.x === 0 && direction.y === 0) return;
-  player.fireCooldown = PLAYER_FIRE_INTERVAL * preset(world).playerFireScale;
+  player.fireCooldown = weapon.fireInterval * preset(world).playerFireScale;
   world.telemetry.recentShots.push(direction);
   if (world.telemetry.recentShots.length > TELEMETRY_SHOT_SAMPLES) world.telemetry.recentShots.shift();
-  const origin = { x: player.position.x + direction.x * 18, y: player.position.y + direction.y * 18 };
-  world.bullets.push({
-    position: origin,
-    velocity: { x: direction.x * PLAYER_BULLET_SPEED, y: direction.y * PLAYER_BULLET_SPEED },
-    owner: "player",
-    damage: PLAYER_BULLET_DAMAGE,
-    life: PLAYER_BULLET_LIFE,
-    color: "#e8dcc0",
-    source: "player",
-    travelled: 0
-  });
-  world.shake = Math.max(world.shake, 1.3);
-  world.stats.shotsFired += 1;
-  world.events.push({ type: "player-fired", position: origin, direction });
+
+  // Multi-round weapons fan their shot out deterministically from the world rng,
+  // so a replay with the same seed produces the same pellet pattern.
+  const baseAngle = Math.atan2(direction.y, direction.x);
+  const pellets = Math.max(1, Math.round(weapon.shots));
+  for (let index = 0; index < pellets; index += 1) {
+    const offset = pellets === 1
+      ? weapon.spread * world.rng.range(-1, 1) * 0
+      : (-weapon.spread / 2 + (weapon.spread * index) / (pellets - 1)) + world.rng.range(-0.02, 0.02);
+    const angle = baseAngle + offset;
+    const shotDirection = { x: Math.cos(angle), y: Math.sin(angle) };
+    const origin = { x: player.position.x + direction.x * 18, y: player.position.y + direction.y * 18 };
+    world.bullets.push({
+      position: { ...origin },
+      velocity: { x: shotDirection.x * weapon.bulletSpeed, y: shotDirection.y * weapon.bulletSpeed },
+      owner: "player",
+      damage: weapon.damage,
+      life: weapon.bulletLife,
+      color: "#e8dcc0",
+      source: "player",
+      travelled: 0
+    });
+    world.stats.shotsFired += 1;
+  }
+  world.shake = Math.max(world.shake, weapon.recoil);
+  world.events.push({ type: "player-fired", position: { x: player.position.x + direction.x * 18, y: player.position.y + direction.y * 18 }, direction });
 }
 
 function updateBots(world: World, dt: number): void {

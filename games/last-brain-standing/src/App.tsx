@@ -5,6 +5,7 @@ import { buildRunSummary } from "./scoring";
 import { BOT_KINDS, BOT_PROFILES, summarizeMirrorRead } from "./ai";
 import { shouldShowTouchControls, stickVectorFromPointer } from "./input";
 import { layoutRecordForSeed } from "./arena";
+import { isUnlocked, LOADOUTS, LOADOUT_ORDER, type LoadoutId } from "./loadouts";
 import { createRandomSeed, formatSeed, normalizeSeed } from "./rng";
 import {
   buildShareUrl,
@@ -19,7 +20,7 @@ import type { AimMode, DifficultyId, Vec2 } from "./types";
 
 const TONE_GLYPH: Record<FeedLine["tone"], string> = { info: "·", good: "▲", bad: "▼", warn: "!" };
 
-type UiState = "start" | "playing" | "paused" | "victory" | "defeat";
+type UiState = "start" | "playing" | "paused" | "victory" | "defeat" | "profile";
 
 const CONTROL_ROWS: Array<[string, string]> = [
   ["W A S D / ARROWS", "MOVE"],
@@ -58,6 +59,7 @@ export default function App({ onGameReady }: AppProps = {}) {
   const [firing, setFiring] = useState(false);
   const [shareNotice, setShareNotice] = useState<string | null>(null);
   const [pendingCode, setPendingCode] = useState<RunCode | null>(null);
+  const [screen, setScreen] = useState<"game" | "profile">("game");
 
   // ------------------------------------------------------------- engine setup
   useEffect(() => {
@@ -112,14 +114,19 @@ export default function App({ onGameReady }: AppProps = {}) {
     return () => window.removeEventListener("touchstart", onFirstTouch);
   }, []);
 
+  const career = snapshot?.career ?? null;
+  const activeLoadout = snapshot?.loadout ?? "rifle";
   const showTouchControls = touchOverride === true;
   const uiState: UiState = useMemo(() => {
+    // The profile is a screen, not a game state: it sits above the run whether
+    // the run is standing by, paused or finished.
+    if (screen === "profile") return "profile";
     if (!snapshot) return "start";
     if (snapshot.phase === "victory") return "victory";
     if (snapshot.phase === "defeat") return "defeat";
     if (!snapshot.started) return "start";
     return snapshot.paused ? "paused" : "playing";
-  }, [snapshot]);
+  }, [snapshot, screen]);
 
   useEffect(() => {
     gameRef.current?.setTouchMovement(stick);
@@ -233,6 +240,10 @@ export default function App({ onGameReady }: AppProps = {}) {
   const changeDifficulty = useCallback((next: DifficultyId) => {
     setDifficulty(next);
     gameRef.current?.setDifficulty(next);
+  }, []);
+
+  const chooseLoadout = useCallback((next: LoadoutId) => {
+    gameRef.current?.setLoadout(next);
   }, []);
 
   const changeAimMode = useCallback((next: AimMode) => {
@@ -462,6 +473,37 @@ export default function App({ onGameReady }: AppProps = {}) {
                       </div>
                     ))}
                   </div>
+                  <section className="loadout-picker" aria-label="Primary weapon">
+                    <div className="picker-head">
+                      <span>PRIMARY WEAPON</span>
+                      <button type="button" className="ghost-button compact" onClick={() => setScreen("profile")}>
+                        OPERATOR PROFILE
+                      </button>
+                    </div>
+                    <div className="loadout-row">
+                      {LOADOUT_ORDER.map((id) => {
+                        const weapon = LOADOUTS[id];
+                        const unlocked = career ? isUnlocked(id, career.score) : id === "rifle";
+                        const selected = activeLoadout === id;
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            className={`loadout-card${selected ? " selected" : ""}${unlocked ? "" : " locked"}`}
+                            aria-pressed={selected}
+                            disabled={!unlocked}
+                            title={unlocked ? weapon.counter : `Unlocks at ${weapon.unlockLabel}`}
+                            onClick={() => chooseLoadout(id)}
+                          >
+                            <span className="loadout-kind">{weapon.kind}</span>
+                            <strong>{weapon.name}</strong>
+                            <small>{unlocked ? weapon.tagline : `LOCKED · ${weapon.unlockLabel}`}</small>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <p className="loadout-hint">{LOADOUTS[activeLoadout].counter}</p>
+                  </section>
                   <button ref={primaryButtonRef} className="primary-button" type="button" onClick={() => startRun(seedInput)}>
                     <span>ENTER THE ARENA</span><span aria-hidden="true">↗</span>
                   </button>
@@ -503,7 +545,67 @@ export default function App({ onGameReady }: AppProps = {}) {
                     </span>
                   </div>
                   {shareNotice ? <p className="share-notice" role="status">{shareNotice}</p> : null}
-                  <div className="overlay-foot"><span>NO LOADOUTS. NO EXCUSES.</span><span>BEST RUN WINS.</span></div>
+                  <div className="overlay-foot"><span>PICK YOUR WEAPON. NO EXCUSES.</span><span>BEST RUN WINS.</span></div>
+                </>
+              ) : null}
+
+              {uiState === "profile" ? (
+                <>
+                  <div className="eyebrow"><span className="live-dot" /> OPERATOR PROFILE</div>
+                  <div className="profile-head">
+                    <div className="insignia" aria-hidden="true">{career?.rank.insignia ?? "I"}</div>
+                    <div>
+                      <h1 className="profile-rank">{career?.rank.name ?? "RECRUIT"}</h1>
+                      <p className="profile-sub">
+                        CAREER {career?.score ?? 0} · {career?.runs ?? 0} RUNS · {career?.kills ?? 0} KILLS
+                        {career?.bestCombo ? ` · BEST CHAIN ×${career.bestCombo}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="profile-block">
+                    <h2>UNLOCKS</h2>
+                    <ul className="unlock-list">
+                      {LOADOUT_ORDER.map((id) => {
+                        const weapon = LOADOUTS[id];
+                        const unlocked = career ? isUnlocked(id, career.score) : id === "rifle";
+                        return (
+                          <li key={id} className={unlocked ? "unlocked" : "locked"}>
+                            <span className="unlock-name">{weapon.name}</span>
+                            <span className="unlock-note">
+                              {unlocked ? "UNLOCKED" : weapon.unlockLabel}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    {career?.next ? (
+                      <p className="unlock-progress">
+                        NEXT: {career.next.name} · {Math.round(career.next.progress * 100)}% OF THE CAREER SCORE NEEDED
+                      </p>
+                    ) : (
+                      <p className="unlock-progress">EVERY WEAPON UNLOCKED.</p>
+                    )}
+                    {career?.nextRank ? (
+                      <p className="unlock-progress">
+                        RANK {career.nextRank.name} AT {career.nextRank.threshold.toLocaleString()} CAREER
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="profile-block">
+                    <h2>BEST RUN PER THREAT LEVEL</h2>
+                    <ul className="best-list">
+                      {(career?.bestByDifficulty ?? []).map((entry) => (
+                        <li key={entry.id}>
+                          <span>{entry.label}</span>
+                          <strong>{entry.score}</strong>
+                          <small>{entry.kills} kills</small>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <button ref={primaryButtonRef} className="primary-button" type="button" onClick={() => setScreen("game")}>
+                    <span>BACK TO THE ARENA</span><span aria-hidden="true">↩</span>
+                  </button>
                 </>
               ) : null}
 
@@ -553,6 +655,26 @@ export default function App({ onGameReady }: AppProps = {}) {
                       </div>
                     ))}
                   </dl>
+                  <div className="loadout-row compact-row">
+                    {LOADOUT_ORDER.map((id) => {
+                      const weapon = LOADOUTS[id];
+                      const unlocked = career ? isUnlocked(id, career.score) : id === "rifle";
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          className={`loadout-card${activeLoadout === id ? " selected" : ""}${unlocked ? "" : " locked"}`}
+                          aria-pressed={activeLoadout === id}
+                          disabled={!unlocked}
+                          title={unlocked ? weapon.counter : `Unlocks at ${weapon.unlockLabel}`}
+                          onClick={() => chooseLoadout(id)}
+                        >
+                          <span className="loadout-kind">SWAP</span>
+                          <strong>{weapon.kind}</strong>
+                        </button>
+                      );
+                    })}
+                  </div>
                   <div className="overlay-actions">
                     <button ref={primaryButtonRef} className="primary-button" type="button" onClick={() => startRun(seedInput)}>
                       <span>RUN IT BACK</span><span aria-hidden="true">↻</span>
@@ -613,6 +735,12 @@ export default function App({ onGameReady }: AppProps = {}) {
               <div className="meta-row">
                 <span>ARENA</span>
                 <strong>{snapshot.arenaName}</strong>
+              </div>
+            ) : null}
+            {snapshot ? (
+              <div className="meta-row">
+                <span>WEAPON</span>
+                <strong>{LOADOUTS[activeLoadout].name}</strong>
               </div>
             ) : null}
           </div>

@@ -69,6 +69,18 @@ describe("React app shell", () => {
     });
     advance(10);
   };
+  /** Tears the shell down and mounts it again, the way a page load would. */
+  const remount = () => {
+    act(() => root.unmount());
+    container.remove();
+    container = document.createElement("div");
+    document.body.append(container);
+    engine = null;
+    act(() => {
+      root = createRoot(container);
+      root.render(<App onGameReady={(game) => { engine = game; }} />);
+    });
+  };
   const press = (key: string) => {
     act(() => {
       pressKey(key);
@@ -351,6 +363,81 @@ describe("React app shell", () => {
     }
   });
 
+  it("lets the player pick a weapon and holds it for the run", () => {
+    // Three cards, only the starting weapon usable on a fresh career.
+    const cards = () => Array.from(container.querySelectorAll(".loadout-card"));
+    expect(cards()).toHaveLength(3);
+    expect(cards().filter((card) => (card as HTMLButtonElement).disabled)).toHaveLength(2);
+    const scatter = cards().find((card) => card.textContent?.includes("BREACH SCATTERGUN")) as HTMLButtonElement;
+    expect(scatter.disabled).toBe(true);
+    expect(scatter.textContent).toContain("LOCKED");
+
+    // The hint explains how the equipped weapon wants to be played.
+    expect(text(".loadout-hint")).toContain("keep the reticle on the target");
+
+    click(button("ENTER THE ARENA"));
+    advance(6);
+    expect(engine?.getLoadoutId()).toBe("rifle");
+    const weaponRow = Array.from(container.querySelectorAll(".meta-row")).find((row) => row.textContent?.startsWith("WEAPON"));
+    expect(weaponRow?.textContent).toContain("SERVICE RIFLE");
+  });
+
+  it("shows the operator profile with career progress and unlocks", () => {
+    // Seed a career worth 5,000 on the standard level: one unlock earned.
+    window.localStorage.setItem("lbs-best-by-difficulty", JSON.stringify({ standard: { score: 5000, kills: 20 } }));
+    window.localStorage.setItem("lbs-career-runs", "7");
+    window.localStorage.setItem("lbs-career-kills", "88");
+    remount();
+
+    click(button("OPERATOR PROFILE"));
+    expect(text(".profile-rank")).toBe("OPERATOR");
+    expect(text(".profile-sub")).toContain("CAREER 5000");
+    expect(text(".profile-sub")).toContain("7 RUNS");
+    expect(text(".profile-sub")).toContain("88 KILLS");
+
+    const unlocks = Array.from(container.querySelectorAll(".unlock-list li"));
+    expect(unlocks).toHaveLength(3);
+    expect(unlocks.filter((item) => item.classList.contains("unlocked"))).toHaveLength(2);
+    expect(text(".unlock-progress")).toContain("RAILGUN");
+    expect(text(".unlock-progress")).toContain("45%"); // 5000 of 11000
+
+    const best = Array.from(container.querySelectorAll(".best-list li")).map((item) => item.textContent ?? "");
+    expect(best.some((row) => row.includes("5000"))).toBe(true);
+
+    // Back out to the arena.
+    click(button("BACK TO THE ARENA"));
+    expect(query(".profile-rank")).toBeNull();
+    expect(button("ENTER THE ARENA")).toBeTruthy();
+  });
+
+  it("unlocks a weapon as soon as the career score reaches it", () => {
+    remount();
+    let cards = Array.from(container.querySelectorAll(".loadout-card")) as HTMLButtonElement[];
+    expect(cards.filter((card) => !card.disabled)).toHaveLength(1);
+
+    // Play a run that pushes the career score past the scattergun threshold.
+    click(button("ENTER THE ARENA"));
+    advance(30);
+    if (!engine) throw new Error("engine was not created");
+    engine.activeWorld.stats.kills = 40;
+    engine.activeWorld.stats.wavesCleared = 5;
+    endRunNow();
+    window.localStorage.setItem("lbs-best-by-difficulty", JSON.stringify({ standard: { score: 4600, kills: 40 } }));
+    remount();
+
+    cards = Array.from(container.querySelectorAll(".loadout-card")) as HTMLButtonElement[];
+    const scatter = cards.find((card) => card.textContent?.includes("BREACH SCATTERGUN")) as HTMLButtonElement;
+    expect(scatter.disabled).toBe(false);
+    click(scatter);
+    expect(engine?.getLoadoutId()).toBe("scatter");
+    expect(text(".loadout-hint")).toContain("Close the distance");
+    // And it survives into the run that starts next.
+    click(button("ENTER THE ARENA"));
+    advance(6);
+    expect(engine?.getLoadoutId()).toBe("scatter");
+    expect(window.localStorage.getItem("lbs-loadout")).toBe("scatter");
+  });
+
   it("opens with the settings this device stored last time", () => {
     // The engine owns the settings, so the panel must reflect what it restored
     // rather than falling back to its own defaults on a fresh load.
@@ -360,15 +447,7 @@ describe("React app shell", () => {
     window.localStorage.setItem("lbs-muted", "true");
 
     // Remount the shell the way a page load would.
-    act(() => root.unmount());
-    container.remove();
-    container = document.createElement("div");
-    document.body.append(container);
-    engine = null;
-    act(() => {
-      root = createRoot(container);
-      root.render(<App onGameReady={(game) => { engine = game; }} />);
-    });
+    remount();
     // Read the engine through a widening cast: `engine` was just assigned null.
     const restored = engine as ArenaGame | null;
     expect(restored).toBeTruthy();

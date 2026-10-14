@@ -86,6 +86,22 @@ Measured with the scripted autoplay policy over 24 seeds per difficulty (`tests/
 
 The policy reacts to telegraphs perfectly, so it is a much stronger player than a first-timer: treat these as ordering and sanity figures, not a human win rate. Best score and best eliminations are stored per difficulty.
 
+## Loadouts
+
+You pick a primary weapon before a run, and it changes how the fight is played:
+
+| Weapon | Rounds | Damage | Interval | Unlocks at |
+|---|---|---|---|---|
+| **SERVICE RIFLE** | 1 | 12 | 0.155 s | Standard issue |
+| **BREACH SCATTERGUN** | 6 (0.42 rad fan) | 5 each | 0.46 s | 4,500 career score |
+| **RAILGUN** | 1 | 34 | 0.68 s | 11,000 career score |
+
+Career score is the sum of your best score on each threat level, so improving any level moves the unlock ladder. Each weapon also names its own counterplay in the picker; every pellet counts as a shot, so accuracy stays honest whichever you carry. A stored value that names a locked or unknown weapon resolves back to the rifle rather than skipping the unlock.
+
+## Operator profile
+
+Pressing **OPERATOR PROFILE** on the start screen opens the account view: rank insignia and name (RECRUIT → OPERATOR → SPECIALIST → VETERAN → INSTRUCTOR by career score), career totals (score, runs, kills, best chain), the unlock ladder with progress toward the next weapon, and your best run on every threat level. It reads the same `localStorage` records the game writes and nothing leaves the device.
+
 ## Scoring
 
 Score rewards pressure, progress and precision, and it pays for the two skills the combat rules ask for:
@@ -106,7 +122,7 @@ Clearing all five threat levels without taking a single point of damage earns th
 
 - A run is a pure function of `(seed, difficulty)`: same seed + same inputs = same fight, frame for frame.
 - The seed is shown in the top bar, the pause card and the run summary.
-- The start screen shows the arena a typed seed will play in, and **RANDOM** rolls a fresh seed for you.
+- The start screen shows the arena a typed seed will play in and the weapon picker, and **RANDOM** rolls a fresh seed for you.
 - Starting a run writes a run code into the URL (`#seed=1A2B3C&level=veteran`), so the address bar is always a replayable link.
 - Opening such a link (or pasting it into the seed field) starts that exact fight; **COPY SEED LINK** on the result screen copies it.
 - Seed labels are six hex characters and are *lossless*: `normalizeSeed` keeps every seed inside 24 bits, so `REPLAY SEED 1A2B3C` restores the fight that label names. Text seeds (`mirror`, `boss-rush`) are hashed, case-insensitively, into the same space.
@@ -160,7 +176,9 @@ Data flow: `App` owns the React state and mounts `ArenaGame` on the canvas. The 
 | `tests/game.test.ts` | jsdom runtime: input, firing, dash, dodge feedback, pause, touch, run end, run history, calm mode, telemetry overlay, persistence, fixed-step invariance. |
 | `tests/app.test.tsx` | jsdom React shell: overlay flow, settings, seed link, counterplay hints, focus management, console cleanliness. |
 | `tests/rng.test.ts`, `tests/share.test.ts`, `tests/input.test.ts`, `tests/scoring.test.ts` | The pure helper modules. |
+| `tests/loadouts.test.ts` | Weapon catalogue (each weapon distinct, the balance promise each one makes, burst-damage band), the career-score ladder, unlock progress and rank thresholds, and in-sim firing per weapon (pellet fan, life, damage, cooldown, shot counting, locked/unknown resolution). |
 | `tests/layout.test.ts` | Arena layouts: blocks in bounds and non-overlapping, the player's start is free, a flood fill proves no layout seals off a pocket, cover is worth hiding behind, and the seed picks the same layout every time (including through a seed-label round trip). |
+| `tests/loadouts.test.ts` | Weapon catalogue (each weapon distinct, the balance promise each one makes, burst-damage band), the career-score ladder, unlock progress and rank thresholds, and in-sim firing per weapon (pellet fan, life, damage, cooldown, shot counting, locked/unknown resolution). |
 | `tests/layout.test.ts` | Arena layouts: blocks in bounds and non-overlapping, the player's start is free, a flood fill proves no layout seals off a pocket, cover is worth hiding behind, every layout carries a distinct accent and a sane openness, and the seed always picks the same layout (including through a seed-label round trip). |
 | `tests/fuzz.test.ts` | Adversarial input sweep: 12 long runs of deliberately awkward input (zero-length aim vectors, dash spam, hard reversals, nonsensical aim points) asserting that vectors stay finite, nobody ends a frame inside geometry, lists stay bounded, and the same input still replays identically. |
 | `tests/audio.test.ts` | Sound engine against a fake `AudioContext`: no graph before a gesture, silent no-op without WebAudio, a broken graph reported once, mute and volume honoured, polyphony capped and voices recycled. |

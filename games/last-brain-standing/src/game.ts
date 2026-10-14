@@ -3,6 +3,19 @@ import { ARENA_LAYOUTS, firstBlockingFraction, layoutForSeed, rangeScaleForOpenn
 import { BLOCK, BOT_ART, BULLET, FLOOR, PLAYER_ART, STATUS, TELEGRAPH } from "./art";
 import { SoundEngine, type SoundName } from "./audio";
 import { BOT_RADIUS, DIFFICULTIES, MAX_PARTICLES, PLAYER_MAX_HEALTH, PLAYER_RADIUS } from "./constants";
+import {
+  careerScore,
+  isLoadoutId,
+  isUnlocked,
+  LOADOUTS,
+  LOADOUT_ORDER,
+  nextLockedLoadout,
+  nextRank,
+  rankFor,
+  resolveLoadout,
+  unlockProgress,
+  type LoadoutId
+} from "./loadouts";
 import { getWaveBriefing, getWaveHint, MAX_WAVES } from "./progression";
 import { computeScore, formatDuration, gradeRun, type RunGrade, type ScoreBreakdown } from "./scoring";
 import {
@@ -10,6 +23,7 @@ import {
   playerPredictability,
   predictedPlayerPoint,
   resetWorld,
+  setWorldLoadout,
   stepWorld,
   type SimPhase,
   type World,
@@ -40,6 +54,10 @@ export interface GameSnapshot {
   hint: string;
   /** Arena layout name for the current run. */
   arenaName: string;
+  /** Primary weapon for this run. */
+  loadout: LoadoutId;
+  /** Career progress and unlocks, for the profile screen and the picker. */
+  career: CareerSummary;
   health: number;
   maxHealth: number;
   kills: number;
@@ -70,6 +88,21 @@ export interface FeedLine {
   time: string;
   text: string;
   tone: "info" | "good" | "bad" | "warn";
+}
+
+export interface CareerSummary {
+  /** Sum of the best score on every threat level. */
+  score: number;
+  runs: number;
+  kills: number;
+  bestCombo: number;
+  rank: { name: string; insignia: string; threshold: number };
+  nextRank: { name: string; insignia: string; threshold: number } | null;
+  /** Loadouts the current career score has opened, in picker order. */
+  unlocked: LoadoutId[];
+  /** The next loadout to earn, with how far along the player is. */
+  next: { id: LoadoutId; name: string; unlockLabel: string; progress: number } | null;
+  bestByDifficulty: Array<{ id: DifficultyId; label: string; score: number; kills: number }>;
 }
 
 export interface RunResult {
@@ -160,7 +193,11 @@ const STORAGE = {
   difficulty: "lbs-difficulty",
   shake: "lbs-shake",
   touch: "lbs-touch",
-  aim: "lbs-aim"
+  aim: "lbs-aim",
+  loadout: "lbs-loadout",
+  careerRuns: "lbs-career-runs",
+  careerKills: "lbs-career-kills",
+  careerBestCombo: "lbs-career-combo"
 } as const;
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -246,6 +283,9 @@ export class ArenaGame {
   private bestKills = 0;
   private bestScore = 0;
   private bestByDifficulty: BestByDifficulty = {};
+  private careerRuns = 0;
+  private careerKills = 0;
+  private careerBestCombo = 0;
   private history: RunRecord[] = [];
   private killsByKind: Record<BotKind, number> = { hunter: 0, flanker: 0, mirror: 0 };
   private lastHitBy: BotKind | "unknown" | null = null;
@@ -276,8 +316,12 @@ export class ArenaGame {
     this.bestKills = this.readNumber(STORAGE.bestKills, 0);
     this.bestScore = this.readNumber(STORAGE.bestScore, 0);
     this.bestByDifficulty = this.readBests();
+    this.careerRuns = this.readNumber(STORAGE.careerRuns, 0);
+    this.careerKills = this.readNumber(STORAGE.careerKills, 0);
+    this.careerBestCombo = this.readNumber(STORAGE.careerBestCombo, 0);
     this.history = this.readHistory();
     this.world = createWorld({ seed: createRandomSeed(), difficulty });
+    this.applyLoadout();
     // The engine owns keyboard input, so it owns being focusable: without a
     // tabindex a click cannot focus the canvas and keys never arrive inside an
     // iframe. Authors can still supply their own tabindex.
@@ -308,6 +352,8 @@ export class ArenaGame {
   beginRun(seed?: number | string): void {
     this.sound.resume();
     resetWorld(this.world, { seed: seed ?? createRandomSeed(), difficulty: this.world.difficulty });
+    // A restart is still the same run, so it keeps the weapon that was picked.
+    this.applyLoadout();
     this.started = true;
     this.paused = false;
     this.phase = "running";
@@ -402,6 +448,63 @@ export class ArenaGame {
     this.write(STORAGE.difficulty, difficulty);
     this.pushFeed(`Difficulty set to ${DIFFICULTIES[difficulty].label}.`, "info");
     this.emitSnapshot(true);
+  }
+
+  /** Career score across all threat levels, which is what unlocks loadouts. */
+  getCareerScore(): number {
+    return careerScore(this.bestByDifficulty);
+  }
+
+  getLoadoutId(): LoadoutId {
+    return this.world.loadout.id;
+  }
+
+  /** Equips a weapon. Locked or unknown ids resolve to the default. */
+  setLoadout(id: unknown): void {
+    const career = this.getCareerScore();
+    const resolved = resolveLoadout(id, career);
+    this.world.loadout = LOADOUTS[resolved];
+    this.write(STORAGE.loadout, resolved);
+    this.emitSnapshot(true);
+  }
+
+  /** Applies the stored weapon to the current world (used on run start). */
+  private applyLoadout(): void {
+    const stored = this.readString(STORAGE.loadout);
+    const career = this.getCareerScore();
+    const resolved = isLoadoutId(stored) && isUnlocked(stored, career) ? stored : resolveLoadout(stored, career);
+    setWorldLoadout(this.world, resolved, Number.POSITIVE_INFINITY);
+  }
+
+  /** Everything the profile screen needs, in one object. */
+  getCareer(): CareerSummary {
+    const score = this.getCareerScore();
+    const next = nextLockedLoadout(score);
+    const rank = rankFor(score);
+    const upcoming = nextRank(score);
+    return {
+      score,
+      runs: this.careerRuns,
+      kills: this.careerKills,
+      bestCombo: this.careerBestCombo,
+      rank: { name: rank.name, insignia: rank.insignia, threshold: rank.threshold },
+      nextRank: upcoming ? { name: upcoming.name, insignia: upcoming.insignia, threshold: upcoming.threshold } : null,
+      unlocked: LOADOUT_ORDER.filter((id) => isUnlocked(id, score)),
+      next: next
+        ? {
+            id: next,
+            name: LOADOUTS[next].name,
+            unlockLabel: LOADOUTS[next].unlockLabel,
+            progress: unlockProgress(next, score)
+          }
+        : null,
+      bestByDifficulty: (Object.keys(DIFFICULTIES) as DifficultyId[]).map((id) => ({
+        id,
+        label: DIFFICULTIES[id].label,
+        score: this.bestByDifficulty[id]?.score ?? 0,
+        kills: this.bestByDifficulty[id]?.kills ?? 0
+      }))
+    };
   }
 
   setMuted(muted: boolean): void {
@@ -840,6 +943,13 @@ export class ArenaGame {
       }
     ].slice(-HISTORY_LIMIT);
     this.write(STORAGE.history, JSON.stringify(this.history));
+    // Career totals feed the profile screen and the unlock ladder.
+    this.careerRuns += 1;
+    this.careerKills += stats.kills;
+    this.careerBestCombo = Math.max(this.careerBestCombo, this.combo);
+    this.write(STORAGE.careerRuns, String(this.careerRuns));
+    this.write(STORAGE.careerKills, String(this.careerKills));
+    this.write(STORAGE.careerBestCombo, String(this.careerBestCombo));
     this.playSound(result === "victory" ? "victory" : "defeat");
     this.shake = Math.max(this.shake, result === "victory" ? 6 : 13);
     const endedBy = result === "defeat" ? this.lastHitBy : null;
@@ -971,6 +1081,8 @@ export class ArenaGame {
       briefing: getWaveBriefing(Math.max(1, world.wave)),
       hint: getWaveHint(Math.max(1, world.wave)),
       arenaName: world.arenaName,
+      loadout: world.loadout.id,
+      career: this.getCareer(),
       health: Math.round(world.player.health),
       maxHealth: world.player.maxHealth || PLAYER_MAX_HEALTH,
       kills: world.stats.kills,

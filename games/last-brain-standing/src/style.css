@@ -233,3 +233,36 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 @media(prefers-reduced-motion:reduce){
   *{transition-duration:0.01ms!important;animation-duration:0.01ms!important}
 }
+
+/* ---- loadout picker ------------------------------------------------------- */
+.loadout-picker{margin:0 0 16px;padding:12px;border:1px solid #2a2d33;border-radius:8px;background:linear-gradient(180deg,#1c1f24,#161819)}
+.picker-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;font:8px "DM Mono",monospace;letter-spacing:1.6px;color:#a4abb4}
+.loadout-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.loadout-card{display:flex;flex-direction:column;gap:4px;padding:10px 9px;border:1px solid #34383f;border-radius:6px;background:#1e2126;text-align:left;cursor:pointer;transition:border-color .15s,transform .15s}
+.loadout-card:hover:not(:disabled){border-color:#8a919b;transform:translateY(-1px)}
+.loadout-card.selected{border-color:var(--brass);background:#232019}
+.loadout-card.locked{cursor:not-allowed;opacity:.62}
+.loadout-kind{font:8px "DM Mono",monospace;letter-spacing:1.4px;color:#7a8b9c}
+.loadout-card.selected .loadout-kind{color:var(--brass)}
+.loadout-card strong{font-size:11px;letter-spacing:.4px;color:#e9e3d6}
+.loadout-card small{font:8px/1.5 "DM Mono",monospace;letter-spacing:.4px;color:#a9b0b9}
+.loadout-hint{margin:10px 0 0;font:8px/1.6 "DM Mono",monospace;letter-spacing:.6px;color:#9aa3ad}
+
+/* ---- operator profile ----------------------------------------------------- */
+.profile-head{display:flex;align-items:center;gap:14px;margin:0 0 16px}
+.insignia{display:grid;place-items:center;width:54px;height:54px;flex:none;border:1px solid var(--brass);border-radius:8px;background:linear-gradient(160deg,#2a251c,#1a1c20);font:700 19px "DM Mono",monospace;color:var(--brass);letter-spacing:-.5px}
+.profile-rank{margin:0;font-size:24px;letter-spacing:-.6px;color:#e9e3d6}
+.profile-sub{margin:4px 0 0;font:8px "DM Mono",monospace;letter-spacing:1.1px;color:#9aa3ad}
+.profile-block{margin:0 0 14px;padding:11px 12px;border:1px solid #2a2d33;border-radius:8px;background:#191b1f}
+.profile-block h2{margin:0 0 9px;font:8px "DM Mono",monospace;letter-spacing:1.8px;color:#8f979f;font-weight:500}
+.unlock-list,.best-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+.unlock-list li,.best-list li{display:flex;align-items:baseline;justify-content:space-between;gap:8px;font:9px "DM Mono",monospace;letter-spacing:.7px}
+.unlock-list li.unlocked .unlock-name{color:#dfe6ec}
+.unlock-list li.unlocked .unlock-note{color:var(--moss)}
+.unlock-list li.locked .unlock-name{color:#98a0a8}
+.unlock-list li.locked .unlock-note{color:#a9834a}
+.best-list li span{color:#a4abb4;min-width:82px}
+.best-list li strong{color:#e9e3d6;font-size:12px}
+.best-list li small{color:#8f979f}
+.unlock-progress{margin:10px 0 0;font:8px "DM Mono",monospace;letter-spacing:.9px;color:var(--brass)}
+.hud-weapon{font:8px "DM Mono",monospace;letter-spacing:1.2px;color:#cfa25f}
