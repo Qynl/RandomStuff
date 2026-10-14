@@ -24,32 +24,32 @@ describe("weapon records", () => {
 
   it("accumulates runs, keeps the best score and counts clears", () => {
     const records = emptyWeaponRecords();
-    recordRun(records.rifle, { kills: 12, score: 3000, victory: false });
-    recordRun(records.rifle, { kills: 15, score: 2500, victory: true });
-    expect(records.rifle.runs).toBe(2);
-    expect(records.rifle.kills).toBe(27);
-    expect(records.rifle.bestScore).toBe(3000);
-    expect(records.rifle.victories).toBe(1);
+    recordRun(records.vanguard, { kills: 12, score: 3000, victory: false });
+    recordRun(records.vanguard, { kills: 15, score: 2500, victory: true });
+    expect(records.vanguard.runs).toBe(2);
+    expect(records.vanguard.kills).toBe(27);
+    expect(records.vanguard.bestScore).toBe(3000);
+    expect(records.vanguard.victories).toBe(1);
     // A blank run still counts, but cannot lower anything.
-    recordRun(records.rifle, { kills: 0, score: 0, victory: false });
-    expect(records.rifle.runs).toBe(3);
-    expect(records.rifle.bestScore).toBe(3000);
+    recordRun(records.vanguard, { kills: 0, score: 0, victory: false });
+    expect(records.vanguard.runs).toBe(3);
+    expect(records.vanguard.bestScore).toBe(3000);
   });
 
   it("ignores nonsense values instead of corrupting the record", () => {
     const records = emptyWeaponRecords();
-    recordRun(records.scatter, { kills: -5, score: Number.NaN, victory: false });
-    expect(records.scatter.kills).toBe(0);
-    expect(Number.isFinite(records.scatter.bestScore)).toBe(true);
-    expect(records.scatter.bestScore).toBe(0);
+    recordRun(records.breacher, { kills: -5, score: Number.NaN, victory: false });
+    expect(records.breacher.kills).toBe(0);
+    expect(Number.isFinite(records.breacher.bestScore)).toBe(true);
+    expect(records.breacher.bestScore).toBe(0);
   });
 
   it("keeps records per weapon rather than pooling them", () => {
     const records = emptyWeaponRecords();
-    recordRun(records.rail, { kills: 9, score: 900, victory: true });
-    expect(records.rail.kills).toBe(9);
-    expect(records.rifle.kills).toBe(0);
-    expect(records.scatter.kills).toBe(0);
+    recordRun(records.marksman, { kills: 9, score: 900, victory: true });
+    expect(records.marksman.kills).toBe(9);
+    expect(records.vanguard.kills).toBe(0);
+    expect(records.breacher.kills).toBe(0);
   });
 });
 
@@ -86,7 +86,10 @@ describe("badges", () => {
     expect(earnedIds({ arenasCleared: ["LANES", "PILLARS", "DIAMOND"] })).toEqual(["tourist"]);
     expect(earnedIds({ levelsCleared: ["recruit", "standard", "veteran"] })).toEqual(["all-levels"]);
     expect(earnedIds({ perfectVictories: 1 })).toEqual(["untouchable"]);
-    expect(earnedIds({ unlocks: LOADOUT_ORDER.length })).toEqual(["gun-metal"]);
+    // GUNSMITH is about what has been flown, not what has been bought: every
+    // class is issued from the start, so a fresh account has none of them flown.
+    expect(earnedIds({ classesFlown: LOADOUT_ORDER.length })).toEqual(["gun-metal"]);
+    expect(earnedIds({ unlocks: LOADOUT_ORDER.length })).toEqual([]);
     expect(earnedIds({ careerScore: 20000 })).toEqual(["centurion"]);
   });
 
@@ -108,6 +111,7 @@ describe("badges", () => {
       perfectVictories: 99,
       victories: 99,
       unlocks: 99,
+      classesFlown: 99,
       arenasCleared: ["A", "B", "C", "D", "E"],
       levelsCleared: ["a", "b", "c"],
       bestAccuracy: 240

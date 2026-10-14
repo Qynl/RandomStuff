@@ -242,6 +242,10 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .loadout-card.selected .loadout-kind{color:var(--brass)}
 .loadout-card strong{font-size:11px;letter-spacing:.4px;color:#e9e3d6}
 .loadout-card small{font:8px/1.5 "DM Mono",monospace;letter-spacing:.4px;color:#a9b0b9}
+
+.loadout-trait{display:block;margin-top:2px;font:8px/1.45 "DM Mono",monospace;font-style:normal;letter-spacing:.3px;color:#8f968f}
+.loadout-trait b{color:var(--brass);letter-spacing:.7px;font-weight:500}
+.loadout-card.selected .loadout-trait{color:#b9b1a2}
 .loadout-hint{margin:10px 0 0;font:8px/1.6 "DM Mono",monospace;letter-spacing:.6px;color:#9aa3ad}
 
 /* ---- operator profile ----------------------------------------------------- */

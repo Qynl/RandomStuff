@@ -19,12 +19,10 @@ import {
   isUnlocked,
   LOADOUTS,
   LOADOUT_ORDER,
-  nextLockedLoadout,
   unlockedLoadouts,
   nextRank,
   rankFor,
   resolveLoadout,
-  unlockProgress,
   type LoadoutId
 } from "./loadouts";
 import { getWaveBriefing, getWaveHint, MAX_WAVES } from "./progression";
@@ -44,6 +42,9 @@ import { dashChargeFraction, isEditableTarget, keyboardMoveVector, mergeMoveInpu
 import { createRandomSeed, createRng, formatSeed } from "./rng";
 import type { AgentState, AimMode, BotKind, DifficultyId, RunStats, Vec2 } from "./types";
 import type { PlayerState } from "./sim";
+
+/** Seconds of standing still a Marksman needs: mirrored from the simulation. */
+const FOCUS_WINDOW = 0.7;
 
 export interface GameSnapshot {
   phase: SimPhase;
@@ -77,6 +78,12 @@ export interface GameSnapshot {
   bestKills: number;
   stats: RunStats;
   dashCharge: number;
+  /** 0..1 toward the Marksman's focused shot; 1 means the next pull is heavy. */
+  focus: number;
+  /** Whether the next shot from this class will be the focused one. */
+  focusReady: boolean;
+  /** Seconds left of a Ghost's phase window. */
+  phaseTime: number;
   predictability: number;
   seedLabel: string;
   difficulty: DifficultyId;
@@ -113,10 +120,9 @@ export interface CareerSummary {
   bestCombo: number;
   rank: { name: string; insignia: string; threshold: number };
   nextRank: { name: string; insignia: string; threshold: number } | null;
-  /** Loadouts the current career score has opened, in picker order. */
+  /** Loadouts the current career score has opened, in picker order. Every class
+   *  is issued from the first run, so this is always the full roster. */
   unlocked: LoadoutId[];
-  /** The next loadout to earn, with how far along the player is. */
-  next: { id: LoadoutId; name: string; unlockLabel: string; progress: number } | null;
   bestByDifficulty: Array<{ id: DifficultyId; label: string; score: number; kills: number }>;
   /** Per-weapon service records, in picker order. */
   weapons: Array<{ id: LoadoutId; name: string; kind: string; record: WeaponRecord }>;
@@ -569,6 +575,11 @@ export class ArenaGame {
       perfectVictories: this.careerPerfect,
       victories: this.careerWins,
       unlocks: unlockedLoadouts(this.getCareerScore()).length,
+      // Every class is issued, so the shelf measures what has actually been
+      // flown rather than what has been bought.
+      classesFlown: this.weaponRecords
+        ? LOADOUT_ORDER.filter((id) => (this.weaponRecords?.[id]?.runs ?? 0) > 0).length
+        : 0,
       arenasCleared: [...this.careerArenas],
       levelsCleared: [...this.careerLevels],
       bestAccuracy: this.careerAccuracy
@@ -578,7 +589,6 @@ export class ArenaGame {
   /** Everything the profile screen needs, in one object. */
   getCareer(): CareerSummary {
     const score = this.getCareerScore();
-    const next = nextLockedLoadout(score);
     const rank = rankFor(score);
     const upcoming = nextRank(score);
     const badges = badgeStatuses(this.badgeContext());
@@ -590,14 +600,6 @@ export class ArenaGame {
       rank: { name: rank.name, insignia: rank.insignia, threshold: rank.threshold },
       nextRank: upcoming ? { name: upcoming.name, insignia: upcoming.insignia, threshold: upcoming.threshold } : null,
       unlocked: LOADOUT_ORDER.filter((id) => isUnlocked(id, score)),
-      next: next
-        ? {
-            id: next,
-            name: LOADOUTS[next].name,
-            unlockLabel: LOADOUTS[next].unlockLabel,
-            progress: unlockProgress(next, score)
-          }
-        : null,
       bestByDifficulty: (Object.keys(DIFFICULTIES) as DifficultyId[]).map((id) => ({
         id,
         label: DIFFICULTIES[id].label,
@@ -1368,7 +1370,10 @@ export class ArenaGame {
       bestScore: Math.max(this.bestScore, computeScore(world.stats).total),
       bestKills: Math.max(this.bestKills, world.stats.kills),
       stats: { ...world.stats, elapsed: world.elapsed },
-      dashCharge: dashChargeFraction(world.player.dashCooldown, difficulty.dashCooldown),
+      dashCharge: dashChargeFraction(world.player.dashCooldown, Math.max(difficulty.dashCooldown, world.loadout.dashCooldown)),
+      focus: clamp(world.player.focusTime / FOCUS_WINDOW, 0, 1),
+      focusReady: world.loadout.trait === "focus" && world.player.focusTime >= FOCUS_WINDOW,
+      phaseTime: world.player.phaseTime,
       predictability: playerPredictability(world),
       seedLabel: formatSeed(world.seed),
       difficulty: world.difficulty,

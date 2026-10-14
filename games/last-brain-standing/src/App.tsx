@@ -6,7 +6,7 @@ import { BOT_KINDS, BOT_PROFILES, summarizeMirrorRead } from "./ai";
 import { BOT_SYMBOLS } from "./art";
 import { isMobileUserAgent, shouldShowTouchControls, stickVectorFromPointer } from "./input";
 import { layoutRecordForSeed } from "./arena";
-import { isUnlocked, LOADOUTS, LOADOUT_ORDER, type LoadoutId } from "./loadouts";
+import { DEFAULT_LOADOUT, LOADOUTS, LOADOUT_ORDER, type LoadoutId } from "./loadouts";
 import { createRandomSeed, formatSeed, normalizeSeed } from "./rng";
 import {
   buildShareUrl,
@@ -130,7 +130,7 @@ export default function App({ onGameReady }: AppProps = {}) {
   }, []);
 
   const career = snapshot?.career ?? null;
-  const activeLoadout = snapshot?.loadout ?? "rifle";
+  const activeLoadout = snapshot?.loadout ?? DEFAULT_LOADOUT;
   const showTouchControls = touchOverride === true;
   const uiState: UiState = useMemo(() => {
     // The profile is a screen, not a game state: it sits above the run whether
@@ -498,26 +498,29 @@ export default function App({ onGameReady }: AppProps = {}) {
                     <div className="loadout-row">
                       {LOADOUT_ORDER.map((id) => {
                         const weapon = LOADOUTS[id];
-                        const unlocked = career ? isUnlocked(id, career.score) : id === "rifle";
                         const selected = activeLoadout === id;
                         return (
                           <button
                             key={id}
                             type="button"
-                            className={`loadout-card${selected ? " selected" : ""}${unlocked ? "" : " locked"}`}
+                            className={`loadout-card${selected ? " selected" : ""}`}
                             aria-pressed={selected}
-                            disabled={!unlocked}
-                            title={unlocked ? weapon.counter : `Unlocks at ${weapon.unlockLabel}`}
+                            title={`${weapon.counter} ${weapon.traitName}: ${weapon.traitRule}`}
                             onClick={() => chooseLoadout(id)}
                           >
                             <span className="loadout-kind">{weapon.kind}</span>
                             <strong>{weapon.name}</strong>
-                            <small>{unlocked ? weapon.tagline : `LOCKED · ${weapon.unlockLabel}`}</small>
+                            <small>{weapon.tagline}</small>
+                            <em className="loadout-trait">
+                              <b>{weapon.traitName}</b> {weapon.traitRule}
+                            </em>
                           </button>
                         );
                       })}
                     </div>
-                    <p className="loadout-hint">{LOADOUTS[activeLoadout].counter}</p>
+                    <p className="loadout-hint">
+                      {LOADOUTS[activeLoadout].counter} <b>{LOADOUTS[activeLoadout].traitName}:</b> {LOADOUTS[activeLoadout].traitRule}
+                    </p>
                   </section>
                   <button ref={primaryButtonRef} className="primary-button" type="button" onClick={() => startRun(seedInput)}>
                     <span>ENTER THE ARENA</span><span aria-hidden="true">↗</span>
@@ -582,24 +585,17 @@ export default function App({ onGameReady }: AppProps = {}) {
                     <ul className="unlock-list">
                       {LOADOUT_ORDER.map((id) => {
                         const weapon = LOADOUTS[id];
-                        const unlocked = career ? isUnlocked(id, career.score) : id === "rifle";
                         return (
-                          <li key={id} className={unlocked ? "unlocked" : "locked"}>
+                          <li key={id} className="unlocked">
                             <span className="unlock-name">{weapon.name}</span>
-                            <span className="unlock-note">
-                              {unlocked ? "UNLOCKED" : weapon.unlockLabel}
-                            </span>
+                            <span className="unlock-note">ISSUED · {weapon.traitName}</span>
                           </li>
                         );
                       })}
                     </ul>
-                    {career?.next ? (
-                      <p className="unlock-progress">
-                        NEXT: {career.next.name} · {Math.round(career.next.progress * 100)}% OF THE CAREER SCORE NEEDED
-                      </p>
-                    ) : (
-                      <p className="unlock-progress">EVERY WEAPON UNLOCKED.</p>
-                    )}
+                    <p className="unlock-progress">
+                      ALL {LOADOUT_ORDER.length} CLASSES ISSUED · NOTHING TO UNLOCK, PICK ANY AT DEPLOY
+                    </p>
                     {career?.nextRank ? (
                       <p className="unlock-progress">
                         RANK {career.nextRank.name} AT {career.nextRank.threshold.toLocaleString()} CAREER
@@ -674,7 +670,9 @@ export default function App({ onGameReady }: AppProps = {}) {
                     <ul className="weapon-list">
                       {(career?.weapons ?? []).map((weapon) => (
                         <li key={weapon.id}>
-                          <span className="weapon-name">{weapon.kind}</span>
+                          <span className="weapon-name">
+                            {weapon.name} <em className="weapon-kit">{weapon.kind}</em>
+                          </span>
                           <span className="weapon-stats">
                             {weapon.record.runs} runs · {weapon.record.kills} kills
                             {weapon.record.victories > 0 ? ` · ${weapon.record.victories} cleared` : ""}
@@ -751,15 +749,13 @@ export default function App({ onGameReady }: AppProps = {}) {
                   <div className="loadout-row compact-row">
                     {LOADOUT_ORDER.map((id) => {
                       const weapon = LOADOUTS[id];
-                      const unlocked = career ? isUnlocked(id, career.score) : id === "rifle";
                       return (
                         <button
                           key={id}
                           type="button"
-                          className={`loadout-card${activeLoadout === id ? " selected" : ""}${unlocked ? "" : " locked"}`}
+                          className={`loadout-card${activeLoadout === id ? " selected" : ""}`}
                           aria-pressed={activeLoadout === id}
-                          disabled={!unlocked}
-                          title={unlocked ? weapon.counter : `Unlocks at ${weapon.unlockLabel}`}
+                          title={`${weapon.counter} ${weapon.traitName}: ${weapon.traitRule}`}
                           onClick={() => chooseLoadout(id)}
                         >
                           <span className="loadout-kind">SWAP</span>

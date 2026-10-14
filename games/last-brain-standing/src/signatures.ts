@@ -72,7 +72,7 @@ export const FLANKER_VOLLEY: Volley = {
 
 /** The Mirror fires a copy of whatever you brought. */
 export function mirrorVolley(loadout: LoadoutId): Volley {
-  if (loadout === "scatter") {
+  if (loadout === "breacher") {
     return {
       rounds: [
         round({ spread: 0.3, damageShare: 0.32, speedScale: 0.95, lifeScale: 0.6 }),
@@ -83,10 +83,10 @@ export function mirrorVolley(loadout: LoadoutId): Volley {
       telegraphScale: 0.95
     };
   }
-  if (loadout === "rail") {
+  if (loadout === "marksman" || loadout === "sapper") {
     return {
       rounds: [round({ spread: 0.02, damageShare: 1.1, speedScale: 1.35, lifeScale: 1.4 })],
-      label: "COPIED RAILGUN",
+      label: loadout === "sapper" ? "COPIED LOBBER" : "COPIED RAILGUN",
       telegraphScale: 1.3
     };
   }

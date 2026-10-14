@@ -126,6 +126,12 @@ export interface AgentState {
   chargeDirection: Vec2;
   /** Seconds left of a continuous attack, for profiles that spray. */
   sprayTime: number;
+  /** Seconds left burning, from a Cinder's flames. */
+  burn?: number;
+  /** Damage per second while burning. */
+  burnDamage?: number;
+  /** Seconds banked toward the next burn tick. */
+  burnTimer?: number;
 }
 
 /** A lobbed shell: it flies for `flight` seconds and then bursts. */
@@ -141,6 +147,8 @@ export interface Shell {
   damage: number;
   kind: BotKind;
   botId: number;
+  /** Who fired it: the mortar's shells hunt the player, the sapper's the bots. */
+  owner: "player" | "bot";
 }
 
 export interface Bullet {
@@ -158,6 +166,10 @@ export interface Bullet {
   dodgeReported?: boolean;
   /** Flame rounds are drawn as fire and die young; they are not slugs. */
   flame?: boolean;
+  /** Hostiles this round still passes through before it stops. */
+  pierce?: number;
+  /** Sets its target alight on impact. */
+  burn?: number;
 }
 
 export interface Rect {
@@ -201,6 +213,7 @@ export type SimEvent =
   | { type: "player-dash"; from: Vec2; to: Vec2; blocked: boolean }
   | { type: "player-hit"; amount: number; position: Vec2; health: number; direction: Vec2; source: BotKind | "unknown" }
   | { type: "player-blocked"; position: Vec2 }
+  | { type: "player-focus"; position: Vec2; direction: Vec2 }
   | { type: "player-dodged"; position: Vec2; kind: BotKind | "unknown" }
   | { type: "bot-windup"; botId: number; kind: BotKind; position: Vec2; duration: number }
   | { type: "bot-windup-cancel"; botId: number; kind: BotKind; position: Vec2 }

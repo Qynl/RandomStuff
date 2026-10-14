@@ -47,10 +47,8 @@ import {
   DIFFICULTIES,
   DEFAULT_DIFFICULTY,
   ELIMINATION_HEAL,
-  PLAYER_DASH_DISTANCE,
   PLAYER_DASH_INVULNERABILITY,
   PLAYER_HIT_INVULNERABILITY,
-  PLAYER_MAX_HEALTH,
   PLAYER_RADIUS,
   PLAYER_SPEED,
   TELEMETRY_DIRECTION_SAMPLES,
@@ -59,7 +57,7 @@ import {
 import { LOADOUTS, resolveLoadout, type Loadout } from "./loadouts";
 import { getWavePlan, MAX_WAVES, type WavePlan } from "./progression";
 import { createRandomSeed, createRng, normalizeSeed, type Rng } from "./rng";
-import type { AimMode, AgentState, Bullet, DifficultyId, PendingSpawn, PlayerTelemetry, Rect, RunStats, Shell, SimEvent, Vec2 } from "./types";
+import type { AimMode, AgentState, BotKind, Bullet, DifficultyId, PendingSpawn, PlayerTelemetry, Rect, RunStats, Shell, SimEvent, Vec2 } from "./types";
 
 export type SimPhase = "standby" | "running" | "victory" | "defeat";
 export type WaveState = "idle" | "cleared" | "telegraph" | "active";
@@ -84,6 +82,10 @@ export interface PlayerState {
   hitFlash: number;
   /** Screen-space direction the last hit came from, for the damage indicator. */
   lastHitDirection: Vec2;
+  /** Seconds of "nothing can see me" left, from a Ghost's phase dash. */
+  phaseTime: number;
+  /** Seconds this operative has been standing still: the Marksman's focus bank. */
+  focusTime: number;
 }
 
 export interface SimInput {
@@ -178,12 +180,12 @@ export function createWorld(options: CreateWorldOptions = {}): World {
     seed: 1,
     obstacles: ARENA_LAYOUTS.quadrant.obstacles,
     arenaName: ARENA_LAYOUTS.quadrant.name,
-    loadout: LOADOUTS.rifle,
+    loadout: LOADOUTS.vanguard,
     difficulty: options.difficulty ?? DEFAULT_DIFFICULTY,
     rng: createRng(seedValue),
     phase: "standby",
     elapsed: 0,
-    player: createPlayer(),
+    player: createPlayer(LOADOUTS.vanguard),
     bots: [],
     bullets: [],
     pendingSpawns: [],
@@ -212,14 +214,14 @@ export function createWorld(options: CreateWorldOptions = {}): World {
   return world;
 }
 
-function createPlayer(): PlayerState {
+function createPlayer(loadout: Loadout): PlayerState {
   return {
     position: { x: WORLD.width / 2, y: WORLD.height - 88 },
     velocity: { x: 0, y: 0 },
     moveIntent: { x: 0, y: 0 },
     aimDirection: { x: 0, y: -1 },
-    health: PLAYER_MAX_HEALTH,
-    maxHealth: PLAYER_MAX_HEALTH,
+    health: loadout.maxHealth,
+    maxHealth: loadout.maxHealth,
     fireCooldown: 0,
     dashCooldown: 0,
     dashBuffer: 0,
@@ -227,7 +229,9 @@ function createPlayer(): PlayerState {
     invulnerability: 1.2,
     contactCooldown: 0,
     hitFlash: 0,
-    lastHitDirection: { x: 0, y: 0 }
+    lastHitDirection: { x: 0, y: 0 },
+    phaseTime: 0,
+    focusTime: 0
   };
 }
 
@@ -265,8 +269,19 @@ function applyArenaLayoutForSeed(world: World): void {
  * Swaps the primary weapon. Anything unknown or still locked resolves to the
  * default, so a tampered stored value cannot skip an unlock.
  */
-export function setWorldLoadout(world: World, id: unknown, career = Number.POSITIVE_INFINITY): Loadout {
-  world.loadout = LOADOUTS[resolveLoadout(id, career)];
+export function setWorldLoadout(world: World, id: unknown, _career = Number.POSITIVE_INFINITY): Loadout {
+  const next = LOADOUTS[resolveLoadout(id)];
+  const previous = world.loadout;
+  world.loadout = next;
+  // A class swap carries its body with it: an operative that changes to a
+  // heavier class does so at the heavier class's health, scaled to how hurt
+  // they already were, so swapping is never a free heal.
+  if (previous.maxHealth !== next.maxHealth) {
+    const fraction = world.player.maxHealth > 0 ? world.player.health / world.player.maxHealth : 1;
+    world.player.maxHealth = next.maxHealth;
+    world.player.health = Math.max(1, Math.round(next.maxHealth * Math.max(0.15, fraction)));
+  }
+  world.player.focusTime = 0;
   return world.loadout;
 }
 
@@ -302,7 +317,7 @@ export function resetWorld(world: World, options: { seed?: number | string; diff
   world.telemetry.recentShots.length = 0;
   world.telemetry.stationaryTime = 0;
   world.telemetry.lastMoveDirection = { x: 0, y: 0 };
-  world.player = createPlayer();
+  world.player = createPlayer(world.loadout);
   return world;
 }
 
@@ -328,6 +343,30 @@ export function stepWorld(world: World, input: SimInput, dt: number): SimEvent[]
 }
 
 const preset = (world: World) => DIFFICULTIES[world.difficulty];
+
+// --- operative class kit -----------------------------------------------------
+/** The Breacher's charge: how long a knocked-down hostile stays down. */
+const SIEGE_STUN = 1.1;
+/** What the charge itself takes off a hostile it catches. */
+const SIEGE_DASH_DAMAGE = 8;
+/** How long a Ghost stays un-targetable after a phase dash. */
+const GHOST_PHASE = 0.34;
+/** Seconds of standing still before a Marksman's shot is focused. */
+const FOCUS_TIME = 0.7;
+/** How much heavier a focused round is. */
+const FOCUS_DAMAGE_SCALE = 1.6;
+/** How many extra hostiles a focused round passes through. */
+const FOCUS_PIERCE = 2;
+/** Seconds a Cinder's flames keep burning after they land. */
+const BURN_DURATION = 2.5;
+/** Damage per second while alight. */
+const BURN_DPS = 3;
+/** How much slower a burning hostile moves. */
+const BURN_SLOW = 0.85;
+// The Sapper's lob.
+const SAPPER_RANGE = 420;
+const SAPPER_FLIGHT = 0.75;
+const SAPPER_RADIUS = 74;
 
 /**
  * Publishes what the Mirror could exploit right now. The HUD turns this into
@@ -355,6 +394,7 @@ function updatePlayer(world: World, input: SimInput, dt: number): void {
   player.hitFlash = Math.max(0, player.hitFlash - dt);
   player.dashTimer = Math.max(0, player.dashTimer - dt);
   player.dashBuffer = Math.max(0, player.dashBuffer - dt);
+  player.phaseTime = Math.max(0, player.phaseTime - dt);
 
   const inputMagnitude = Math.hypot(input.move.x, input.move.y);
   const move = normalize(input.move);
@@ -363,7 +403,12 @@ function updatePlayer(world: World, input: SimInput, dt: number): void {
   updateAim(world, input, dt);
   updateTelemetry(world, move, dt);
 
-  const speed = PLAYER_SPEED * Math.min(1, inputMagnitude);
+  // The Marksman banks focus by standing still: the counter is measured from
+  // the *intent*, so a dash or a shove does not break it, only walking does.
+  if (inputMagnitude < 0.15) player.focusTime += dt;
+  else player.focusTime = 0;
+
+  const speed = PLAYER_SPEED * world.loadout.speedScale * Math.min(1, inputMagnitude);
   const previous = { ...player.position };
   const movement = { x: move.x * speed * dt, y: move.y * speed * dt };
   player.position = sweepMovement(player.position, movement, PLAYER_RADIUS, 6, world.obstacles).position;
@@ -448,13 +493,45 @@ function tryDash(world: World): void {
   if (player.dashCooldown > 0) return;
   const direction = selectDashDirection(world);
   if (direction.x === 0 && direction.y === 0) return;
-  const movement = { x: direction.x * PLAYER_DASH_DISTANCE, y: direction.y * PLAYER_DASH_DISTANCE };
+  const klass = world.loadout;
+  const movement = { x: direction.x * klass.dashDistance, y: direction.y * klass.dashDistance };
   const from = { ...player.position };
   const swept = sweepMovement(player.position, movement, PLAYER_RADIUS, 4, world.obstacles);
   player.position = swept.position;
-  player.dashCooldown = preset(world).dashCooldown;
+  // The class cooldown is the floor; a difficulty preset may make it longer.
+  player.dashCooldown = Math.max(klass.dashCooldown, preset(world).dashCooldown);
   player.dashBuffer = 0;
   player.invulnerability = Math.max(player.invulnerability, PLAYER_DASH_INVULNERABILITY);
+
+  if (klass.dashKind === "charge") {
+    // The Breacher's dash is a body check: everything on the path is knocked
+    // down and takes a bruise, which is the whole point of the class.
+    for (const bot of world.bots) {
+      if (!bot.alive) continue;
+      const gap = pointSegmentDistance(bot.position, from, player.position);
+      if (gap > BOT_RADIUS + PLAYER_RADIUS + 6) continue;
+      bot.stun = Math.max(bot.stun, SIEGE_STUN);
+      bot.windup = 0;
+      bot.windupDuration = 0;
+      bot.burn = undefined;
+      damageBot(world, bot, SIEGE_DASH_DAMAGE, from, "charge");
+      world.events.push({ type: "bot-stunned", botId: bot.id, kind: bot.kind, position: { ...bot.position }, duration: SIEGE_STUN });
+    }
+    world.shake = Math.max(world.shake, 6);
+  }
+
+  if (klass.trait === "phase") {
+    // The Ghost's dash blanks hostile targeting for a moment: telegraphs that
+    // were underway are dropped, which is the answer to a committed wind-up.
+    player.phaseTime = GHOST_PHASE;
+    for (const bot of world.bots) {
+      if (!bot.alive || bot.windup <= 0) continue;
+      bot.windup = 0;
+      bot.windupDuration = 0;
+      world.events.push({ type: "bot-windup-cancel", botId: bot.id, kind: bot.kind, position: { ...bot.position } });
+    }
+  }
+
   player.dashTimer = 0.18;
   world.shake = Math.max(world.shake, 4);
   world.stats.dashes += 1;
@@ -477,6 +554,35 @@ function firePlayerBullet(world: World): void {
   world.telemetry.recentShots.push(direction);
   if (world.telemetry.recentShots.length > TELEMETRY_SHOT_SAMPLES) world.telemetry.recentShots.shift();
 
+  if (weapon.trait === "arc") {
+    // The Sapper lobs: the round is not aimed at a hostile, it is aimed at a
+    // patch of floor, and it clears anything in between.
+    const range = Math.min(SAPPER_RANGE, 420);
+    const target = { x: player.position.x + direction.x * range, y: player.position.y + direction.y * range };
+    world.shells.push({
+      position: { ...player.position },
+      from: { ...player.position },
+      target,
+      flight: SAPPER_FLIGHT,
+      totalFlight: SAPPER_FLIGHT,
+      radius: SAPPER_RADIUS,
+      damage: weapon.damage,
+      kind: "mortar",
+      botId: -1,
+      owner: "player"
+    });
+    world.stats.shotsFired += 1;
+    world.shake = Math.max(world.shake, weapon.recoil);
+    world.events.push({ type: "shell-launched", botId: -1, kind: "mortar", from: { ...player.position }, target, flight: SAPPER_FLIGHT, radius: SAPPER_RADIUS });
+    return;
+  }
+
+  // The Marksman's focus: a still moment buys one heavy, piercing round.
+  const focused = weapon.trait === "focus" && player.focusTime >= FOCUS_TIME;
+  if (weapon.trait === "focus") player.focusTime = 0;
+  const damage = focused ? weapon.damage * FOCUS_DAMAGE_SCALE : weapon.damage;
+  const pierce = weapon.pierce + (focused ? FOCUS_PIERCE : 0);
+
   // Multi-round weapons fan their shot out deterministically from the world rng,
   // so a replay with the same seed produces the same pellet pattern.
   const baseAngle = Math.atan2(direction.y, direction.x);
@@ -492,15 +598,21 @@ function firePlayerBullet(world: World): void {
       position: { ...origin },
       velocity: { x: shotDirection.x * weapon.bulletSpeed, y: shotDirection.y * weapon.bulletSpeed },
       owner: "player",
-      damage: weapon.damage,
+      damage,
       life: weapon.bulletLife,
       color: "#e8dcc0",
       source: "player",
-      travelled: 0
+      travelled: 0,
+      pierce: pierce > 0 ? pierce : undefined,
+      burn: weapon.trait === "ignite" ? BURN_DURATION : undefined,
+      flame: weapon.trait === "ignite" ? true : undefined
     });
     world.stats.shotsFired += 1;
   }
-  world.shake = Math.max(world.shake, weapon.recoil);
+  world.shake = Math.max(world.shake, weapon.recoil + (focused ? 2.4 : 0));
+  if (focused) {
+    world.events.push({ type: "player-focus", position: { ...player.position }, direction });
+  }
   world.events.push({ type: "player-fired", position: { x: player.position.x + direction.x * 18, y: player.position.y + direction.y * 18 }, direction });
 }
 
@@ -522,7 +634,8 @@ function updateBots(world: World, dt: number): void {
     bot.detourTime = Math.max(0, bot.detourTime - dt);
     const profile = BOT_PROFILES[bot.kind];
     const range = distance(bot.position, player.position);
-    const seesPlayer = !segmentBlocked(bot.position, player.position, world.obstacles);
+    // A Ghost mid-phase is not there as far as hostile targeting is concerned.
+    const seesPlayer = player.phaseTime <= 0 && !segmentBlocked(bot.position, player.position, world.obstacles);
     bot.blindTime = seesPlayer ? 0 : bot.blindTime + dt;
 
     const allies = collectAllies(world, bot);
@@ -555,6 +668,22 @@ function updateBots(world: World, dt: number): void {
     const windingUp = bot.windup > 0;
     bot.stun = Math.max(0, bot.stun - dt);
     updateSpray(world, bot, dt);
+
+    // Burning: a Cinder's mark keeps working while the fight moves on.
+    if (bot.burn !== undefined && bot.burn > 0) {
+      bot.burn = Math.max(0, bot.burn - dt);
+      bot.burnTimer = (bot.burnTimer ?? 0) + dt;
+      if (bot.burnTimer >= 0.25) {
+        bot.burnTimer = 0;
+        damageBot(world, bot, BURN_DPS * 0.25, bot.position, "burn");
+      }
+      if (!bot.alive) continue;
+      if (bot.burn <= 0) {
+        bot.burn = undefined;
+        bot.burnDamage = undefined;
+      }
+    }
+    const burning = (bot.burn ?? 0) > 0;
 
     // A committed charge overrides steering entirely: it runs down the lane it
     // marked, and if it comes up empty it staggers and is easy prey.
@@ -609,7 +738,8 @@ function updateBots(world: World, dt: number): void {
     const speedScale =
       chooseBotSpeedScale(bot.kind, range, { advancing: decision.intent === "advance", windingUp }) *
       diveSpeedScale(bot.kind, bot.diveTime) *
-      pressureSpeedScale(world.pressure);
+      pressureSpeedScale(world.pressure) *
+      (burning ? BURN_SLOW : 1);
     const speed = profile.speed * plan.speedMultiplier * speedScale;
     const steered = steerSafely(world, bot, decision.direction, Math.max(30, speed * 0.34));
     const previous = { ...bot.position };
@@ -644,7 +774,7 @@ function updateBots(world: World, dt: number): void {
     // Body contact: the hostile body-checks you, both actors bounce apart, and
     // the hit has its own cooldown so a crowd cannot chain-stun the player.
     const gap = distance(bot.position, player.position);
-    if (gap >= PLAYER_RADIUS + BOT_RADIUS + 4 || player.contactCooldown > 0 || player.invulnerability > 0) continue;
+    if (gap >= PLAYER_RADIUS + BOT_RADIUS + 4 || player.contactCooldown > 0 || player.invulnerability > 0 || player.phaseTime > 0) continue;
     const away = contactNormal(bot.position, player.position, world);
     const detonates = attackFor(bot.kind).kamikaze === true;
     const knockback = detonates ? CONTACT_KNOCKBACK * 1.8 : CONTACT_KNOCKBACK;
@@ -811,7 +941,8 @@ function startVolley(world: World, bot: AgentState): void {
       radius: attack.shell.radius,
       damage: profile.damage * preset(world).damageScale,
       kind: bot.kind,
-      botId: bot.id
+      botId: bot.id,
+      owner: "bot"
     });
     world.events.push({
       type: "shell-launched",
@@ -1013,12 +1144,27 @@ function updateShells(world: World, dt: number): void {
     if (shell.flight > 0) continue;
     world.shells.splice(index, 1);
     const player = world.player;
-    const gap = distance(shell.target, player.position);
+    const falloffWidth = shell.radius * (attackFor(shell.kind).shell?.falloff ?? 0.45);
     world.shake = Math.max(world.shake, 8);
     world.events.push({ type: "shell-landed", kind: shell.kind, position: { ...shell.target }, radius: shell.radius });
+
+    if (shell.owner === "player") {
+      // The sapper's shell clears hostiles: everyone in the ring takes the hit,
+      // hardest at the centre, and a knocked-down target stays down.
+      for (const bot of world.bots) {
+        if (!bot.alive) continue;
+        const inRing = distance(shell.target, bot.position);
+        if (inRing > shell.radius) continue;
+        const share = inRing <= shell.radius - falloffWidth ? 1 : Math.max(0.3, (shell.radius - inRing) / falloffWidth);
+        damageBot(world, bot, shell.damage * share, shell.target, "shell");
+      }
+      continue;
+    }
+
+    const gap = distance(shell.target, player.position);
     if (gap > shell.radius || player.invulnerability > 0) continue;
     // Falls off toward the rim, so clipping the edge is a graze not a hit.
-    const falloff = shell.radius * (attackFor(shell.kind).shell?.falloff ?? 0.45);
+    const falloff = falloffWidth;
     const share = gap <= shell.radius - falloff ? 1 : Math.max(0.25, (shell.radius - gap) / falloff);
     const direction = normalize({ x: player.position.x - shell.target.x, y: player.position.y - shell.target.y });
     const push = direction.x === 0 && direction.y === 0 ? { x: 0, y: 0 } : direction;
@@ -1062,13 +1208,13 @@ function updateBullets(world: World, dt: number): void {
     if (bullet.owner === "player") {
       const target = nearestSweptHit(world, previous, bullet.position, BOT_RADIUS + 4);
       if (target) {
-        world.bullets.splice(i, 1);
         const impact = { ...bullet.position };
         // A raised shield stops the round dead; a staggered one has dropped it.
         // The guard is up while it walks, and drops while it winds up a bash or
         // recovers from a failed charge: those are the windows to shoot through.
         const guardDown = target.stun > 0 || target.windup > 0;
         if (shieldBlocks(target.kind, target.facing, target.position, impact, guardDown)) {
+          world.bullets.splice(i, 1);
           world.events.push({
             type: "bot-blocked",
             botId: target.id,
@@ -1082,6 +1228,21 @@ function updateBullets(world: World, dt: number): void {
         const plating = platingScale(target.kind, target.position, target.facing, impact);
         const stagger = target.stun > 0 ? STUNNED_DAMAGE_SCALE : 1;
         const applied = bullet.damage * plating * stagger;
+        if (bullet.burn) {
+          target.burn = Math.max(target.burn ?? 0, bullet.burn);
+        }
+        // A piercing round carries on through: the Marksman's focus shot is what
+        // makes a queue of hostiles a bad idea. It is nudged past the body it
+        // just left so the same hostile cannot be hit twice by one round.
+        const pierceLeft = bullet.pierce ?? 0;
+        if (pierceLeft > 0) {
+          bullet.pierce = pierceLeft - 1;
+          const heading = normalize(bullet.velocity);
+          const past = { x: target.position.x + heading.x * (BOT_RADIUS + 8), y: target.position.y + heading.y * (BOT_RADIUS + 8) };
+          if (!segmentBlocked(target.position, past, world.obstacles)) bullet.position = past;
+        } else {
+          world.bullets.splice(i, 1);
+        }
         target.health -= applied;
         target.hitFlash = 0.16;
         world.stats.damageDealt += applied;
@@ -1153,6 +1314,22 @@ function pointSegmentDistance(point: Vec2, start: Vec2, end: Vec2): number {
  * Applies damage to the player. Callers own the knockback, this function owns
  * health, invulnerability frames, feedback and the defeat transition.
  */
+/**
+ * Applies damage to one hostile and reports it the same way a player round does,
+ * so every wound in the arena has a single name in the event stream.
+ */
+export function damageBot(world: World, bot: AgentState, amount: number, source: Vec2, cause: BotKind | "charge" | "shell" | "burn" | "player"): number {
+  if (!bot.alive) return 0;
+  const applied = Math.max(1, Math.round(amount));
+  bot.health -= applied;
+  bot.hitFlash = 0.12;
+  world.stats.damageDealt += applied;
+  world.events.push({ type: "bot-hit", botId: bot.id, kind: bot.kind, amount: applied, position: { ...source }, health: bot.health, plated: false });
+  if (bot.health <= 0) eliminateBot(world, bot);
+  else if (cause === "burn") world.stats.shotsHit += 0;
+  return applied;
+}
+
 export function damagePlayer(world: World, amount: number, source: Vec2, push: Vec2, origin: AgentState["kind"] | "unknown"): void {
   const player = world.player;
   if (world.phase !== "running" || player.invulnerability > 0) return;

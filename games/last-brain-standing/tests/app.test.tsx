@@ -417,23 +417,24 @@ describe("React app shell", () => {
     }
   });
 
-  it("lets the player pick a weapon and holds it for the run", () => {
-    // Three cards, only the starting weapon usable on a fresh career.
+  it("lets the player pick a class and holds it for the run", () => {
+    // Every class is issued: six cards, none of them disabled, on a fresh career.
     const cards = () => Array.from(container.querySelectorAll(".loadout-card"));
-    expect(cards()).toHaveLength(3);
-    expect(cards().filter((card) => (card as HTMLButtonElement).disabled)).toHaveLength(2);
-    const scatter = cards().find((card) => card.textContent?.includes("BREACH SCATTERGUN")) as HTMLButtonElement;
-    expect(scatter.disabled).toBe(true);
-    expect(scatter.textContent).toContain("LOCKED");
+    expect(cards()).toHaveLength(6);
+    expect(cards().filter((card) => (card as HTMLButtonElement).disabled)).toHaveLength(0);
+    const breacher = cards().find((card) => card.textContent?.includes("BREACHER")) as HTMLButtonElement;
+    expect(breacher.disabled).toBe(false);
+    // Each card carries its signature rule, not a lock.
+    expect(breacher.textContent).toContain("SIEGE DASH");
 
-    // The hint explains how the equipped weapon wants to be played.
+    // The hint explains how the equipped class wants to be played.
     expect(text(".loadout-hint")).toContain("keep the reticle on the target");
 
     click(button("ENTER THE ARENA"));
     advance(6);
-    expect(engine?.getLoadoutId()).toBe("rifle");
+    expect(engine?.getLoadoutId()).toBe("vanguard");
     const weaponRow = Array.from(container.querySelectorAll(".meta-row")).find((row) => row.textContent?.startsWith("WEAPON"));
-    expect(weaponRow?.textContent).toContain("SERVICE RIFLE");
+    expect(weaponRow?.textContent).toContain("VANGUARD");
   });
 
   it("shows the operator profile with career progress and unlocks", () => {
@@ -449,11 +450,11 @@ describe("React app shell", () => {
     expect(text(".profile-sub")).toContain("7 RUNS");
     expect(text(".profile-sub")).toContain("88 KILLS");
 
+    // The class roster is fully issued: nothing on the shelf is withheld.
     const unlocks = Array.from(container.querySelectorAll(".unlock-list li"));
-    expect(unlocks).toHaveLength(3);
-    expect(unlocks.filter((item) => item.classList.contains("unlocked"))).toHaveLength(2);
-    expect(text(".unlock-progress")).toContain("RAILGUN");
-    expect(text(".unlock-progress")).toContain("45%"); // 5000 of 11000
+    expect(unlocks).toHaveLength(6);
+    expect(unlocks.filter((item) => item.classList.contains("unlocked"))).toHaveLength(6);
+    expect(text(".unlock-list")).toContain("ISSUED");
 
     const best = Array.from(container.querySelectorAll(".best-list li")).map((item) => item.textContent ?? "");
     expect(best.some((row) => row.includes("5000"))).toBe(true);
@@ -466,12 +467,13 @@ describe("React app shell", () => {
     expect(badges.filter((badge) => badge.classList.contains("earned")).length).toBeGreaterThan(0);
     // Locked badges hide their name and show what it takes instead.
     const locked = badges.filter((badge) => badge.classList.contains("locked"));
-    expect(locked.every((badge) => (badge.textContent ?? "").includes("???"))).toBe(true);
+    expect(locked.every((badge) => (badge.querySelector(".badge-name")?.textContent ?? "").includes("???"))).toBe(true);
     expect(container.querySelectorAll(".badge-bar").length).toBe(locked.length);
 
     const weapons = Array.from(container.querySelectorAll(".weapon-list li")).map((item) => item.textContent ?? "");
-    expect(weapons).toHaveLength(3);
-    expect(weapons.some((row) => row.includes("RIFLE"))).toBe(true);
+    expect(weapons).toHaveLength(6);
+    expect(weapons.some((row) => row.includes("SERVICE RIFLE"))).toBe(true);
+    expect(weapons.some((row) => row.includes("FLAME PROJECTOR"))).toBe(true);
 
     // The threat dossier names each profile's signature and counts what it has
     // done to this account.
@@ -495,7 +497,7 @@ describe("React app shell", () => {
     advance(20);
     const world = engine?.activeWorld;
     if (!world) throw new Error("expected a world");
-    expect(world.loadout.id).toBe("rifle");
+    expect(world.loadout.id).toBe("vanguard");
     world.stats.kills = 6;
     endRunNow();
 
@@ -510,32 +512,24 @@ describe("React app shell", () => {
     expect(earned.some((badge) => badge.includes("FIRST CONTACT"))).toBe(true);
   });
 
-  it("unlocks a weapon as soon as the career score reaches it", () => {
+  it("swaps to the breacher with no career score at all", () => {
     remount();
     let cards = Array.from(container.querySelectorAll(".loadout-card")) as HTMLButtonElement[];
-    expect(cards.filter((card) => !card.disabled)).toHaveLength(1);
+    expect(cards).toHaveLength(6);
+    expect(cards.filter((card) => !card.disabled)).toHaveLength(6);
 
-    // Play a run that pushes the career score past the scattergun threshold.
-    click(button("ENTER THE ARENA"));
-    advance(30);
-    if (!engine) throw new Error("engine was not created");
-    engine.activeWorld.stats.kills = 40;
-    engine.activeWorld.stats.wavesCleared = 5;
-    endRunNow();
-    window.localStorage.setItem("lbs-best-by-difficulty", JSON.stringify({ standard: { score: 4600, kills: 40 } }));
-    remount();
-
+    // Swap on a brand-new account: no runs, no score, no gate.
     cards = Array.from(container.querySelectorAll(".loadout-card")) as HTMLButtonElement[];
-    const scatter = cards.find((card) => card.textContent?.includes("BREACH SCATTERGUN")) as HTMLButtonElement;
-    expect(scatter.disabled).toBe(false);
-    click(scatter);
-    expect(engine?.getLoadoutId()).toBe("scatter");
+    const breacher = cards.find((card) => card.textContent?.includes("BREACHER")) as HTMLButtonElement;
+    expect(breacher.disabled).toBe(false);
+    click(breacher);
+    expect(engine?.getLoadoutId()).toBe("breacher");
     expect(text(".loadout-hint")).toContain("Close the distance");
     // And it survives into the run that starts next.
     click(button("ENTER THE ARENA"));
     advance(6);
-    expect(engine?.getLoadoutId()).toBe("scatter");
-    expect(window.localStorage.getItem("lbs-loadout")).toBe("scatter");
+    expect(engine?.getLoadoutId()).toBe("breacher");
+    expect(window.localStorage.getItem("lbs-loadout")).toBe("breacher");
   });
 
   it("opens with the settings this device stored last time", () => {

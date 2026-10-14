@@ -59,9 +59,9 @@ describe("volley geometry", () => {
   });
 
   it("has the Mirror copy the player's weapon geometry", () => {
-    const rifle = mirrorVolley("rifle");
-    const scatter = mirrorVolley("scatter");
-    const rail = mirrorVolley("rail");
+    const rifle = mirrorVolley("vanguard");
+    const scatter = mirrorVolley("breacher");
+    const rail = mirrorVolley("marksman");
     expect(rifle.rounds).toHaveLength(1);
     // The scattergun's fan and the railgun's weight both come back at you.
     expect(scatter.rounds.length).toBeGreaterThan(rifle.rounds.length);
@@ -80,9 +80,9 @@ describe("volley geometry", () => {
   });
 
   it("routes each profile to its own volley", () => {
-    expect(volleyFor("hunter", "scatter")).toBe(HUNTER_VOLLEY);
-    expect(volleyFor("flanker", "rail")).toBe(FLANKER_VOLLEY);
-    expect(volleyFor("mirror", "rail")).toEqual(mirrorVolley("rail"));
+    expect(volleyFor("hunter", "breacher")).toBe(HUNTER_VOLLEY);
+    expect(volleyFor("flanker", "marksman")).toBe(FLANKER_VOLLEY);
+    expect(volleyFor("mirror", "marksman")).toEqual(mirrorVolley("marksman"));
   });
 });
 
@@ -325,7 +325,7 @@ describe("archetype behaviour in the simulation", () => {
   });
 
   it("arms the Mirror with the player's own weapon", () => {
-    const volleyOf = (loadout: "rifle" | "scatter" | "rail") => {
+    const volleyOf = (loadout: "vanguard" | "breacher" | "marksman") => {
       const world = soloWorld("mirror", `mirror-${loadout}`);
       setWorldLoadout(world, loadout, 100_000);
       world.bots[0].windup = 0.001;
@@ -340,9 +340,9 @@ describe("archetype behaviour in the simulation", () => {
       }
       return { bullets, loadout };
     };
-    const rifle = volleyOf("rifle");
-    const scatter = volleyOf("scatter");
-    const rail = volleyOf("rail");
+    const rifle = volleyOf("vanguard");
+    const scatter = volleyOf("breacher");
+    const rail = volleyOf("marksman");
     expect(rifle.bullets).toHaveLength(1);
     // The scattergun comes back as a fan...
     expect(scatter.bullets.length).toBeGreaterThan(rifle.bullets.length);

@@ -869,12 +869,12 @@ describe("ArenaGame engine shell", () => {
     expect(results[0]).toBeTruthy();
 
     let career = game.getCareer();
-    const rifle = career.weapons.find((weapon) => weapon.id === "rifle");
+    const rifle = career.weapons.find((weapon) => weapon.id === "vanguard");
     expect(rifle?.record.runs).toBe(1);
     expect(rifle?.record.kills).toBe(5);
     expect(rifle?.record.bestScore).toBe(results[0].score.total);
-    expect(career.weapons).toHaveLength(3);
-    expect(career.weapons.find((weapon) => weapon.id === "scatter")?.record.runs).toBe(0);
+    expect(career.weapons).toHaveLength(6);
+    expect(career.weapons.find((weapon) => weapon.id === "breacher")?.record.runs).toBe(0);
     expect(career.badgesEarned).toBeGreaterThanOrEqual(1); // FIRST CONTACT
     expect(career.badges.find((badge) => badge.id === "first-run")?.earned).toBe(true);
     // A badge that needs more than one run is still locked, with progress.
@@ -886,7 +886,7 @@ describe("ArenaGame engine shell", () => {
     game.destroy();
     game = createGame();
     career = game.getCareer();
-    expect(career.weapons.find((weapon) => weapon.id === "rifle")?.record.kills).toBe(5);
+    expect(career.weapons.find((weapon) => weapon.id === "vanguard")?.record.kills).toBe(5);
     // And a second run with the other weapon does not pollute the rifle's row.
     game.destroy();
   });
@@ -909,7 +909,7 @@ describe("ArenaGame engine shell", () => {
     // The run lands in the recent list, newest first, with its weapon stamped.
     expect(career.recentRuns).toHaveLength(1);
     expect(career.recentRuns[0].seed).toBe(game.getSeedLabel());
-    expect(career.recentRuns[0].weapon).toBe("rifle");
+    expect(career.recentRuns[0].weapon).toBe("vanguard");
 
     // A second run accumulates on top rather than replacing.
     game.beginRun("dossier-b");
@@ -939,7 +939,8 @@ describe("ArenaGame engine shell", () => {
     game = createGame();
     const career = game.getCareer();
     expect(career.weapons.every((weapon) => weapon.record.runs === 0)).toBe(true);
-    expect(career.badges.every((badge) => !badge.earned)).toBe(true);
+    // Corrupt junk cannot be read as an earned badge.
+    expect(career.badges.some((badge) => badge.earned)).toBe(false);
     expect(career.score).toBe(0);
     expect(Number.isFinite(career.runs)).toBe(true);
   });

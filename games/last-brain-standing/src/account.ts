@@ -46,6 +46,8 @@ export interface BadgeContext {
   perfectVictories: number;
   victories: number;
   unlocks: number;
+  /** Classes flown at least once. */
+  classesFlown: number;
   /** Arenas a run has been won in. */
   arenasCleared: string[];
   /** Threat levels a run has been won on. */
@@ -119,9 +121,9 @@ export const BADGES: Badge[] = [
   {
     id: "gun-metal",
     name: "GUNSMITH",
-    requirement: "Unlock every weapon",
-    progress: (c) => at(c.unlocks, LOADOUT_ORDER.length),
-    earned: (c) => c.unlocks >= LOADOUT_ORDER.length
+    requirement: "Fly every operative class at least once",
+    progress: (c) => at(c.classesFlown, LOADOUT_ORDER.length),
+    earned: (c) => c.classesFlown >= LOADOUT_ORDER.length
   },
   {
     id: "centurion",
@@ -159,6 +161,7 @@ export const EMPTY_BADGE_CONTEXT: BadgeContext = {
   perfectVictories: 0,
   victories: 0,
   unlocks: 1,
+  classesFlown: 0,
   arenasCleared: [],
   levelsCleared: [],
   bestAccuracy: 0
