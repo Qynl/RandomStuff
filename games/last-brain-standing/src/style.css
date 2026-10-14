@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Lilita+One&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 :root{font-family:"Space Grotesk",system-ui,sans-serif;color:#e9e3d6;background:#101114;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;--bg:#101114;--panel:#191b1f;--panel-deep:#141619;--line:#2a2d33;--muted:#93a0ad;--brass:#cfa25f;--clay:#a08ec0;--rust:#d26e5e;--amber:#c9975a;--moss:#8fb48c;--steel:#8fb0cf}
 *{box-sizing:border-box}
@@ -335,6 +335,11 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 
 /* == lobby: the command screen =========================================== */
 /*
+ * Big labels in the lobby use a heavy rounded display face, the way a cartoon
+ * game signs its buttons; everything technical stays in the game's own mono so
+ * the numbers still read as instrumentation.
+ */
+/*
  * The lobby is a screen of its own, not a document: a bright field, chunky
  * tiles and one very large operative. Every surface is a light card with a hard
  * dark outline and a solid drop edge, which is what gives a menu its toy feel -
@@ -357,12 +362,12 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .lobby-id:hover .lobby-name strong{color:#7d5f28}
 .lobby-avatar{display:grid;place-items:center;width:48px;height:48px;border-radius:50%;border:2px solid #2c3138;background:#ffe9b8;box-shadow:inset 0 -3px 0 #d9b877;font:700 18px/1 "Space Grotesk",sans-serif;color:#2c3138}
 .lobby-name{display:flex;flex-direction:column;gap:2px;text-align:left}
-.lobby-name strong{font-weight:700;font-size:14px;letter-spacing:.8px;color:#2c3138}
+.lobby-name strong{font:400 15px/1.1 "Lilita One","Space Grotesk",sans-serif;letter-spacing:1.2px;color:#2c3138}
 .lobby-name small{font:9px "DM Mono",monospace;letter-spacing:1.1px;color:#5b6472}
 .lobby-chips{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
 .lobby-chip{display:flex;align-items:baseline;gap:7px;padding:8px 13px;border:2px solid #2c3138;border-radius:15px;background:#ffffff;box-shadow:0 4px 0 #2c3138}
 .lobby-chip em{font:8px "DM Mono",monospace;font-style:normal;letter-spacing:1.3px;color:#5b6472}
-.lobby-chip strong{font-weight:700;font-size:16px;letter-spacing:.2px;color:#2c3138}
+.lobby-chip strong{font:400 17px/1 "Lilita One","Space Grotesk",sans-serif;letter-spacing:.8px;color:#2c3138}
 .lobby-chip small{font:9px "DM Mono",monospace;color:#5b6472}
 
 /* -- three columns ------------------------------------------------------- */
@@ -375,36 +380,36 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .rail-button:active{transform:translateY(2px);box-shadow:0 2px 0 #2c3138}
 .rail-glyph{display:grid;place-items:center;width:40px;height:40px;flex:none;border-radius:13px;border:2px solid #2c3138;background:#ffe9b8;box-shadow:inset 0 -3px 0 #d9b877;color:#2c3138;font-size:17px}
 .rail-copy{display:flex;flex-direction:column;gap:2px}
-.rail-copy strong{font-weight:700;font-size:11px;letter-spacing:1.2px;color:#2c3138}
+.rail-copy strong{font:400 12px/1.1 "Lilita One","Space Grotesk",sans-serif;letter-spacing:1.3px;color:#2c3138}
 .rail-copy small{font:8px "DM Mono",monospace;letter-spacing:.9px;color:#5b6472}
 
 /* -- stage: the operative, front and centre ------------------------------ */
 .home-stage{position:relative;display:flex;flex-direction:column;align-items:center;gap:12px;padding:8px 10px 0;border:0;background:none;overflow:visible}
 .home-stage:before{content:"";position:absolute;left:50%;top:-6%;width:min(760px,130%);height:78%;transform:translateX(-50%);border-radius:50%;background:radial-gradient(ellipse at center,#ffffffcc 0%,#ffffff00 68%);pointer-events:none}
 .stage-floor{position:absolute;left:50%;bottom:150px;width:min(600px,110%);height:150px;transform:translateX(-50%);border-radius:50%;background:radial-gradient(ellipse at center,#ffffffd0 0%,#ffffff00 72%);pointer-events:none}
-.operator-figure{position:relative;z-index:2;width:250px;height:300px;flex:none;transform:scale(1.22);transform-origin:50% 72%;filter:drop-shadow(0 6px 0 #2c3138)}
+.operator-figure{position:relative;z-index:2;width:250px;height:300px;flex:none;transform:scale(1.28);transform-origin:50% 72%;filter:drop-shadow(0 6px 0 #2c3138)}
 .operator-figure span{position:absolute;display:block}
 .fig-shadow{left:22px;bottom:4px;width:206px;height:26px;border-radius:50%;background:radial-gradient(ellipse at center,#2c313855 0%,#2c313800 70%)}
-.fig-legs{left:82px;top:186px;width:86px;height:84px;border-radius:14px 14px 8px 8px;background:linear-gradient(180deg,#4d5665,#333b48);border:2px solid #2c3138}
-.fig-boot{top:258px;width:46px;height:30px;border-radius:8px 10px 6px 6px;background:#3a4150;border:2px solid #2c3138}
+.fig-legs{left:82px;top:186px;width:86px;height:84px;border-radius:14px 14px 8px 8px;background:linear-gradient(180deg,#4d5665,#333b48);border:3px solid #2c3138}
+.fig-boot{top:258px;width:46px;height:30px;border-radius:8px 10px 6px 6px;background:#3a4150;border:3px solid #2c3138}
 .fig-boot.left{left:68px}
 .fig-boot.right{left:136px}
 .fig-torso{left:62px;top:92px;width:126px;height:102px;border-radius:22px 22px 12px 12px;background:linear-gradient(160deg,#cfd8e2 0%,#a9b6c6 55%,#8d9aab 100%);border:2px solid #2c3138;clip-path:polygon(14% 0,86% 0,100% 30%,96% 100%,4% 100%,0 30%)}
 .fig-torso:after{content:"";position:absolute;left:0;right:0;top:26px;height:11px;background:var(--class-ink)}
-.fig-belt{left:70px;top:190px;width:110px;height:14px;border-radius:4px;background:#3a4150;border:2px solid #2c3138}
-.fig-shoulder{top:100px;width:46px;height:40px;border-radius:14px 14px 9px 9px;background:linear-gradient(160deg,#dbe3ec,#b3bfcd);border:2px solid #2c3138}
+.fig-belt{left:70px;top:190px;width:110px;height:14px;border-radius:4px;background:#3a4150;border:3px solid #2c3138}
+.fig-shoulder{top:100px;width:46px;height:40px;border-radius:14px 14px 9px 9px;background:linear-gradient(160deg,#dbe3ec,#b3bfcd);border:3px solid #2c3138}
 .fig-shoulder.left{left:32px;transform:rotate(-8deg)}
 .fig-shoulder.right{left:174px;transform:rotate(8deg)}
-.fig-arm{top:140px;width:28px;height:60px;border-radius:12px;background:linear-gradient(180deg,#c6d0db,#9fabb9);border:2px solid #2c3138}
+.fig-arm{top:140px;width:28px;height:60px;border-radius:12px;background:linear-gradient(180deg,#c6d0db,#9fabb9);border:3px solid #2c3138}
 .fig-arm.left{left:42px;transform:rotate(9deg)}
 .fig-arm.right{left:180px;transform:rotate(-9deg)}
-.fig-helmet{left:84px;top:28px;width:86px;height:70px;border-radius:44px 44px 26px 26px;background:linear-gradient(165deg,#e6ecf3 0%,#bcc7d4 70%);border:2px solid #2c3138}
-.fig-visor{left:92px;top:56px;width:70px;height:18px;border-radius:10px;background:linear-gradient(90deg,#38404d,#4b5563 60%,#38404d);border:2px solid #2c3138}
+.fig-helmet{left:84px;top:28px;width:86px;height:70px;border-radius:44px 44px 26px 26px;background:linear-gradient(165deg,#e6ecf3 0%,#bcc7d4 70%);border:3px solid #2c3138}
+.fig-visor{left:92px;top:56px;width:70px;height:18px;border-radius:10px;background:linear-gradient(90deg,#38404d,#4b5563 60%,#38404d);border:3px solid #2c3138}
 .fig-visor:after{content:"";position:absolute;left:5px;right:5px;top:5px;height:4px;border-radius:2px;background:var(--class-ink)}
-.fig-antenna{display:none;left:160px;top:10px;width:4px;height:34px;border-radius:3px;background:var(--class-ink);border:2px solid #2c3138}
+.fig-antenna{display:none;left:160px;top:10px;width:4px;height:34px;border-radius:3px;background:var(--class-ink);border:3px solid #2c3138}
 .fig-weapon{left:196px;top:150px;width:120px;height:15px;border-radius:4px;background:linear-gradient(90deg,#2f3742,#59636f 40%,#2f3742);border:2px solid #2c3138;transform:rotate(-14deg)}
-.fig-weapon:before{content:"";position:absolute;left:-17px;top:-2px;width:23px;height:19px;border-radius:5px;background:#3a4150;border:2px solid #2c3138}
-.fig-weapon:after{content:"";position:absolute;right:-5px;top:3px;width:15px;height:7px;border-radius:3px;background:var(--class-ink);border:2px solid #2c3138}
+.fig-weapon:before{content:"";position:absolute;left:-17px;top:-2px;width:23px;height:19px;border-radius:5px;background:#3a4150;border:3px solid #2c3138}
+.fig-weapon:after{content:"";position:absolute;right:-5px;top:3px;width:15px;height:7px;border-radius:3px;background:var(--class-ink);border:3px solid #2c3138}
 
 .operator-figure[data-class="vanguard"] .fig-weapon{left:198px;top:152px;width:128px;height:14px}
 .operator-figure[data-class="breacher"] .fig-torso{width:142px;left:54px;background:linear-gradient(160deg,#d8cdbb 0%,#b6a892 55%,#96896f 100%)}
@@ -436,9 +441,9 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 
 /* the name plate floats over the operative, like a lobby name tag */
 .stage-plate{position:relative;z-index:3;display:flex;align-items:center;gap:10px;padding:7px 20px 7px 7px;border:2px solid #2c3138;border-radius:999px;background:#fbf7ee;box-shadow:0 4px 0 #2c3138}
-.plate-rank{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;border:4px solid var(--class-ink);background:#fbf7ee;box-shadow:inset 0 -3px 0 #e6ddc8;color:#2c3138;font:700 15px/1 "Space Grotesk",sans-serif}
+.plate-rank{display:grid;place-items:center;width:42px;height:42px;border-radius:50%;border:4px solid var(--class-ink);background:#fbf7ee;box-shadow:inset 0 -3px 0 #e6ddc8;color:#2c3138;font:400 17px/1 "Lilita One","Space Grotesk",sans-serif}
 .plate-copy{display:flex;flex-direction:column;gap:2px}
-.plate-copy strong{font-weight:700;font-size:16px;letter-spacing:.6px;color:#2c3138}
+.plate-copy strong{font:400 18px/1 "Lilita One","Space Grotesk",sans-serif;letter-spacing:1.4px;color:#2c3138}
 .plate-copy small{font:9px "DM Mono",monospace;letter-spacing:1.1px;color:#5b6472}
 .plate-copy small b{color:#7d5f28}
 
@@ -451,7 +456,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .home-stage .loadout-slot{position:absolute;top:13px;right:10px;font:9px "DM Mono",monospace;letter-spacing:1px;color:#5b6472}
 .home-stage .loadout-kind{font:8px "DM Mono",monospace;letter-spacing:1.2px;color:#5b6472;padding-top:6px}
 .home-stage .loadout-card.selected .loadout-kind{color:#7d5f28}
-.home-stage .loadout-card strong{font-weight:700;font-size:12px;letter-spacing:.4px;color:#2c3138}
+.home-stage .loadout-card strong{font:400 13px/1.1 "Lilita One","Space Grotesk",sans-serif;letter-spacing:.9px;color:#2c3138}
 .home-stage .loadout-card small{display:none}
 .home-stage .loadout-trait{margin-top:3px;font:7.5px/1.45 "DM Mono",monospace;font-style:normal;letter-spacing:.1px;color:#5b6472;
   display:-webkit-box;overflow:hidden;-webkit-line-clamp:3;-webkit-box-orient:vertical}
@@ -466,7 +471,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .daily-card:hover{transform:translateY(-2px);box-shadow:0 7px 0 #2c3138}
 .daily-tag{font:8px "DM Mono",monospace;letter-spacing:1.5px;color:#7d5f28;writing-mode:vertical-rl;text-orientation:mixed}
 .daily-copy{display:flex;flex-direction:column;gap:3px;flex:1}
-.daily-copy strong{font-weight:700;font-size:20px;letter-spacing:3px;color:#2c3138}
+.daily-copy strong{font:400 22px/1 "Lilita One","Space Grotesk",sans-serif;letter-spacing:3.4px;color:#2c3138}
 .daily-copy small{font:9px "DM Mono",monospace;letter-spacing:.9px;color:#5b6472}
 .daily-copy .daily-result{color:#7d5f28}
 .daily-copy .daily-clock{color:#2c3138;font-weight:500}
@@ -487,7 +492,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .deploy-rank-track{flex:1;height:12px;border-radius:999px;border:2px solid #2c3138;background:#ffffff;overflow:hidden}
 .deploy-rank-track i{display:block;height:100%;background:linear-gradient(90deg,#cfa25f,#e6c37a)}
 .deploy-rank-next{font:8px "DM Mono",monospace;letter-spacing:1px;color:#5b6472}
-.deploy-button{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:16px 20px;border:2px solid #2c3138;border-radius:18px;background:linear-gradient(180deg,#f4dd9e,#e0bd6c);box-shadow:0 6px 0 #2c3138;cursor:pointer;font-weight:700;font-size:16px;letter-spacing:1.8px;color:#2c3138;transition:transform .12s,box-shadow .12s}
+.deploy-button{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 20px;border:2px solid #2c3138;border-radius:18px;background:linear-gradient(180deg,#f4dd9e,#e0bd6c);box-shadow:0 6px 0 #2c3138;cursor:pointer;font:400 21px/1.1 "Lilita One","Space Grotesk",sans-serif;letter-spacing:2.2px;color:#2c3138;transition:transform .12s,box-shadow .12s}
 .deploy-button:hover{transform:translateY(-2px);box-shadow:0 8px 0 #2c3138}
 .deploy-button:active{transform:translateY(3px);box-shadow:0 2px 0 #2c3138}
 .deploy-note{margin:0;text-align:center;font:9px "DM Mono",monospace;letter-spacing:1.4px;color:#5b6472}
@@ -495,11 +500,11 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 /* -- information cards down the right ------------------------------------ */
 .home-side{display:flex;flex-direction:column;gap:12px}
 .home-screen .side-card,.home-screen .settings-section{padding:14px;border:2px solid #2c3138;border-radius:20px;background:#fbf7ee;box-shadow:0 5px 0 #2c3138}
-.home-screen .side-kicker,.home-screen .section-kicker{font:700 9px "Space Grotesk",sans-serif;letter-spacing:1.5px;color:#7d5f28}
+.home-screen .side-kicker,.home-screen .section-kicker{font:400 10px "Lilita One","Space Grotesk",sans-serif;letter-spacing:1.6px;color:#7d5f28}
 .home-screen .side-kicker.tight{margin-top:12px}
 .side-empty{margin:8px 0 0;font:9px/1.6 "DM Mono",monospace;letter-spacing:.7px;color:#5b6472}
 .brief-level{display:flex;flex-direction:column;gap:5px;margin-top:9px}
-.brief-name{font-weight:700;font-size:15px;letter-spacing:1px;color:#2c3138}
+.brief-name{font:400 16px/1.1 "Lilita One","Space Grotesk",sans-serif;letter-spacing:1.4px;color:#2c3138}
 .brief-rule{font:9px/1.6 "DM Mono",monospace;letter-spacing:.4px;color:#5b6472}
 .brief-list{list-style:none;margin:11px 0 0;padding:0;display:flex;flex-direction:column;gap:7px}
 .brief-list li{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font:8px "DM Mono",monospace;letter-spacing:1px;color:#5b6472}
@@ -507,7 +512,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .contract-list{display:flex;flex-direction:column;gap:11px;margin:10px 0 0;padding:0;list-style:none}
 .contract-list li{display:flex;flex-direction:column;gap:5px}
 .contract-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
-.contract-head strong{font-weight:700;font-size:10px;letter-spacing:1.2px;color:#2c3138}
+.contract-head strong{font:400 11px/1.1 "Lilita One","Space Grotesk",sans-serif;letter-spacing:1.2px;color:#2c3138}
 .contract-head span{font:9px "DM Mono",monospace;letter-spacing:1px;color:#7d5f28}
 .contract-track{height:10px;border-radius:999px;border:2px solid #2c3138;background:#ffffff;overflow:hidden}
 .contract-track i{display:block;height:100%;background:var(--class-ink);opacity:.85}
@@ -543,7 +548,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .home-strip{display:flex;flex-direction:column;gap:10px}
 .strip-chip{display:flex;flex-direction:column;gap:4px;padding:11px 13px;border:2px solid #2c3138;border-radius:16px;background:#fbf7ee;box-shadow:0 4px 0 #2c3138}
 .strip-label{font:8px "DM Mono",monospace;letter-spacing:1.4px;color:#5b6472}
-.strip-chip strong{font-weight:700;font-size:20px;letter-spacing:-.4px;color:#2c3138}
+.strip-chip strong{font:400 24px/1 "Lilita One","Space Grotesk",sans-serif;letter-spacing:.4px;color:#2c3138}
 .strip-chip strong em{font-style:normal;color:#5b6472}
 .strip-note{font:8px "DM Mono",monospace;letter-spacing:1px;color:#5b6472}
 .strip-meter{display:block;height:9px;border-radius:999px;border:2px solid #2c3138;background:#ffffff;overflow:hidden}
@@ -554,7 +559,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .sheet-scrim{position:absolute;inset:0;border:0;background:#1b2a38b0;cursor:pointer}
 .sheet-card{position:relative;z-index:1;width:min(1020px,100%);max-height:88vh;overflow:auto;padding:20px 22px 24px;border:3px solid #2c3138;border-radius:24px;background:#fbf7ee;box-shadow:0 8px 0 #2c3138;color:#2c3138}
 .sheet-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
-.sheet-head h2{margin:0;font-weight:700;font-size:17px;letter-spacing:1.6px;color:#2c3138}
+.sheet-head h2{margin:0;font:400 20px/1.1 "Lilita One","Space Grotesk",sans-serif;letter-spacing:2px;color:#2c3138}
 .sheet-head .eyebrow{margin:0;font:9px "DM Mono",monospace;letter-spacing:1.6px;color:#7d5f28}
 .sheet-card .icon-button{display:grid;place-items:center;width:36px;height:36px;border:2px solid #2c3138;border-radius:50%;background:#ffe9b8;color:#2c3138;font-size:14px;cursor:pointer}
 .sheet-card .icon-button:hover{background:#e6c37a}
@@ -562,8 +567,8 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .class-card{display:flex;flex-direction:column;gap:9px;padding:14px;border:2px solid #2c3138;border-radius:18px;background:#ffffff;box-shadow:0 4px 0 #2c3138}
 .class-card.selected{background:#fff6e0}
 .class-card header{display:flex;align-items:center;gap:9px}
-.class-card header strong{font-weight:700;font-size:14px;letter-spacing:.5px;color:#2c3138}
-.class-swatch{width:16px;height:16px;border-radius:5px;background:var(--class-ink);border:2px solid #2c3138}
+.class-card header strong{font:400 15px/1.1 "Lilita One","Space Grotesk",sans-serif;letter-spacing:1.1px;color:#2c3138}
+.class-swatch{width:16px;height:16px;border-radius:5px;background:var(--class-ink);border:3px solid #2c3138}
 .class-eq{margin-left:auto;font:8px "DM Mono",monospace;letter-spacing:1.2px;color:#7d5f28}
 .class-tagline{margin:0;font:9px/1.6 "DM Mono",monospace;letter-spacing:.4px;color:#5b6472}
 .class-card dl{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;margin:0}
@@ -575,12 +580,12 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .class-counter{margin:0;font:9px/1.6 "DM Mono",monospace;letter-spacing:.3px;color:#5b6472}
 .arena-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
 .arena-card{display:flex;flex-direction:column;gap:7px;padding:13px;border:2px solid #2c3138;border-radius:18px;background:#ffffff;box-shadow:0 4px 0 #2c3138}
-.arena-card strong{font-weight:700;font-size:13px;letter-spacing:1.1px;color:#2c3138}
+.arena-card strong{font:400 14px/1.1 "Lilita One","Space Grotesk",sans-serif;letter-spacing:1.4px;color:#2c3138}
 .arena-card small{font:9px/1.6 "DM Mono",monospace;letter-spacing:.3px;color:#5b6472}
 .arena-figure{position:relative;width:100%;aspect-ratio:16/10;border:2px solid #2c3138;border-radius:12px;background:#eef3f8;overflow:hidden}
 .arena-figure i{position:absolute;display:block;background:#aab6c4;border:2px solid #2c3138;border-radius:4px}
 .help-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:20px}
-.help-grid h3{margin:0 0 6px;font:700 10px "Space Grotesk",sans-serif;letter-spacing:1.6px;color:#7d5f28}
+.help-grid h3{margin:0 0 6px;font:400 11px "Lilita One","Space Grotesk",sans-serif;letter-spacing:1.8px;color:#7d5f28}
 .help-grid p{margin:0 0 14px;font-size:12.5px;line-height:1.7;color:#3f4854;max-width:440px}
 .help-keys{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
 .help-keys li{display:flex;align-items:center;gap:10px;font:9px "DM Mono",monospace;letter-spacing:1px;color:#5b6472}
