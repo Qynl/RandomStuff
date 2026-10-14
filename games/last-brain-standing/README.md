@@ -2,7 +2,9 @@
 
 A small, fast top-down arena combat game built around one idea: opponents should feel different because they make different decisions, not just because they have different colors.
 
-Three hostile profiles hunt you across five escalating threat levels. Every hostile shot is telegraphed before it happens, so damage is always something you could have read and dodged. A run is fully determined by a seed, which you can replay, share, and use to compare scores with someone else.
+Ten hostile profiles hunt you across five escalating threat levels, and you fly one of six operative classes, each with its own weapon, body and signature kit. Every hostile shot is telegraphed before it happens, so damage is always something you could have read and dodged. A run is fully determined by a seed, which you can replay, share, and use to compare scores with someone else.
+
+The game opens on a **command screen**: your rank and career at the top, the class ribbon and deploy button in the middle with the operative standing on a lit floor, briefing and service record down the side, and a bottom strip with career score, runs/kills and threat levels cleared. Classes, arenas and controls each open a sheet; nothing is more than one tap from the deploy button.
 
 ## Play
 
@@ -22,7 +24,7 @@ npm run coverage   # the same run with a v8 coverage report
 npm run build      # tsc -b && vite build
 ```
 
-Coverage of `src/` is 97% of statements and 89% of branches; the sound engine, entry point and every rules module are covered by fakes rather than skipped.
+Coverage of `src/` is 97% of statements and 89% of branches; the sound engine, entry point and every rules module are covered by fakes rather than skipped. The suite is 350 tests across 21 files, including a balance sweep that prints its envelope every run and a class sweep that flies all six classes over the same seeds.
 
 ## Controls
 
@@ -31,25 +33,32 @@ Coverage of `src/` is 97% of statements and 89% of branches; the sound engine, e
 | WASD / Arrow keys | Move |
 | Mouse (or drag the arena) | Aim |
 | Left click / Space / FIRE button | Fire (hold to keep firing) |
-| Shift / DASH button | Dash — 118 units with brief invulnerability |
+| Shift / DASH button | Dash — class-dependent distance with brief invulnerability |
 | Esc | Pause / resume |
 | R | Restart with a new seed |
 | Shift + R | Restart the *same* seed |
 | M | Mute |
 | F3 | Telemetry: side-panel read-outs and an arena overlay (bot state, line of sight, intercept crosshairs, preferred range circles, arena openness and the hostile range multiplier it implies) |
 | Enter (in the seed field) | Start the run |
+| ⌂ (top bar) | Back to the command screen (once the run is over) |
 
-Touch controls (virtual stick, FIRE, DASH) appear on touch devices and can be forced on from **Settings → Touch Controls**. **Settings → Aiming** switches between raw mouse aiming and assisted aiming, which slowly tracks the nearest visible hostile in front of you — for keyboard-only and touch play.
+Touch controls (virtual stick, FIRE, DASH) appear on real phones and tablets — a desktop that merely reports touch support does not get them — and can be forced on from **Settings → Touch Controls**. **Settings → Aiming** switches between raw mouse aiming and assisted aiming, which slowly tracks the nearest visible hostile in front of you — for keyboard-only and touch play.
 
-## The three profiles
+## The ten profiles
 
-Each profile owns a different *axis* of behaviour, not just a different stat line. The rules live in `src/signatures.ts` as data plus pure functions, so what the game tells you and what it does cannot drift apart.
+Each profile owns a different *axis* of behaviour, not just a different stat line: a movement rule, an attack shape, its own silhouette and its own tell. The rules live in `src/signatures.ts` as data plus pure functions, so what the game tells you and what it does cannot drift apart.
 
 | Profile | Owns | Signature behaviour | Counterplay |
 |---|---|---|---|
 | **The Hunter** | *Timing* | Fires a **two-round salvo** from one telegraph (a tight round and a sloppy one, 55/45 of its damage). Its barrel **commits halfway through the wind-up**: it stops tracking, so a late sidestep beats it while an early panic does not. **Front plating** soaks 22 % of any hit landing within ~65° of its facing, and it **plants its feet** while telegraphing (24 % speed, against the Flanker's 72 %). | Break the lane early, or sidestep *late*. Shoot it from the side or while it is holding and turning; a frontal duel pays the plating tax. |
 | **The Flanker** | *Space* | **Pincer discipline**: it holds fire while another Flanker is crowding the same ~100° arc around you, and keeps moving for the envelop instead, so the pair rarely shoots from one angle at once. It **dives** (1.8× speed for 0.42 s, 2.4 s cooldown) to close a gap rather than jogging, and it **keeps skirmishing while it telegraphs**. | Keep both flankers on one side of you and one of them will stay silent; when they split you get hit from two directions. |
-| **The Mirror** | *Your own kit* | It **fires a copy of the weapon you brought**: a single rifle round, a three-pellet scattergun fan with the shorter falloff, or a faster, heavier railgun slug with a longer telegraph. It still reads your movement and firing habits, and slides out of the lane you are aiming down. | Change direction and firing lane. Your loadout choice literally arms it, so the counter changes with the weapon you pick. |
+| **The Mirror** | *Your own kit* | It **fires a copy of the weapon you brought** — a rifle round, a scattergun fan, a heavier rail slug, a burst, a flame or a lob — and reads your movement and firing habits while sliding out of the lane you are aiming down. | Change direction and firing lane. Your class choice literally arms it, so the counter changes with the class you pick. |
+| **The Marksman** | *Range* | A laser-fast **rail slug** (19 damage, 900 px/s) across the whole arena on a 2.8× longer telegraph, drawing a 1.5 s aim line it never chases with. | Break the line the moment the aim line appears: it commits to where you *were*. |
+| **The Cinder** | *Area denial* | A six-second **flame cone** at short range that keeps burning whatever it touches, so hiding behind cover it can reach does not work. | Stay outside arm's reach and kill it while it sprays; its range is its weakness. |
+| **The Mortar** | *Indirect fire* | **Lobs a shell** onto a marked circle where you are, landing 1.6 s later, over any cover in between. | Watch the marker and walk out of it — it cannot shoot where you will be. |
+| **The Bulwark** | *Attrition* | Carries a **tower shield** that blocks everything in front and walks you down behind it. | Get behind it or dash past: the shield only covers one side. |
+| **The Swarm Cell** | *Numbers* | Fires a **spore volley**, and comes apart into two fast shards when it dies. | Kill it early and at range, or plan for the two that follow. |
+| **The Ram** | *Burst pressure* | Winds up, then **charges** 3× speed along a marked lane and is staggered if it misses. | Step out of the lane and punish the stagger — staggered hostiles take extra damage. |
 
 The sim's own behaviour rules also gained two things that apply to all profiles because a fight should never freeze:
 
@@ -88,46 +97,53 @@ Measured with the scripted autoplay policy over 24 seeds per difficulty (`tests/
 
 | Level | Wins | Avg kills | Avg waves | Avg damage taken | Wind-up cuts (24 runs) | Fairness issues |
 |---|---|---|---|---|---|---|
-| RECRUIT | 19/24 | 15.7 | 4.1 | 26 | 180 | 0 |
-| STANDARD | 8/24 | 17.7 | 3.5 | 114 | 148 | 0 |
-| VETERAN | 0/24 | 12.5 | 2.7 | 123 | 99 | 0 |
+| RECRUIT | 22/24 | 17.6 | 4.6 | 31 | 182 | 0 |
+| STANDARD | 11/24 | 21.8 | 4.1 | 132 | 173 | 0 |
+| VETERAN | 1/24 | 17.3 | 3.2 | 152 | 127 | 0 |
 
-The policy reacts to telegraphs perfectly, so it is a much stronger player than a first-timer: treat these as ordering and sanity figures, not a human win rate. Best score and best eliminations are stored per difficulty.
+The same harness flies **every class over the same 24 seeds**, so a class cannot quietly become unplayable (`VANGUARD 11/24 · MARKSMAN 9/24 · GHOST 9/24 · SAPPER 7/24 · BREACHER 3/24 · CINDER 2/24`, each with zero fairness issues). The policy reacts to telegraphs perfectly, so it is a much stronger player than a first-timer: treat these as ordering and sanity figures, not a human win rate. Best score and best eliminations are stored per difficulty.
 
 ## Look
 
 Grounded industrial test chamber, not a neon vector demo: poured concrete with slab seams, coarser speckle, worn paint and stencilled sector marks; extruded steel crates with lit top plates, ribs, rust streaks and a worn hazard strip; three work lamps laying pools of light on the floor; dust motes drifting through the room; units with contact shadows; tracers instead of glowing bolts; scorch marks that appear where rounds land and fade out over the next half minute.
 
-Every hostile has its own model rather than its own colour: the Hunter is a squat siege mech with skirt plates and a cannon that lights as it charges, the Flanker a light interceptor with swept prongs, a fluttering wing and thruster burn that tracks its speed, and the Mirror a faceted prism with a narrowing eye and three orbiting shards. The player is an armoured operative with an amber visor, a rifle that recoils on every shot and a walk cycle.
+Every hostile has its own model rather than its own colour: the Hunter is a squat siege mech with skirt plates and a cannon that lights as it charges, the Flanker a light interceptor with swept prongs and a fluttering wing, the Mirror a faceted prism with a narrowing eye and three orbiting shards, the Marksman a lance with a scope bloom, the Cinder a furnace with a maw that opens as it sprays, the Mortar a pod that tips back to lob, the Bulwark a walking wall, the Swarm Cell a cluster of sacs, the Ram a wedge with a plated head, and the Shard a splinter.
+
+The player is an armoured operative with a visor that lights when a shot is banked and a walk cycle, painted and armed per class — service rifle, scattergun with a brake, scoped rail, carbine, projector with a fuel tank, drum-fed lobber — so the class you picked is the operative on the floor. On the command screen the same figure stands at lobby scale in CSS, with the weapon silhouette of the class that is equipped.
 
 There is no bloom anywhere (a test rejects any non-zero `shadowBlur`), and a second test rejects any colour that is both vivid and bright, so neon cannot creep back in without deleting a test that says why it is there.
 
-## Loadouts
+## Operative classes
 
-You pick a primary weapon before a run, and it changes how the fight is played:
+You pick a class before a run, and it changes how the fight is played: a different weapon, body, dash and signature kit rule. **All six are issued from the first run** — nothing is gated behind career score. Every pellet counts as a shot, so accuracy stays honest whichever class you fly, and a stored value that names an unknown class resolves back to the vanguard.
 
-| Weapon | Rounds | Damage | Interval | Unlocks at |
-|---|---|---|---|---|
-| **SERVICE RIFLE** | 1 | 12 | 0.155 s | Standard issue |
-| **BREACH SCATTERGUN** | 6 (0.42 rad fan) | 5 each | 0.46 s | 4,500 career score |
-| **RAILGUN** | 1 | 34 | 0.68 s | 11,000 career score |
+| Class | Weapon | Weapon numbers | Body | Dash | Kit |
+|---|---|---|---|---|---|
+| **VANGUARD** | SERVICE RIFLE | 12 damage, 0.155 s | 100 HP, ×1.00 speed | 118 u / 2.0 s | **RESOLUTE** — every kill hands back 35 % of the dash |
+| **BREACHER** | BREACH SCATTERGUN | 6 × 5 damage, 0.42 rad fan, 0.46 s | 132 HP, ×0.93 | 152 u / 2.7 s **charge** | **SIEGE DASH** — charge through a hostile to stagger it (1.1 s) and hit for 8 |
+| **MARKSMAN** | RAILGUN | 30 damage, pierces 2, 0.7 s | 86 HP, ×0.96 | 132 u / 3.0 s | **FOCUS** — stand still 0.7 s: next shot +60 % and +2 pierce |
+| **GHOST** | BURST CARBINE | 3 × 6 damage, 0.34 s | 94 HP, ×1.12 | 126 u / 1.7 s | **PHASE** — the dash blanks hostile aim for 0.34 s; wind-ups in flight are cancelled |
+| **CINDER** | FLAME PROJECTOR | 5.5 damage, pierces 3, 0.06 s | 126 HP, ×0.97 | 124 u / 2.0 s | **IGNITE** — burning hostiles take 5/s and move 22 % slower for 3 s |
+| **SAPPER** | ARC LOBBER | 30 damage in an 84-unit burst, 0.8 s | 106 HP, ×1.00 | 118 u / 2.2 s | **ARC FIRE** — lob a shell over cover; it lands where the reticle is, 0.6 s later |
 
-Career score is the sum of your best score on each threat level, so improving any level moves the unlock ladder. Each weapon also names its own counterplay in the picker; every pellet counts as a shot, so accuracy stays honest whichever you carry. A stored value that names a locked or unknown weapon resolves back to the rifle rather than skipping the unlock.
+Every class is visible while you play, not just in the picker: each has its own armour paint, its own weapon drawn in the operative's hands, and a kit readout in the run panel (focus charging → ready, phase seconds remaining, and a one-line reminder for the rest). On the canvas the marksman banks focus into a brass gauge that closes into a bracket, the ghost turns into an outline with afterimages, burning hostiles sprout flame tongues and a scorched ring, staggered hostiles wear amber ticks, and the sapper's own shell paints the radius it is going to clear.
+
+The vanguard is the baseline the balance sweep was tuned against; the others trade power for range, mobility or area. `tests/balance.test.ts` flies all six over the same 24 seeds and requires each one to clear at least one run.
 
 ## Operator profile
 
-**OPERATOR PROFILE** (on the start screen and on the result card) opens the account view:
+**OPERATOR PROFILE** (the medallion on the command screen, the rail, and the result card) opens the account view:
 
 - **Rank** — insignia and name, RECRUIT → OPERATOR → SPECIALIST → VETERAN → INSTRUCTOR by career score.
 - **Career totals** — score, runs, kills, wins and best chain.
-- **Unlock ladder** — each weapon, what it costs, and a progress bar toward the next one.
+- **Class roster** — all six classes, marked ISSUED, with the trait each one carries and the rank still ahead of you (career score buys rank and badges, never classes).
 - **Service record** — nine badges with an explicit requirement each. Locked ones hide their name and show what it takes plus how far along you are: FIRST CONTACT, MARKSMAN (80 % accuracy), CHAIN REACTION (5 eliminations in a row), WIND-UP CUTTER, ARENA TOUR (win in three arenas), FULL SWEEP (win every threat level), UNTOUCHABLE (win without damage), GUNSMITH, CENTURION.
-- **Weapon records** — runs, kills, clears and best score for each of the three weapons separately, so the railgun's row is its own history.
+- **Class records** — runs, kills, clears and best score for each of the six classes separately, so the sapper's row is its own history.
 - **Threat dossier** — per profile: how many you have killed, how many runs it has ended, its signature behaviour and its counterplay line, so the intel you get mid-fight is also something the account remembers.
 - **Recent runs** — the last five finished runs, newest first, each with its seed, threat level, weapon, arena, score and outcome.
 - **Best run per threat level**, so recruit and veteran progress do not overwrite each other.
 
-Everything lives in `localStorage` (the runs, kills, per-weapon records, per-profile kills and the runs each profile has ended) and nothing leaves the device. The badge rules live in `src/account.ts` as data (requirement text plus a progress function), so the same code decides whether a badge is earned and explains what is missing.
+Everything lives in `localStorage` (the runs, kills, per-class records, per-profile kills and the runs each profile has ended) and nothing leaves the device. The GUNSMITH badge tracks classes actually **flown**, since there is nothing left to unlock. The badge rules live in `src/account.ts` as data (requirement text plus a progress function), so the same code decides whether a badge is earned and explains what is missing.
 
 ## Scoring
 
@@ -149,7 +165,7 @@ Clearing all five threat levels without taking a single point of damage earns th
 
 - A run is a pure function of `(seed, difficulty)`: same seed + same inputs = same fight, frame for frame.
 - The seed is shown in the top bar, the pause card and the run summary.
-- The start screen shows the arena a typed seed will play in and the weapon picker, and **RANDOM** rolls a fresh seed for you.
+- The command screen shows the arena a typed seed will play in next to the class ribbon and the deploy button, and **RANDOM** rolls a fresh seed for you.
 - Starting a run writes a run code into the URL (`#seed=1A2B3C&level=veteran`), so the address bar is always a replayable link.
 - Opening such a link (or pasting it into the seed field) starts that exact fight; **COPY SEED LINK** on the result screen copies it.
 - Seed labels are six hex characters and are *lossless*: `normalizeSeed` keeps every seed inside 24 bits, so `REPLAY SEED 1A2B3C` restores the fight that label names. Text seeds (`mirror`, `boss-rush`) are hashed, case-insensitively, into the same space.
@@ -167,6 +183,11 @@ Everything the browser stores lives in `localStorage` under `lbs-*` keys, and no
 | `lbs-muted` | Sound on/off |
 | `lbs-shake` | Screen shake and damage flash (calm mode when off) |
 | `lbs-touch` | Whether the touch controls were forced on |
+| `lbs-loadout` | Last class flown |
+| `lbs-weapon-records` | Per-class service records (runs, kills, best score, clears) |
+| `lbs-career-runs` / `-kills` / `-combo` / `-wins` / `-interrupts` / `-perfect` / `-accuracy` | Career counters the badge shelf reads |
+| `lbs-career-arenas` / `-levels` | Arenas and threat levels ever cleared |
+| `lbs-career-kills-by-kind` / `-deaths-by-kind` | What the threat dossier counts |
 
 Every read is validated: a corrupt or hand-edited value falls back to the default rather than breaking the panel, and the shell renders the restored settings on a fresh load.
 
@@ -182,11 +203,16 @@ The simulation is completely separate from React and from rendering, which is wh
 | `src/progression.ts` | Wave plans: composition, telegraph, spawn interval, durability/speed/awareness scaling. |
 | `src/rng.ts` | Seeded generator (mulberry32) plus seed normalization and labels. |
 | `src/constants.ts` | Difficulty presets and every shared tuning constant. |
+| `src/signatures.ts` | The ten hostile profiles as data: attack shape, movement rule, silhouette, tint, pitch and telegraph scale, plus the accessors the rest of the code asks through. |
+| `src/loadouts.ts` | The six operative classes as data: weapon numbers, body, dash and kit trait, in picker order, with legacy-id resolution and the rank ladder. |
+| `src/account.ts` | The operator account: per-class service records and the badge shelf, both as data with pure progress rules. |
 | `src/scoring.ts` | Score breakdown, grades, and the rows shown on the result screen. |
 | `src/input.ts` | Pure input helpers: deadzone, stick vector, screen→world mapping, keyboard vector, dash charge. |
 | `src/share.ts` | Run codes: parse/build share links, seed labels, copy confirmation text. |
 | `src/game.ts` | Presentation shell (`ArenaGame`): 120 Hz fixed-step loop, input handling, canvas rendering, effects, audio, HUD snapshots, `localStorage`. Degrades to a no-op renderer when the canvas has no 2D context, so the simulation, input and HUD keep working. |
-| `src/App.tsx` | React UI shell: overlays, side panel, settings, touch controls, share link. |
+| `src/App.tsx` | React UI shell: screens (command / arena / profile), overlays, side panel, touch controls, share link. |
+| `src/HomeScreen.tsx` | The command screen: rails, class ribbon, deploy block, briefing cards, and the class / arena / controls sheets. |
+| `src/SettingsPanel.tsx` | The tuning block, rendered identically on the command screen and in the arena side panel. |
 | `src/audio.ts` | WebAudio synthesis (no asset files). |
 
 Data flow: `App` owns the React state and mounts `ArenaGame` on the canvas. The engine runs a fixed-step accumulator (the world always advances in 1/120 s steps regardless of the render frame rate) and pushes a throttled JSON snapshot to React at 10 Hz, plus event-driven feed lines. React never re-renders per animation frame.
@@ -201,11 +227,12 @@ Data flow: `App` owns the React state and mounts `ArenaGame` on the canvas. The 
 | `tests/progression.test.ts` | Wave composition and difficulty scaling. |
 | `tests/balance.test.ts` | 24-seed sweep per difficulty: win band, difficulty ordering, fairness counters, run length, performance, scoring. |
 | `tests/game.test.ts` | jsdom runtime: input, firing, dash, dodge feedback, pause, touch, run end, run history, calm mode, telemetry overlay, persistence, fixed-step invariance. |
-| `tests/app.test.tsx` | jsdom React shell: overlay flow, settings, seed link, counterplay hints, focus management, console cleanliness. |
+| `tests/app.test.tsx` | jsdom React shell: the command screen and its sheets, class swapping from the lobby, overlay flow, settings, seed link, counterplay hints, focus management, console cleanliness. |
 | `tests/rng.test.ts`, `tests/share.test.ts`, `tests/input.test.ts`, `tests/scoring.test.ts` | The pure helper modules. |
-| `tests/loadouts.test.ts` | Weapon catalogue (each weapon distinct, the balance promise each one makes, burst-damage band), the career-score ladder, unlock progress and rank thresholds, and in-sim firing per weapon (pellet fan, life, damage, cooldown, shot counting, locked/unknown resolution). |
+| `tests/loadouts.test.ts` | Class catalogue (six classes, each with a distinct weapon, body and trait; the balance promise each one makes; burst-damage band), the career-score ladder and rank thresholds, and in-sim behaviour per class: the pellet fan, focus banking, the phase window, burn ticks, the sapper's ring blast, the siege stagger, legacy ids and unknown-id fallback. |
+| `tests/class-visuals.test.ts` | The class system on the canvas and in the panel: distinct armour paint per class, the right weapon in the operative's hands, embers on a burning hostile, amber ticks on a staggered one, the focus gauge, the phase outline, the sapper's brass shell and the class kit readout. Reads a recorded frame trace, so colour-level claims are checkable. |
 | `tests/account.test.ts` | Service records per weapon (accumulate, keep the best, ignore junk input, never pool across weapons) and the badge shelf: nine badges each earned by its own condition, partial progress for locked ones, and progress clamped even for absurd career state. |
-| `tests/archetypes.test.ts` | The behavioural divergence itself: volley geometry per profile, the Hunter's front plating and mid-wind-up aim lock, the Flanker's arc-based hold-fire and dive, the Mirror copying each of the three weapons, the detour thresholds, stall pressure, and a twelve-seed sweep proving each signature fires in real fights and none of them bleeds into another profile. |
+| `tests/archetypes.test.ts` | The behavioural divergence itself: volley geometry per profile, the Hunter's front plating and mid-wind-up aim lock, the Flanker's arc-based hold-fire and dive, the Mirror copying the class you brought, the marksman's aim line, the mortar's lob, the bulwark's shield, the swarm cell's shards, the ram's charge and stagger, the detour thresholds, stall pressure, and a sweep proving each signature fires in real fights and none of them bleeds into another profile. |
 | `tests/artdirection.test.ts` | Every source file is scanned for neon (a colour that is both saturated and bright, with an explicit allow-list) and for any non-zero `shadowBlur`; the detector self-checks against the retired palette so a broken classifier cannot pass the guard. |
 | `tests/layout.test.ts` | Arena layouts: blocks in bounds and non-overlapping, the player's start is free, a flood fill proves no layout seals off a pocket, cover is worth hiding behind, every layout carries a distinct accent and a sane openness, and the seed always picks the same layout (including through a seed-label round trip). |
 | `tests/fuzz.test.ts` | Adversarial input sweep: 12 long runs of deliberately awkward input (zero-length aim vectors, dash spam, hard reversals, nonsensical aim points) asserting that vectors stay finite, nobody ends a frame inside geometry, lists stay bounded, and the same input still replays identically. |
@@ -231,4 +258,4 @@ Data flow: `App` owns the React state and mounts `ArenaGame` on the canvas. The 
 
 - The sandboxed preview environment has no network access, so the optional Google Fonts import degrades to system fonts (by design).
 - No headless browser is available here: runtime behavior is verified with the jsdom harness and the scripted autoplay policy rather than real-device playtests.
-- Veteran is intentionally a wall: the scripted policy never clears it, though it consistently reaches the later waves.
+- Veteran is intentionally a wall: the scripted policy clears it roughly one run in twenty-four, and consistently reaches the later waves. The cinder is the hardest class to fly with a scripted kiting policy, which is exactly the class that wants a human's judgement about when to commit.
