@@ -7,7 +7,7 @@ import type { ArenaGame } from "../src/game";
 import { WORLD } from "../src/arena";
 import { installFakeCanvasPrototype, installFrameController, installResizeObserver, pointer, pressKey, type FakeCanvas, type FrameController } from "./helpers/fake-dom";
 import { BOT_KINDS } from "../src/ai";
-import { dailySeedLabel } from "../src/rng";
+import { dailySeedCountdown, dailySeedLabel } from "../src/rng";
 import { LOADOUT_ORDER } from "../src/loadouts";
 
 declare global {
@@ -241,6 +241,8 @@ describe("React app shell", () => {
     expect(dailySeedLabel(new Date())).toMatch(/^[0-9A-F]{6}$/);
     expect(card.textContent).toContain(dailySeedLabel(new Date()));
     expect(card.textContent).toContain("TODAY");
+    // The card is a clock, not a static label: it says when the fight changes.
+    expect(card.textContent).toContain(`NEW SEED IN ${dailySeedCountdown(new Date())}`);
     // One tap puts that seed in the field and starts the run on it.
     click(card);
     advance(6);
@@ -279,6 +281,19 @@ describe("React app shell", () => {
     const result = container.querySelector(".daily-result");
     expect(result?.textContent).toContain("5120");
     expect(result?.textContent).toContain("CLEARED");
+  });
+
+  it("shows the rank ladder to the next rank right above the deploy button", () => {
+    const rank = container.querySelector(".deploy-rank");
+    expect(rank?.textContent).toContain("RECRUIT");
+    expect(rank?.textContent).toContain("0 CAREER");
+    expect(rank?.textContent).toContain("OPERATOR");
+    // A run's career score moves the bar, and reloading the lobby reads it back.
+    localStorage.setItem("lbs-best-by-difficulty", JSON.stringify({ standard: { score: 8000, kills: 20 } }));
+    remount();
+    expect(container.querySelector(".deploy-rank")?.textContent).toContain("8,000");
+    const fill = container.querySelector(".deploy-rank-track i") as HTMLElement;
+    expect(fill.style.width).not.toBe("0%");
   });
 
   it("swaps class from the keyboard, one key per class", () => {

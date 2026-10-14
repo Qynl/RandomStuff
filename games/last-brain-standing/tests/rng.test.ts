@@ -3,6 +3,7 @@ import {
   createRandomSeed,
   createRng,
   dailySeed,
+  dailySeedCountdown,
   dailySeedLabel,
   formatSeed,
   hashSeed,
@@ -129,6 +130,14 @@ describe("seed identity", () => {
     // And the day it names is inside the seed space the sim uses.
     expect(dailySeed(morning)).toBeGreaterThan(0);
     expect(dailySeed(morning)).toBeLessThan(SEED_SPACE);
+  });
+
+  it("counts down to the next seed, never past midnight", () => {
+    expect(dailySeedCountdown(new Date(2026, 9, 14, 8, 30))).toBe("15H 30M");
+    expect(dailySeedCountdown(new Date(2026, 9, 14, 0, 0))).toBe("24H 00M");
+    expect(dailySeedCountdown(new Date(2026, 9, 14, 23, 59))).toBe("0H 01M");
+    // Same minute, same countdown - it only moves with the clock, not the seed.
+    expect(dailySeedCountdown(new Date(2026, 9, 14, 8, 30, 40))).toBe("15H 29M");
   });
 
   it("produces the same fight whether a seed is given as text or as its label", () => {

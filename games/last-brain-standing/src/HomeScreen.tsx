@@ -2,7 +2,7 @@ import { useState, type RefObject } from "react";
 import { DIFFICULTIES } from "./constants";
 import { DEFAULT_LOADOUT, LOADOUTS, LOADOUT_ORDER, type LoadoutId } from "./loadouts";
 import { ARENA_LAYOUTS, ARENA_ORDER, layoutForSeed, type ArenaLayoutId } from "./arena";
-import { dailySeed, dailySeedLabel } from "./rng";
+import { dailySeed, dailySeedCountdown, dailySeedLabel } from "./rng";
 import type { CareerSummary } from "./game";
 import SettingsPanel from "./SettingsPanel";
 import type { AimMode, DifficultyId } from "./types";
@@ -150,6 +150,17 @@ export default function HomeScreen({
 
         <section className="home-stage" aria-label="Operative">
           <div className="stage-floor" aria-hidden="true" />
+          <div className="stage-plate">
+            <span className="plate-rank" style={{ ["--class-ink" as string]: ink }}>
+              {career?.rank.insignia ?? "I"}
+            </span>
+            <div className="plate-copy">
+              <strong>{active.name}</strong>
+              <small>
+                {active.kind} · <b>{active.traitName}</b>
+              </small>
+            </div>
+          </div>
           <div className="operator-figure" data-class={loadout} style={{ ["--class-ink" as string]: ink }} aria-hidden="true">
             <span className="fig-shadow" />
             <span className="fig-legs" />
@@ -165,18 +176,6 @@ export default function HomeScreen({
             <span className="fig-helmet" />
             <span className="fig-visor" />
             <span className="fig-antenna" />
-          </div>
-
-          <div className="stage-plate">
-            <span className="plate-rank" style={{ ["--class-ink" as string]: ink }}>
-              {career?.rank.insignia ?? "I"}
-            </span>
-            <div className="plate-copy">
-              <strong>{active.name}</strong>
-              <small>
-                {active.kind} · <b>{active.traitName}</b>
-              </small>
-            </div>
           </div>
 
           <div className="loadout-row" role="group" aria-label="Operative class">
@@ -223,6 +222,7 @@ export default function HomeScreen({
                     YOUR RUN: {dailyRun.score} · {dailyRun.victory ? "CLEARED" : "TERMINATED"}
                   </small>
                 ) : null}
+                <small className="daily-clock">NEW SEED IN {dailySeedCountdown(today)}</small>
               </span>
               <span className="daily-play" aria-hidden="true">▶</span>
             </button>
@@ -259,6 +259,18 @@ export default function HomeScreen({
                 {shareNotice}
               </p>
             ) : null}
+            <div className="deploy-rank">
+              <span className="deploy-rank-copy">
+                <b>{career?.rank.name ?? "RECRUIT"}</b>
+                <small>{(career?.score ?? 0).toLocaleString()} CAREER</small>
+              </span>
+              <span className="deploy-rank-track" aria-hidden="true">
+                <i style={{ width: `${Math.round((career?.rankProgress ?? 0) * 100)}%` }} />
+              </span>
+              <span className="deploy-rank-next">
+                {career?.nextRank ? `${career.nextRank.threshold.toLocaleString()} → ${career.nextRank.name}` : "TOP RANK"}
+              </span>
+            </div>
             <button ref={deployRef} className="primary-button deploy-button" type="button" onClick={onStart}>
               <span>ENTER THE ARENA</span>
               <span aria-hidden="true">↗</span>

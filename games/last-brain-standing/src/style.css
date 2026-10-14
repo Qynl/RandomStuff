@@ -527,3 +527,12 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .loadout-card:hover .loadout-slot,.loadout-card.selected .loadout-slot{color:#c8b083}
 .loadout-keys{margin:0;font:8px "DM Mono",monospace;letter-spacing:1.6px;color:#8794a1;position:relative;z-index:2}
 .daily-result{color:var(--brass) !important}
+.stage-plate{margin-bottom:-10px}
+.deploy-rank{display:flex;align-items:center;gap:9px;padding:0 2px}
+.deploy-rank-copy{display:flex;flex-direction:column;gap:1px;min-width:104px}
+.deploy-rank-copy b{font:9px "DM Mono",monospace;letter-spacing:1.4px;color:#f0e6d2}
+.deploy-rank-copy small{font:8px "DM Mono",monospace;letter-spacing:1.2px;color:#94a1ae}
+.deploy-rank-track{flex:1;height:7px;border-radius:999px;border:1px solid #3a3e45;background:#14171b;overflow:hidden}
+.deploy-rank-track i{display:block;height:100%;background:linear-gradient(90deg,#8a6a3f,#cfa25f)}
+.deploy-rank-next{font:8px "DM Mono",monospace;letter-spacing:1.2px;color:#94a1ae}
+.daily-clock{color:#c8b083 !important}

@@ -147,3 +147,15 @@ export function dailySeed(date: Date): number {
 export function dailySeedLabel(date: Date): string {
   return formatSeed(dailySeed(date));
 }
+
+/**
+ * How long until the seed of the day changes, as `5H 12M`.
+ *
+ * Midnight is built from the local calendar date rather than by adding 24 hours,
+ * so a clock change does not make the countdown lie by an hour.
+ */
+export function dailySeedCountdown(date: Date): string {
+  const midnight = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+  const minutes = Math.max(0, Math.floor((midnight.getTime() - date.getTime()) / 60000));
+  return `${Math.floor(minutes / 60)}H ${String(minutes % 60).padStart(2, "0")}M`;
+}
