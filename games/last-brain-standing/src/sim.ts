@@ -40,7 +40,10 @@ import {
 import {
   ARENA_LAYOUTS,
   DEFAULT_ARENA,
+  CRATE_HEALTH,
+  firstBlockingBlock,
   firstBlockingFraction,
+  TILE,
   findSpawnPositions,
   layoutForSeed,
   rangeScaleForOpenness,
@@ -69,7 +72,23 @@ import {
 import { LOADOUTS, resolveLoadout, type Loadout } from "./loadouts";
 import { getWavePlan, MAX_WAVES, type WavePlan } from "./progression";
 import { createRandomSeed, createRng, normalizeSeed, type Rng } from "./rng";
-import type { AimMode, AgentState, BotKind, Bullet, DifficultyId, PendingSpawn, PlayerTelemetry, Rect, RunStats, Shell, SimEvent, Vec2 } from "./types";
+export { CRATE_HEALTH } from "./arena";
+import type {
+  AimMode,
+  AgentState,
+  BotKind,
+  Bullet,
+  DifficultyId,
+  PendingSpawn,
+  BlockRect,
+  Pickup,
+  PlayerTelemetry,
+  Rect,
+  RunStats,
+  Shell,
+  SimEvent,
+  Vec2
+} from "./types";
 
 export type SimPhase = "standby" | "running" | "victory" | "defeat";
 export type WaveState = "idle" | "cleared" | "telegraph" | "active";
@@ -133,8 +152,17 @@ export interface World {
    * Blocks that occupy this arena. Every geometry query (movement sweeps, line
    * of sight, spawn clearance) reads this list rather than the module constant,
    * so a run plays in one fixed layout from start to finish.
+   *
+   * These are *copies* of the layout's blocks, because crates carry the damage
+   * this run has done to them and a shared array would leak that into every
+   * other world built from the same arena.
    */
-  obstacles: Rect[];
+  obstacles: BlockRect[];
+  /** Where crates used to stand, so the floor can remember them. */
+  brokenCrates: Rect[];
+  /** Supplies dropped by broken crates. */
+  pickups: Pickup[];
+  nextPickupId: number;
   /** Which authored arena this run is playing in. */
   arena: ArenaLayoutId;
   /** Human-readable name of the current layout, for the HUD. */
@@ -201,11 +229,21 @@ const MAX_SPAWN_RELOCATIONS = 4;
 /** How long a bot commits to an orbit side once it picks one. */
 const STRAFE_HOLD = 0.7;
 
+/** Health a medkit restores when the operative walks over it. */
+export const MEDKIT_HEAL = 26;
+/** How long a supply waits on the floor before the arena takes it back. */
+export const PICKUP_LIFE = 26;
+/** How close the operative has to get to a supply to take it. */
+export const PICKUP_RADIUS = 20;
+
 export function createWorld(options: CreateWorldOptions = {}): World {
   const seedValue = options.seed ?? createRandomSeed();
   const world: World = {
     seed: 1,
-    obstacles: ARENA_LAYOUTS[DEFAULT_ARENA].obstacles,
+    obstacles: copyBlocks(DEFAULT_ARENA),
+    brokenCrates: [],
+    pickups: [],
+    nextPickupId: 1,
     arena: DEFAULT_ARENA,
     arenaName: ARENA_LAYOUTS[DEFAULT_ARENA].name,
     bushes: ARENA_LAYOUTS[DEFAULT_ARENA].bushes,
@@ -289,14 +327,81 @@ function opennessOf(world: World): number {
 }
 
 /** Points a world at the layout its seed names, and keeps the HUD name in sync. */
+/**
+ * The world's own copy of an arena's blocks.
+ *
+ * The layout itself is module-level and shared by every world that uses it, so
+ * the copies are what a run is allowed to damage: a crate broken in one run must
+ * not be missing from the next one, or from the layout the tests read.
+ */
+function copyBlocks(layoutId: ArenaLayoutId): BlockRect[] {
+  return ARENA_LAYOUTS[layoutId].obstacles.map((block) => ({ ...block }));
+}
+
 function applyArenaLayoutForSeed(world: World): void {
   const layoutId = layoutForSeed(world.seed);
   const layout = ARENA_LAYOUTS[layoutId];
   world.arena = layoutId;
-  world.obstacles = layout.obstacles;
+  world.obstacles = copyBlocks(layoutId);
+  world.brokenCrates = [];
+  world.pickups = [];
+  world.nextPickupId = 1;
+  // Bushes and water never change during a run, so they stay shared.
   world.bushes = layout.bushes;
   world.water = layout.water;
   world.arenaName = layout.name;
+}
+
+/**
+ * Cracks a crate, or bursts it open and leaves a supply on the floor.
+ *
+ * Crates are the only cover that can be taken away, which is what lets the arena
+ * change shape over a run: a lane that is shut on wave one can be open by wave
+ * four, and the supply inside is the reason to spend the rounds on opening it.
+ * The drop is chosen from where the crate stood rather than from the order they
+ * break in, so a given arena always pays out the same way.
+ */
+function damageCrate(world: World, block: BlockRect, amount: number): void {
+  const maxHealth = block.maxHealth ?? CRATE_HEALTH;
+  const health = Math.max(0, (block.health ?? maxHealth) - amount);
+  block.health = health;
+  const centre = { x: block.x + block.w / 2, y: block.y + block.h / 2 };
+  if (health > 0) {
+    world.events.push({ type: "crate-hit", position: centre, health, maxHealth });
+    return;
+  }
+  const index = world.obstacles.indexOf(block);
+  if (index >= 0) world.obstacles.splice(index, 1);
+  world.brokenCrates.push({ ...block });
+  const stagger = Math.round(centre.x / TILE) + Math.round(centre.y / TILE);
+  const kind = stagger % 2 === 0 ? "medkit" : "charge";
+  world.pickups.push({ id: world.nextPickupId, kind, position: centre, life: PICKUP_LIFE });
+  world.nextPickupId += 1;
+  world.events.push({ type: "crate-broken", position: centre, rect: { ...block }, drop: kind });
+  world.shake = Math.max(world.shake, 4.5);
+}
+
+/**
+ * Supplies on the floor: they wait, they blink, and the operative takes them by
+ * walking over them. A medkit heals; a charge hands the dash straight back.
+ */
+function updatePickups(world: World, dt: number): void {
+  const player = world.player;
+  const reach = PLAYER_RADIUS + PICKUP_RADIUS;
+  for (let i = world.pickups.length - 1; i >= 0; i -= 1) {
+    const pickup = world.pickups[i];
+    pickup.life -= dt;
+    const gap = Math.hypot(pickup.position.x - player.position.x, pickup.position.y - player.position.y);
+    if (pickup.life > 0 && gap <= reach) {
+      const heals = pickup.kind === "medkit" ? Math.min(MEDKIT_HEAL, player.maxHealth - player.health) : 0;
+      if (pickup.kind === "medkit") player.health = Math.min(player.maxHealth, player.health + MEDKIT_HEAL);
+      else player.dashCooldown = 0;
+      world.pickups.splice(i, 1);
+      world.events.push({ type: "pickup-collected", kind: pickup.kind, position: { ...pickup.position }, heals });
+      continue;
+    }
+    if (pickup.life <= 0) world.pickups.splice(i, 1);
+  }
 }
 
 /** True when a point sits inside one of the given rects. */
@@ -366,6 +471,9 @@ export function resetWorld(world: World, options: { seed?: number | string; diff
   if (options.difficulty) world.difficulty = options.difficulty;
   world.phase = "running";
   world.elapsed = 0;
+  world.brokenCrates.length = 0;
+  world.pickups.length = 0;
+  world.nextPickupId = 1;
   world.bots.length = 0;
   world.bullets.length = 0;
   world.pendingSpawns.length = 0;
@@ -407,6 +515,7 @@ export function stepWorld(world: World, input: SimInput, dt: number): SimEvent[]
   updatePressure(world, step);
   updateBots(world, step);
   updateBullets(world, step);
+  updatePickups(world, step);
   updateShells(world, step);
   updateSpawns(world, step);
   updateWaveState(world, step);
@@ -1480,7 +1589,14 @@ function updateBullets(world: World, dt: number): void {
       world.bullets.splice(i, 1);
       continue;
     }
-    if (segmentBlocked(previous, bullet.position, world.obstacles)) {
+    const blocking = firstBlockingBlock(previous, bullet.position, world.obstacles);
+    if (blocking) {
+      // Only the operative's rounds take cover apart. A hostile's round stops at
+      // a crate the same as at a wall - otherwise a long firefight would quietly
+      // dismantle the arena the player is fighting from.
+      if (bullet.owner === "player" && blocking.kind === "crate") {
+        damageCrate(world, blocking, bullet.damage);
+      }
       world.bullets.splice(i, 1);
       continue;
     }

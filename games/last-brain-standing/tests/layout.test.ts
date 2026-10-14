@@ -143,7 +143,11 @@ describe("arena layouts", () => {
   it("gives a world the layout its seed names, through a reset and a label round trip", () => {
     const world = createWorld({ seed: "layout-world" });
     const id = layoutForSeed(world.seed);
-    expect(world.obstacles).toBe(ARENA_LAYOUTS[id].obstacles);
+    // The blocks match the authored layout, but they are the world's own copies:
+    // crates carry the damage they have taken, and a shared array would carry it
+    // into every other run built from the same arena.
+    expect(world.obstacles).toEqual(ARENA_LAYOUTS[id].obstacles);
+    expect(world.obstacles).not.toBe(ARENA_LAYOUTS[id].obstacles);
     expect(world.arenaName).toBe(ARENA_LAYOUTS[id].name);
 
     // Restarting with the same seed keeps the same arena.
@@ -161,7 +165,7 @@ describe("arena layouts", () => {
     // is one of the real ones.
     const other = createWorld({ seed: "some-other-run" });
     expect(ids).toContain(layoutForSeed(other.seed));
-    expect(other.obstacles).toBe(ARENA_LAYOUTS[layoutForSeed(other.seed)].obstacles);
+    expect(other.obstacles).toEqual(ARENA_LAYOUTS[layoutForSeed(other.seed)].obstacles);
   });
 
   it("describes how open each layout is, and scales hostile ranges sanely", () => {

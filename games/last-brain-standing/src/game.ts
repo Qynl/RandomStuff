@@ -1,6 +1,6 @@
 import { AIM_SETTLED_ERROR, BOT_KINDS, BOT_PROFILES, emptyKindTotals } from "./ai";
 import { aimFor, attackFor, PROFILE_PITCH, volleyFor } from "./signatures";
-import { ARENA_LAYOUTS, firstBlockingFraction, layoutForSeed, rangeScaleForOpenness, TILE, VIEW, WORLD } from "./arena";
+import { ARENA_LAYOUTS, CRATE_HEALTH, firstBlockingBlock, firstBlockingFraction, layoutForSeed, rangeScaleForOpenness, TILE, VIEW, WORLD } from "./arena";
 import { BIOMES, BOT_ART, BULLET, CLASS_ART, frameOf, PLAYER_ART, STATUS, TELEGRAPH, TELEGRAPH_STYLE, type BiomeSkin } from "./art";
 import { SoundEngine, type SoundName } from "./audio";
 import { BOT_RADIUS, DIFFICULTIES, MAX_PARTICLES, PLAYER_MAX_HEALTH, PLAYER_RADIUS } from "./constants";
@@ -54,12 +54,12 @@ import {
 } from "./sim";
 import { dashChargeFraction, isEditableTarget, keyboardMoveVector, mergeMoveInputs, screenToWorld } from "./input";
 import { createRandomSeed, createRng, formatSeed } from "./rng";
-import type { AgentState, AimMode, BotKind, DifficultyId, Rect, RunStats, Vec2 } from "./types";
+import type { AgentState, AimMode, BlockRect, BotKind, DifficultyId, Rect, RunStats, Vec2 } from "./types";
 import type { PlayerState } from "./sim";
 
 /** A layout rect may be tagged as a crate; walls are the untagged default. */
-function isCrateBlock(block: Rect): boolean {
-  return (block as { kind?: string }).kind === "crate";
+function isCrateBlock(block: BlockRect): boolean {
+  return block.kind === "crate";
 }
 
 /** Seconds of standing still a Marksman needs: mirrored from the simulation. */
@@ -1091,6 +1091,48 @@ export class ArenaGame {
           this.shake = Math.max(this.shake, 3);
           break;
         }
+        case "crate-hit": {
+          // Splinters off the face, and marks in the wood as it gives.
+          this.burst(event.position, "#b08a56", 3, 0.2, 90);
+          this.spawnDecal(event.position, 3, "player");
+          break;
+        }
+        case "crate-broken": {
+          // The lane just opened: make sure nobody missed it.
+          this.burst(event.position, "#b08a56", 16, 0.42, 190);
+          this.burst(event.position, "#5d4526", 8, 0.5, 130);
+          this.pulses.push({ position: { ...event.position }, radius: 27, life: 0.34, maxLife: 0.34, color: "#c9a877" });
+          this.spawnDecal(event.position, 10, "player");
+          this.shake = Math.max(this.shake, 5);
+          this.playSound("impact", 0.9, 0.8);
+          this.pushFeed(
+            event.drop === "medkit" ? "Crate open — medkit on the floor." : "Crate open — dash charge on the floor.",
+            "good"
+          );
+          break;
+        }
+        case "pickup-collected": {
+          const medkit = event.kind === "medkit";
+          this.texts.push({
+            position: { x: event.position.x, y: event.position.y - 18 },
+            text: medkit ? (event.heals > 0 ? `+${event.heals} HP` : "ALREADY WHOLE") : "DASH READY",
+            life: 0.8,
+            maxLife: 0.8,
+            color: medkit ? "#b7d9a8" : "#f0d9a4",
+            size: 12
+          });
+          this.burst(event.position, medkit ? "#b7d9a8" : "#f0d9a4", 10, 0.3, 140);
+          this.pulses.push({
+            position: { ...event.position },
+            radius: 20,
+            life: 0.3,
+            maxLife: 0.3,
+            color: medkit ? "#b7d9a8" : "#f0d9a4"
+          });
+          this.playSound("contract", 0.7);
+          this.pushFeed(medkit ? `Medkit taken: +${event.heals} health.` : "Dash charge taken: your dash is back.", "good");
+          break;
+        }
         case "bot-fired": {
           // A spray is many rounds a second: one small puff each, and only
           // every other round gets a cue so the mix does not turn to mud.
@@ -1723,8 +1765,10 @@ export class ArenaGame {
     try {
       this.drawBackground();
       this.drawFloorDecals();
+      this.drawBrokenCrates();
       this.drawBushBeds();
       this.drawObstacles();
+      this.drawPickups();
       this.drawSpawnWarnings();
       this.drawDashTrail();
       this.drawAimLine();
@@ -1912,15 +1956,15 @@ export class ArenaGame {
     ctx.globalAlpha = 0.5;
     ctx.fillStyle = "#1b1f24";
     ctx.fillRect(x, y, w, h);
-    // Terrain, in the arena's own tints.
-    const layout = ARENA_LAYOUTS[this.world.arena];
+    // Terrain, in the arena's own tints - read from the world rather than the
+    // layout, so a crate that has been shot apart opens up on the map too.
     ctx.globalAlpha = 0.85;
     ctx.fillStyle = this.skin.wall.top;
-    for (const block of layout.obstacles) ctx.fillRect(x + block.x * scale, y + block.y * scale, Math.max(1.5, block.w * scale), Math.max(1.5, block.h * scale));
+    for (const block of this.world.obstacles) ctx.fillRect(x + block.x * scale, y + block.y * scale, Math.max(1.5, block.w * scale), Math.max(1.5, block.h * scale));
     ctx.fillStyle = this.skin.bush.leaf;
-    for (const bush of layout.bushes) ctx.fillRect(x + bush.x * scale, y + bush.y * scale, bush.w * scale, bush.h * scale);
+    for (const bush of this.world.bushes) ctx.fillRect(x + bush.x * scale, y + bush.y * scale, bush.w * scale, bush.h * scale);
     ctx.fillStyle = this.skin.water.fill;
-    for (const pool of layout.water) ctx.fillRect(x + pool.x * scale, y + pool.y * scale, pool.w * scale, pool.h * scale);
+    for (const pool of this.world.water) ctx.fillRect(x + pool.x * scale, y + pool.y * scale, pool.w * scale, pool.h * scale);
     // The camera window, so the player can see where the edges are.
     ctx.globalAlpha = 0.5;
     ctx.strokeStyle = "rgba(233, 227, 214, 0.5)";
@@ -1933,7 +1977,7 @@ export class ArenaGame {
     );
     // Crates, so the map reads as stock rather than as wall.
     ctx.fillStyle = this.skin.crate.top;
-    for (const block of layout.obstacles) {
+    for (const block of this.world.obstacles) {
       if (!isCrateBlock(block)) continue;
       ctx.fillRect(x + block.x * scale, y + block.y * scale, Math.max(1.5, block.w * scale), Math.max(1.5, block.h * scale));
     }
@@ -1943,6 +1987,10 @@ export class ArenaGame {
       if (!bot.alive) continue;
       if (pointInRects(bot.position, this.world.bushes)) continue;
       dot(bot.position.x, bot.position.y, BOT_ART[bot.kind].accent, 4);
+    }
+    // Supplies, so a drop is worth crossing the arena for.
+    for (const pickup of this.world.pickups) {
+      dot(pickup.position.x, pickup.position.y, pickup.kind === "medkit" ? "#9fc48f" : "#e0c07a", 3);
     }
     dot(this.world.player.position.x, this.world.player.position.y, "#f4efe2", 5);
     ctx.globalAlpha = 0.9;
@@ -2265,7 +2313,7 @@ export class ArenaGame {
    * on a floor plan; they differ in how they are painted, which is what tells the
    * player a wall will stop a slug and a crate is worth shooting.
    */
-  private paintBlock(ctx: CanvasRenderingContext2D, block: Rect, crate: boolean): void {
+  private paintBlock(ctx: CanvasRenderingContext2D, block: BlockRect, crate: boolean): void {
     const skin = this.skin;
     const layout = ARENA_LAYOUTS[this.world.arena];
     const lift = crate ? 5 : 7;
@@ -2323,6 +2371,36 @@ export class ArenaGame {
       ctx.strokeStyle = "rgba(8, 6, 4, 0.75)";
       ctx.lineWidth = 1.4;
       ctx.strokeRect(block.x + 0.5, block.y + 0.5, block.w - 1, block.h - 1);
+
+      // Damage is visible: a crate that is nearly open reads as nearly open, so
+      // the player can tell which lane is about to stop being a lane.
+      const maxHealth = block.maxHealth ?? CRATE_HEALTH;
+      const health = block.health ?? maxHealth;
+      const damage = clamp(1 - health / maxHealth, 0, 1);
+      if (damage > 0.01) {
+        const crackSeed = createRng(`crack-${Math.round(block.x)}-${Math.round(block.y)}`);
+        ctx.strokeStyle = `rgba(18, 11, 5, ${0.3 + damage * 0.5})`;
+        ctx.lineWidth = 1 + damage * 0.7;
+        for (let i = 0; i <= Math.floor(damage * 3.99); i += 1) {
+          let cx = crackSeed.range(block.x + 5, block.x + block.w - 5);
+          let cy = block.y + 4;
+          ctx.beginPath();
+          ctx.moveTo(cx, cy);
+          for (let step = 0; step < 4; step += 1) {
+            cx = clamp(cx + crackSeed.range(-5, 5), block.x + 3, block.x + block.w - 3);
+            cy += (block.h - 8) / 4;
+            ctx.lineTo(cx, cy);
+          }
+          ctx.stroke();
+        }
+        // The lid lifts as it comes apart.
+        ctx.strokeStyle = `rgba(236, 214, 168, ${0.1 + damage * 0.3})`;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(block.x + 4, block.y + 3 + damage * 2);
+        ctx.lineTo(block.x + block.w - 4, block.y + 3);
+        ctx.stroke();
+      }
       return;
     }
 
@@ -2394,6 +2472,104 @@ export class ArenaGame {
     for (const block of this.world.obstacles) {
       if (!isCrateBlock(block)) continue;
       this.paintBlock(ctx, block, true);
+    }
+  }
+
+  /**
+   * Where a crate used to stand: a stain, splinters, and the nails it left.
+   *
+   * Crates are the arena's one piece of consumable cover, and this is the receipt
+   * - a lane that is open now should look like it was opened on purpose.
+   */
+  private drawBrokenCrates(): void {
+    const ctx = this.ctx;
+    const skin = this.skin;
+    for (const rect of this.world.brokenCrates) {
+      const seed = createRng(`debris-${Math.round(rect.x)}-${Math.round(rect.y)}`);
+      ctx.save();
+      // The scorched footprint, inset so the old outline still reads.
+      ctx.globalAlpha = 0.42;
+      ctx.fillStyle = "#141210";
+      ctx.beginPath();
+      ctx.moveTo(rect.x + 3, rect.y + 4);
+      ctx.lineTo(rect.x + rect.w - 4, rect.y + 2);
+      ctx.lineTo(rect.x + rect.w - 1, rect.y + rect.h - 3);
+      ctx.lineTo(rect.x + 5, rect.y + rect.h - 1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      // Planks that went elsewhere.
+      for (let i = 0; i < 7; i += 1) {
+        const px = seed.range(rect.x - 6, rect.x + rect.w + 6);
+        const py = seed.range(rect.y - 6, rect.y + rect.h + 6);
+        const angle = seed.range(0, Math.PI);
+        const length = seed.range(5, 13);
+        ctx.save();
+        ctx.translate(px, py);
+        ctx.rotate(angle);
+        ctx.fillStyle = i % 3 === 0 ? skin.crate.face : skin.crate.top;
+        ctx.globalAlpha = 0.85;
+        ctx.fillRect(-length / 2, -1.5, length, 3);
+        ctx.restore();
+      }
+      // The nails that held it, still where they landed.
+      ctx.fillStyle = "rgba(180, 176, 168, 0.5)";
+      for (let i = 0; i < 5; i += 1) {
+        ctx.fillRect(seed.range(rect.x - 4, rect.x + rect.w), seed.range(rect.y - 4, rect.y + rect.h), 2, 2);
+      }
+      ctx.restore();
+    }
+  }
+
+  /**
+   * Supplies on the floor: a small crate-box with the kind's mark on it.
+   *
+   * They bob, they blink out as the arena takes them back, and they are drawn
+   * over the floor but under the actors, so the operative walks over one rather
+   * than behind it.
+   */
+  private drawPickups(): void {
+    const ctx = this.ctx;
+    const time = this.world.elapsed;
+    for (const pickup of this.world.pickups) {
+      const bob = Math.sin(time * 2.6 + pickup.id) * 2.2;
+      // The last four seconds are a blink: a supply never disappears unseen.
+      const fading = pickup.life < 4;
+      const medkit = pickup.kind === "medkit";
+      ctx.save();
+      ctx.globalAlpha = fading ? 0.4 + 0.5 * (0.5 + 0.5 * Math.sin(time * 12)) : 1;
+      ctx.translate(pickup.position.x, pickup.position.y + bob);
+      ctx.fillStyle = "rgba(4, 5, 7, 0.35)";
+      ctx.beginPath();
+      ctx.ellipse(0, 9 - bob, 12, 5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = medkit ? "#4a6a48" : "#6b5a30";
+      ctx.strokeStyle = "rgba(12, 10, 6, 0.75)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.rect(-9, -9, 18, 18);
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = "rgba(238, 228, 206, 0.16)";
+      ctx.fillRect(-9, -9, 18, 4);
+      ctx.strokeStyle = medkit ? "#d3e6c6" : "#f0d9a4";
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      if (medkit) {
+        ctx.moveTo(-4.5, 0.5);
+        ctx.lineTo(4.5, 0.5);
+        ctx.moveTo(0, -4);
+        ctx.lineTo(0, 5);
+      } else {
+        ctx.moveTo(-5, -3);
+        ctx.lineTo(0, 2);
+        ctx.lineTo(5, -3);
+        ctx.moveTo(-5, 1.5);
+        ctx.lineTo(0, 6.5);
+        ctx.lineTo(5, 1.5);
+      }
+      ctx.stroke();
+      ctx.restore();
     }
   }
 
@@ -2555,10 +2731,12 @@ export class ArenaGame {
   private drawAimLine(): void {
     const ctx = this.ctx;
     const player = this.world.player;
-    const blocking = firstBlockingFraction(
-      { x: player.position.x, y: player.position.y },
-      { x: player.position.x + player.aimDirection.x * 900, y: player.position.y + player.aimDirection.y * 900 }
-    );
+    const origin = { x: player.position.x, y: player.position.y };
+    const far = {
+      x: player.position.x + player.aimDirection.x * 900,
+      y: player.position.y + player.aimDirection.y * 900
+    };
+    const blocking = firstBlockingFraction(origin, far, this.world.obstacles);
     const length = blocking === null ? 240 : clamp(blocking * 900, 30, 240);
     ctx.save();
     ctx.setLineDash([4, 9]);
@@ -2568,6 +2746,33 @@ export class ArenaGame {
     ctx.lineTo(player.position.x + player.aimDirection.x * length, player.position.y + player.aimDirection.y * length);
     ctx.stroke();
     ctx.restore();
+
+    // A lane that ends on a crate is a lane the player can open: mark the point
+    // of impact and show how much of the crate is left. Walls get nothing,
+    // because nothing is what happens to a wall.
+    const struck = blocking === null ? null : firstBlockingBlock(origin, far, this.world.obstacles);
+    if (blocking !== null && struck && struck.kind === "crate") {
+      const maxHealth = struck.maxHealth ?? CRATE_HEALTH;
+      const health = clamp((struck.health ?? maxHealth) / maxHealth, 0, 1);
+      ctx.save();
+      ctx.translate(origin.x + player.aimDirection.x * blocking * 900, origin.y + player.aimDirection.y * blocking * 900);
+      ctx.rotate(Math.atan2(player.aimDirection.y, player.aimDirection.x));
+      // A bracketed seam: this face is a fracture line, not a wall.
+      ctx.strokeStyle = "rgba(233, 214, 176, 0.6)";
+      ctx.lineWidth = 1.4;
+      ctx.beginPath();
+      ctx.moveTo(-4, -5);
+      ctx.lineTo(4, -5);
+      ctx.moveTo(-4, 5);
+      ctx.lineTo(4, 5);
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(207, 162, 95, 0.55)";
+      ctx.beginPath();
+      ctx.moveTo(-6, -9.5);
+      ctx.lineTo(-6 + 12 * health, -9.5);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     const assistTarget = this.world.bots.find((bot) => bot.alive && bot.id === this.world.assistTargetId);
     if (assistTarget) {

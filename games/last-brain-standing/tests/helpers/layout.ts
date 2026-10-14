@@ -14,7 +14,9 @@ import type { World } from "../../src/sim";
 export function pinLayout(world: World, id: ArenaLayoutId = "proving"): World {
   const layout = ARENA_LAYOUTS[id];
   world.arena = id;
-  world.obstacles = layout.obstacles;
+  // Copied, exactly as the sim copies them: a test is allowed to shoot a crate
+  // apart, and must not be able to alter the layout every other test reads.
+  world.obstacles = layout.obstacles.map((block) => ({ ...block }));
   world.bushes = layout.bushes;
   world.water = layout.water;
   world.arenaName = layout.name;

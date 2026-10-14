@@ -197,6 +197,19 @@ export interface Rect {
   h: number;
 }
 
+/**
+ * A solid block on the floor plan.
+ *
+ * Walls are permanent and carry no hit points; crates do, because a crate is the
+ * one piece of cover a run is allowed to take away.
+ */
+export interface BlockRect extends Rect {
+  kind?: "wall" | "crate";
+  /** Hit points left. Only written once a crate has actually been hit. */
+  health?: number;
+  maxHealth?: number;
+}
+
 export interface PendingSpawn {
   kind: BotKind;
   position: Vec2;
@@ -226,6 +239,18 @@ export interface RunStats {
   wave: number;
 }
 
+/** What a broken crate leaves on the floor. */
+export type PickupKind = "medkit" | "charge";
+
+/** A supply drop, waiting to be walked over. */
+export interface Pickup {
+  id: number;
+  kind: PickupKind;
+  position: Vec2;
+  /** Seconds left on the floor before the arena takes it back. */
+  life: number;
+}
+
 export type SimEvent =
   | { type: "player-fired"; position: Vec2; direction: Vec2 }
   | { type: "player-dash"; from: Vec2; to: Vec2; blocked: boolean }
@@ -246,6 +271,9 @@ export type SimEvent =
   | { type: "shell-launched"; botId: number; kind: BotKind; from: Vec2; target: Vec2; flight: number; radius: number }
   | { type: "shell-landed"; kind: BotKind; position: Vec2; radius: number }
   | { type: "arena-pressure"; level: number }
+  | { type: "crate-hit"; position: Vec2; health: number; maxHealth: number }
+  | { type: "crate-broken"; position: Vec2; rect: Rect; drop: PickupKind }
+  | { type: "pickup-collected"; kind: PickupKind; position: Vec2; heals: number }
   | { type: "bot-eliminated"; botId: number; kind: BotKind; position: Vec2; heals: number; kills: number; interrupted: boolean }
   | { type: "spawn-warning"; kind: BotKind; position: Vec2; delay: number }
   | { type: "bot-spawned"; botId: number; kind: BotKind; position: Vec2 }

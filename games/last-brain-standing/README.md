@@ -74,18 +74,50 @@ Every hostile shot is preceded by a visible wind-up ring in the profile's color;
 
 ## Arenas
 
-There are four hand-placed arena layouts, and the seed decides which one a run plays in:
+Six arenas are authored as tile maps and mirrored into four quadrants, so each one is
+hand-made where it matters and symmetric where that is fairer. The seed decides which one a
+run plays in, and the arena is part of what a run code replays.
 
-| Layout | Shape | What it changes |
-|---|---|---|
-| **QUADRANT** | Four corner blocks with a block in the middle | Balanced: cover in the corners, a contested centre |
-| **LANES** | Four long walls with offset gaps plus a centre slab | Continuous cover; rewards route planning over open-field strafing |
-| **PILLARS** | Six small pillars spread over the arena | Short sight lines everywhere; hurts the long-range flanker |
-| **DIAMOND** | A stepped diamond around the middle | The centre is strong but every long diagonal is broken |
+| Arena | Biome | Shape | What it changes |
+|---|---|---|---|
+| **FOUNDRY** | foundry | Four machine rooms with doorways | Fight through a bay, or go around and come in behind |
+| **CROSSROADS** | quarry | Long walls with gates punched through them | Every long sight line ends at a doorway |
+| **GARDENS** | garden | Hedge blocks and four walled plots | Hedges break every line; the plots break every dash |
+| **GEM MINE** | quarry | Long banks, a wide central yard, ore crates in the corners | The middle is a killing field |
+| **SUNKEN PLAZA** | harbour | Shallow water and a handful of stone blocks | Almost nowhere to hide, and nowhere to run fast |
+| **BONEYARD** | foundry | Scattered cover at every range | Nothing blocks a shot for long, so keep moving |
 
-Each layout also carries an `openness` value, and hostiles scale the ring they try to hold by it (62%-100% of their profile range): in a room full of cover a wide orbit is impossible, so the Flanker tightens up instead of walking into blocks trying to regain a range the arena cannot give it.
+The arena is **1500×1100** — two and a half screens — and the camera follows the operative,
+leaning the way they are aiming. Hostiles outside the window get an edge marker, and the
+minimap in the corner carries the whole layout: terrain in the arena's own tints, the camera
+window, the operative, hostiles (except the ones in cover) and any supply on the floor.
 
-Layouts are never generated randomly: each one is hand-placed and carries its own guarantees, so the pool cannot produce an unfair arena. They keep the middle connected, leave a clear starting area and block-wide cover that a hostile body actually fits behind, and `tests/layout.test.ts` proves all of that with a flood fill over the free space in every layout. The current arena is named in the run feed, the side panel and the F3 overlay, and its cover is tinted with a layout accent so the arena you are in reads at a glance. Because the choice comes from the seed, it is part of what a run code replays.
+**Four kinds of ground, and they do not all behave the same way:**
+
+| Terrain | Blocks movement | Blocks shots | What it does |
+|---|---|---|---|
+| Walls | yes | yes | Permanent. The map is the map. |
+| Crates | yes | yes | 60 hit points, and only the operative's rounds take them apart. A broken crate opens the lane it was closing and leaves a supply: a medkit (26 health) or a dash charge. |
+| Hedges | no | no | Hide whoever stands inside. Hostile sight cannot see into cover until it is within 170 units, and firing from a hedge gives you away for 1.15s. The HUD reads CONCEALED or EXPOSED. |
+| Water | no | no | Wading costs 22% of your speed, and hides nothing. |
+
+Four biomes skin the floor, the walls, the crates, the hedges and the water (foundry steel,
+quarry rock, garden turf, harbour concrete), and the static half of an arena is baked into
+one offscreen layer per biome, so a map this size costs roughly what the old single screen
+did.
+
+Each layout also carries an `openness` value, and hostiles scale the ring they try to hold
+by it (62%–100% of their profile range): in a room full of cover a wide orbit is impossible,
+so the Flanker tightens up instead of walking into blocks trying to regain a range the arena
+cannot give it.
+
+Layouts are never generated randomly: each one is hand-authored and carries its own
+guarantees. They keep the middle connected, leave the insertion pad clear at the bottom
+centre, and `tests/layout.test.ts` proves all of that with a flood fill over the free space
+in every layout. `tests/terrain.test.ts` pins the terrain rules above, including that a crate
+broken in one run never damages the authored layout it came from. The current arena is named
+in the run feed, the side panel and the F3 overlay, and its cover is tinted with the layout's
+accent so the arena you are in reads at a glance.
 
 ## Difficulty
 
@@ -99,17 +131,20 @@ Measured with the scripted autoplay policy over 24 seeds per difficulty (`tests/
 
 | Level | Wins | Avg kills | Avg waves | Avg damage taken | Wind-up cuts (24 runs) | Fairness issues |
 |---|---|---|---|---|---|---|
-| RECRUIT | 22/24 | 17.6 | 4.6 | 31 | 182 | 0 |
-| STANDARD | 11/24 | 21.8 | 4.1 | 132 | 173 | 0 |
-| VETERAN | 1/24 | 17.3 | 3.2 | 152 | 127 | 0 |
+| RECRUIT | 17/24 | 17.2 | 4.4 | 17 | 181 | 0 |
+| STANDARD | 17/24 | 23.1 | 4.4 | 69 | 194 | 0 |
+| VETERAN | 8/24 | 20.5 | 3.7 | 125 | 161 | 0 |
 
-The same harness flies **every class over the same 24 seeds**, so a class cannot quietly become unplayable (`VANGUARD 11/24 · MARKSMAN 9/24 · GHOST 9/24 · SAPPER 7/24 · BREACHER 3/24 · CINDER 2/24`, each with zero fairness issues). The policy reacts to telegraphs perfectly, so it is a much stronger player than a first-timer: treat these as ordering and sanity figures, not a human win rate. Best score and best eliminations are stored per difficulty.
+The same harness flies **every class over the same 24 seeds**, so a class cannot quietly become unplayable (`VANGUARD 17/24 · SAPPER 20/24 · MARKSMAN 17/24 · BREACHER 13/24 · GHOST 13/24 · CINDER 9/24`, each with zero fairness issues). The policy reacts to telegraphs perfectly, so it is a much stronger player than a first-timer: treat these as ordering and sanity figures, not a human win rate. Best score and best eliminations are stored per difficulty.
 
 ## Look
 
 Grounded industrial test chamber, not a neon vector demo: poured concrete with slab seams, coarser speckle, worn paint and stencilled sector marks; extruded steel crates with lit top plates, ribs, rust streaks and a worn hazard strip; three work lamps laying pools of light on the floor; dust motes drifting through the room; units with contact shadows; tracers instead of glowing bolts; scorch marks that appear where rounds land and fade out over the next half minute.
 
-Every hostile has its own model rather than its own colour: the Hunter is a squat siege mech with skirt plates and a cannon that lights as it charges, the Flanker a light interceptor with swept prongs and a fluttering wing, the Mirror a faceted prism with a narrowing eye and three orbiting shards, the Marksman a lance with a scope bloom, the Cinder a furnace with a maw that opens as it sprays, the Mortar a pod that tips back to lob, the Bulwark a walking wall, the Swarm Cell a cluster of sacs, the Ram a wedge with a plated head, and the Shard a splinter.
+Every hostile has its own model *and its own footprint* rather than its own colour: the
+Marksman is a long low rail, the Bulwark is a slab stood broadside, the Shard is a speck —
+sizes are asserted by measuring the drawn geometry in `tests/hostile-visuals.test.ts`. The
+models are: the Hunter is a squat siege mech with skirt plates and a cannon that lights as it charges, the Flanker a light interceptor with swept prongs and a fluttering wing, the Mirror a faceted prism with a narrowing eye and three orbiting shards, the Marksman a lance with a scope bloom, the Cinder a furnace with a maw that opens as it sprays, the Mortar a pod that tips back to lob, the Bulwark a walking wall, the Swarm Cell a cluster of sacs, the Ram a wedge with a plated head, and the Shard a splinter.
 
 The player is an armoured operative with a visor that lights when a shot is banked and a walk cycle, painted and armed per class — service rifle, scattergun with a brake, scoped rail, carbine, projector with a fuel tank, drum-fed lobber — so the class you picked is the operative on the floor. On the command screen the same figure stands at lobby scale in CSS, with the weapon silhouette of the class that is equipped.
 
@@ -236,7 +271,9 @@ Data flow: `App` owns the React state and mounts `ArenaGame` on the canvas. The 
 | `tests/account.test.ts` | Service records per weapon (accumulate, keep the best, ignore junk input, never pool across weapons) and the badge shelf: nine badges each earned by its own condition, partial progress for locked ones, and progress clamped even for absurd career state. |
 | `tests/archetypes.test.ts` | The behavioural divergence itself: volley geometry per profile, the Hunter's front plating and mid-wind-up aim lock, the Flanker's arc-based hold-fire and dive, the Mirror copying the class you brought, the marksman's aim line, the mortar's lob, the bulwark's shield, the swarm cell's shards, the ram's charge and stagger, the detour thresholds, stall pressure, and a sweep proving each signature fires in real fights and none of them bleeds into another profile. |
 | `tests/artdirection.test.ts` | Every source file is scanned for neon (a colour that is both saturated and bright, with an explicit allow-list) and for any non-zero `shadowBlur`; the detector self-checks against the retired palette so a broken classifier cannot pass the guard. |
-| `tests/layout.test.ts` | Arena layouts: blocks in bounds and non-overlapping, the player's start is free, a flood fill proves no layout seals off a pocket, cover is worth hiding behind, every layout carries a distinct accent and a sane openness, and the seed always picks the same layout (including through a seed-label round trip). |
+| `tests/layout.test.ts` | Arena layouts: blocks in bounds and non-overlapping, the player's start is free, a flood fill proves no layout seals off a pocket, cover is worth hiding behind, every layout carries a distinct accent, openness and biome, and the seed always picks the same layout (including through a seed-label round trip). |
+| `tests/terrain.test.ts` | The ground itself: hedges hide whoever stands in them (and firing gives them away), water costs speed, crates crack and then open the lane and leave a supply, walls never break, hostile fire never dismantles the arena, supplies are walked onto (never magnetised, never taken through a wall), and a run can never damage the authored layout it was built from. |
+| `tests/hostile-visuals.test.ts` | Measured silhouettes: renders one hostile at a time against a canvas that tracks the transform matrix, and asserts the real footprint in world units — ten distinct sizes, the Marksman the longest, the Bulwark the largest, the Shard a speck — plus ten distinct body paints and the marksman's aim-in (the sight opens beside the target, sweeps on, freezes, and the slug leaves down the frozen line, so a sidestep after the freeze is a miss). |
 | `tests/fuzz.test.ts` | Adversarial input sweep: 12 long runs of deliberately awkward input (zero-length aim vectors, dash spam, hard reversals, nonsensical aim points) asserting that vectors stay finite, nobody ends a frame inside geometry, lists stay bounded, and the same input still replays identically. |
 | `tests/audio.test.ts` | Sound engine against a fake `AudioContext`: no graph before a gesture, silent no-op without WebAudio, a broken graph reported once, mute and volume honoured, polyphony capped and voices recycled. |
 | `tests/main.test.ts` | The browser entry point mounts into `#root` and logs nothing on the way up. |
@@ -252,6 +289,9 @@ Data flow: `App` owns the React state and mounts `ArenaGame` on the canvas. The 
 - **No surprise damage.** Every hit has a visible cause: a telegraph ring, a body check, or an explained feed line with the shooter named.
 - **Readable at the smallest sizes.** Every text colour in the panel palette clears WCAG AA (4.5:1) against the panel surfaces, and a test enforces it so the muted greys cannot drift back down.
 - **Failures stay contained.** A drawing fault skips the rest of that frame (reported once in the feed and the console) while the simulation keeps running, and a canvas without a 2D context is replaced by a no-op renderer instead of throwing.
+- **Cover can be taken away, on purpose.** Crates are the only destructible cover, and only
+  the operative's rounds break them: a long firefight never quietly dismantles the arena the
+  player is fighting from.
 - **No spawning on top of the player.** Spawn markers relocate and re-telegraph if the player walks onto them.
 - **Determinism.** All randomness flows through the seeded generator, so runs replay exactly and balance can be measured.
 - **No unavoidable pressure.** Dash carries real invulnerability frames and rounds pass through the player during them. A round that passes through is reported once, with floating feedback, so the skill is taught rather than hidden.
@@ -260,4 +300,4 @@ Data flow: `App` owns the React state and mounts `ArenaGame` on the canvas. The 
 
 - The sandboxed preview environment has no network access, so the optional Google Fonts import degrades to system fonts (by design).
 - No headless browser is available here: runtime behavior is verified with the jsdom harness and the scripted autoplay policy rather than real-device playtests.
-- Veteran is intentionally a wall: the scripted policy clears it roughly one run in twenty-four, and consistently reaches the later waves. The cinder is the hardest class to fly with a scripted kiting policy, which is exactly the class that wants a human's judgement about when to commit.
+- Veteran is the wall: the scripted policy clears it about one run in three while consistently reaching the later waves, and the difficulty table above is the honest ordering - hostiles wind up faster, shoot harder and track better. The cinder is the hardest class to fly with a scripted kiting policy, which is exactly the class that wants a human's judgement about when to commit.

@@ -1,4 +1,4 @@
-import type { Rect, Vec2 } from "./types";
+import type { BlockRect, Rect, Vec2 } from "./types";
 
 export const WORLD = { width: 1500, height: 1100 };
 
@@ -37,9 +37,12 @@ export type ArenaLayoutId = "foundry" | "crossroads" | "gardens" | "mine" | "pla
 /** What a solid tile is made of. Crates are painted as breakable wood. */
 export type ArenaBlockKind = "wall" | "crate";
 
-export interface ArenaBlock extends Rect {
+export interface ArenaBlock extends BlockRect {
   kind: ArenaBlockKind;
 }
+
+/** Hit points a crate starts a run with. */
+export const CRATE_HEALTH = 60;
 
 /** Terrain skins. One per arena family, so the maps do not all look poured. */
 export type BiomeId = "foundry" | "quarry" | "garden" | "harbour";
@@ -143,7 +146,10 @@ function buildLayout(spec: LayoutSpec): ArenaLayout {
     biome: spec.biome,
     obstacles: [
       ...mergeTiles(tiles, "#").map((rect) => ({ ...rect, kind: "wall" as const })),
-      ...mergeTiles(tiles, "c").map((rect) => ({ ...rect, kind: "crate" as const }))
+      // Crates are the one kind of cover that can be shot apart, so they carry
+      // the hit points the world will spend. Walls carry nothing: they are not
+      // going anywhere.
+      ...mergeTiles(tiles, "c").map((rect) => ({ ...rect, kind: "crate" as const, maxHealth: CRATE_HEALTH }))
     ],
     bushes: mergeTiles(tiles, "o"),
     water: mergeTiles(tiles, "~"),
@@ -428,15 +434,35 @@ export function segmentBlocked(from: Vec2, to: Vec2, obstacles: Rect[] = OBSTACL
   return obstacles.some((obstacle) => segmentRectEntryFraction(from, to, obstacle) !== null);
 }
 
-/** Normalised 0..1 distance to the first block along a path, or null when clear. */
-export function firstBlockingFraction(from: Vec2, to: Vec2, obstacles: Rect[] = OBSTACLES): number | null {
-  let best: number | null = null;
+/** The first block a path runs into, and how far along the path it starts. */
+function firstBlockAlong(
+  from: Vec2,
+  to: Vec2,
+  obstacles: readonly BlockRect[]
+): { block: BlockRect; fraction: number } | null {
+  let best: { block: BlockRect; fraction: number } | null = null;
   for (const obstacle of obstacles) {
     const entry = segmentRectEntryFraction(from, to, obstacle);
     if (entry === null) continue;
-    best = best === null ? entry : Math.min(best, entry);
+    if (best === null || entry < best.fraction) best = { block: obstacle, fraction: entry };
   }
   return best;
+}
+
+/** Normalised 0..1 distance to the first block along a path, or null when clear. */
+export function firstBlockingFraction(from: Vec2, to: Vec2, obstacles: readonly BlockRect[] = OBSTACLES): number | null {
+  return firstBlockAlong(from, to, obstacles)?.fraction ?? null;
+}
+
+/**
+ * The block itself, for callers that need to know *what* was hit.
+ *
+ * A round that stops on a crate should be able to say so: crates take damage,
+ * walls do not, and the difference is the whole reason the map has two kinds of
+ * cover on it.
+ */
+export function firstBlockingBlock(from: Vec2, to: Vec2, obstacles: readonly BlockRect[] = OBSTACLES): BlockRect | null {
+  return firstBlockAlong(from, to, obstacles)?.block ?? null;
 }
 
 /** A circle can stand at this point without overlapping walls or blocks. */
