@@ -522,3 +522,8 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .daily-copy strong{font:15px "DM Mono",monospace;letter-spacing:2.4px;color:#f0e6d2}
 .daily-copy small{font:8px "DM Mono",monospace;letter-spacing:1px;color:#94a1ae}
 .daily-play{display:grid;place-items:center;width:30px;height:30px;border-radius:50%;border:1px solid var(--brass);color:var(--brass);font-size:11px;padding-left:2px}
+.loadout-slot{position:absolute;top:6px;right:7px;font:8px "DM Mono",monospace;letter-spacing:1px;color:#8b98a5}
+.home-stage .loadout-card{position:relative}
+.loadout-card:hover .loadout-slot,.loadout-card.selected .loadout-slot{color:#c8b083}
+.loadout-keys{margin:0;font:8px "DM Mono",monospace;letter-spacing:1.6px;color:#8794a1;position:relative;z-index:2}
+.daily-result{color:var(--brass) !important}

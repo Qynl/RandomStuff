@@ -8,6 +8,7 @@ import { WORLD } from "../src/arena";
 import { installFakeCanvasPrototype, installFrameController, installResizeObserver, pointer, pressKey, type FakeCanvas, type FrameController } from "./helpers/fake-dom";
 import { BOT_KINDS } from "../src/ai";
 import { dailySeedLabel } from "../src/rng";
+import { LOADOUT_ORDER } from "../src/loadouts";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -247,6 +248,62 @@ describe("React app shell", () => {
     expect(engine?.getSeedLabel()).toBe(dailySeedLabel(new Date()));
     // And the address bar carries it, so the challenge can be shared.
     expect(window.location.hash).toContain(`seed=${dailySeedLabel(new Date())}`);
+  });
+
+  it("remembers the player's own attempt at today's seed on the card", () => {
+    // Yesterday's run is not today's fight, so it must not be shown as one.
+    localStorage.setItem(
+      "lbs-run-history",
+      JSON.stringify([
+        { seed: "000001", difficulty: "standard", score: 3120, kills: 14, victory: false, elapsed: 92, arenaName: "Foundry" }
+      ])
+    );
+    remount();
+    expect(container.querySelector(".daily-result")).toBeNull();
+
+    localStorage.setItem(
+      "lbs-run-history",
+      JSON.stringify([
+        {
+          seed: dailySeedLabel(new Date()),
+          difficulty: "standard",
+          score: 5120,
+          kills: 22,
+          victory: true,
+          elapsed: 148,
+          arenaName: "Foundry"
+        }
+      ])
+    );
+    remount();
+    const result = container.querySelector(".daily-result");
+    expect(result?.textContent).toContain("5120");
+    expect(result?.textContent).toContain("CLEARED");
+  });
+
+  it("swaps class from the keyboard, one key per class", () => {
+    expect(container.querySelectorAll(".loadout-slot").length).toBe(LOADOUT_ORDER.length);
+    // Slot 5 is the cinder: the ribbon numbers itself and the key matches it.
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "5" }));
+    });
+    advance(3);
+    expect(container.querySelector('.loadout-card[aria-pressed="true"]')?.textContent).toContain("CINDER");
+    expect(container.querySelector('.operator-figure[data-class="cinder"]')).toBeTruthy();
+    // A digit with no class behind it is ignored rather than clamped.
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "9" }));
+    });
+    advance(3);
+    expect(container.querySelector('.loadout-card[aria-pressed="true"]')?.textContent).toContain("CINDER");
+    // And typing into the seed field is not a class change.
+    const field = container.querySelector("#seed-input") as HTMLInputElement;
+    field.focus();
+    act(() => {
+      field.dispatchEvent(new KeyboardEvent("keydown", { key: "1", bubbles: true }));
+    });
+    advance(3);
+    expect(container.querySelector('.loadout-card[aria-pressed="true"]')?.textContent).toContain("CINDER");
   });
 
   it("moves between the lobby, the roster sheet, the arena and the profile", () => {

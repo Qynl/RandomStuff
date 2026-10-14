@@ -284,6 +284,23 @@ export default function App({ onGameReady }: AppProps = {}) {
     () => (seedInput.trim().length > 0 ? layoutForSeed(normalizeSeed(seedInput)) : null),
     [seedInput]
   );
+  // Number keys swap class on the command screen: the ribbon numbers itself, so
+  // the fastest path to "the flamethrower this time" is one keystroke.
+  useEffect(() => {
+    if (screen !== "home") return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey || event.repeat) return;
+      const target = event.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT")) return;
+      const slot = Number.parseInt(event.key, 10);
+      if (!Number.isFinite(slot) || slot < 1 || slot > LOADOUT_ORDER.length) return;
+      event.preventDefault();
+      chooseLoadout(LOADOUT_ORDER[slot - 1]);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [screen, chooseLoadout]);
+
   const openProfile = useCallback((from: Exclude<Screen, "profile">) => {
     setProfileReturn(from);
     setScreen("profile");

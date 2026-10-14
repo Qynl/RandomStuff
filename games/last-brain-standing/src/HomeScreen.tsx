@@ -97,6 +97,8 @@ export default function HomeScreen({
   const today = new Date();
   const daily = dailySeedLabel(today);
   const dailyArena = ARENA_LAYOUTS[layoutForSeed(dailySeed(today))].name;
+  // The account's own attempt at today's fight, if it has one.
+  const dailyRun = recent.find((run) => run.seed === daily) ?? null;
   const badgesEarned = career?.badgesEarned ?? 0;
   const badgeTotal = career?.badges.length ?? 0;
 
@@ -178,7 +180,7 @@ export default function HomeScreen({
           </div>
 
           <div className="loadout-row" role="group" aria-label="Operative class">
-            {LOADOUT_ORDER.map((id) => {
+            {LOADOUT_ORDER.map((id, index) => {
               const weapon = LOADOUTS[id];
               const selected = loadout === id;
               return (
@@ -190,6 +192,7 @@ export default function HomeScreen({
                   title={`${weapon.counter} ${weapon.traitName}: ${weapon.traitRule}`}
                   onClick={() => onChooseLoadout(id)}
                 >
+                  <span className="loadout-slot" aria-hidden="true">{index + 1}</span>
                   <span className="loadout-kind">{weapon.kind}</span>
                   <strong>{weapon.name}</strong>
                   <small>{weapon.tagline}</small>
@@ -203,6 +206,9 @@ export default function HomeScreen({
           <p className="loadout-hint">
             {active.counter} <b>{active.traitName}:</b> {active.traitRule}
           </p>
+          <p className="loadout-keys" aria-hidden="true">
+            PRESS 1–{LOADOUT_ORDER.length} TO SWAP CLASS
+          </p>
 
           <div className="deploy-block">
             <button type="button" className="daily-card" onClick={() => onStartSeed(daily)}>
@@ -212,6 +218,11 @@ export default function HomeScreen({
                 <small>
                   {dailyArena} · ONE ARENA, ONE FIGHT, EVERYONE
                 </small>
+                {dailyRun ? (
+                  <small className="daily-result">
+                    YOUR RUN: {dailyRun.score} · {dailyRun.victory ? "CLEARED" : "TERMINATED"}
+                  </small>
+                ) : null}
               </span>
               <span className="daily-play" aria-hidden="true">▶</span>
             </button>
