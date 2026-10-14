@@ -56,6 +56,7 @@ Do **not** add new game modes or lots of content. First make the current combat 
 - Projectile collision now sweeps the bullet path for the frame instead of checking only the endpoint. This is intended to stop fast bullets skipping over targets between frames.
 - `src/arena.ts` exports `distanceToSegment` and `segmentHitsCircle`; `tests/arena.test.ts` covers geometry, arena bounds, line-of-sight, swept hits, and near-misses.
 - These changes have been committed, but **their tests/build have not been confirmed yet**. Do not assume they pass.
+- Wave progression now ends after wave five with a victory overlay instead of endlessly spawning another wave labelled 05. The pure rules live in `src/progression.ts` and are covered by `tests/progression.test.ts`.
 
 ## Immediate task
-First run `npm install`, `npm test`, and `npm run build` against the current branch state. Fix any failures before adding features. Then inspect the new swept projectile collision and React cleanup carefully, add any missing regression tests, and confirm the changes behave correctly. Only after that passes should you choose the next single highest-impact improvement. Do not claim the commands or a browser playtest ran unless you actually ran them.
+First run `npm install`, `npm test`, and `npm run build` against the current branch state. Fix any failures before adding features. Then inspect the swept projectile collision, React cleanup, and final-wave victory path carefully. Run the complete tests/build, fix any failures, and confirm the changes behave correctly. Only after that passes should you choose the next single highest-impact improvement. Do not claim the commands or a browser playtest ran unless you actually ran them.
