@@ -139,6 +139,12 @@ interface LayoutSpec {
 }
 
 function buildLayout(spec: LayoutSpec): ArenaLayout {
+  // The quadrant is mirrored into the whole arena, so a mistyped row would move
+  // cover to the wrong place in four quadrants at once. Fail loudly instead.
+  const width = spec.quadrant[0]?.length ?? 0;
+  if (spec.quadrant.length !== 11 || spec.quadrant.some((row) => row.length !== width)) {
+    throw new Error(`${spec.name} must be authored as a full rectangular quadrant`);
+  }
   const tiles = buildTiles(spec.quadrant);
   return {
     name: spec.name,
@@ -162,21 +168,21 @@ function buildLayout(spec: LayoutSpec): ArenaLayout {
 export const ARENA_LAYOUTS: Record<ArenaLayoutId, ArenaLayout> = {
   foundry: buildLayout({
     name: "FOUNDRY",
-    blurb: "Four machine rooms with doorways. Fight through a bay, or go around and come in behind.",
+    blurb: "Four machine housings and ore crates, with broad lanes between the bays.",
     biome: "foundry",
     openness: 0.55,
     accent: "rgba(93, 131, 161, 0.5)",
     accentSoft: "rgba(255, 180, 84, 0.13)",
     quadrant: [
       "...............",
-      "...#####.......",
-      "...#.....#.....",
-      "...#..c..#.....",
-      "...#.....#.....",
-      "...###.###.....",
+      "...###.........",
+      "...#...........",
+      "......c........",
       "...............",
-      "....oo....c....",
-      "....oo....#....",
+      ".........###...",
+      ".........#.....",
+      "..oo...........",
+      "..oo....c......",
       "...............",
       "..............."
     ]
@@ -204,23 +210,23 @@ export const ARENA_LAYOUTS: Record<ArenaLayoutId, ArenaLayout> = {
   }),
   gardens: buildLayout({
     name: "GARDENS",
-    blurb: "Hedge blocks and four walled plots. Bushes break every line; the plots break every dash.",
+    blurb: "Hedge blocks and low planters: hedges break every line, planters break every dash.",
     biome: "garden",
     openness: 0.5,
     accent: "rgba(120, 165, 150, 0.5)",
     accentSoft: "rgba(128, 232, 196, 0.12)",
     quadrant: [
       "...............",
-      "..ooo......ooo.",
-      "..ooo......ooo.",
-      ".....##.####...",
-      ".....##.#......",
-      "........#..c...",
-      ".....##.#......",
-      ".....##.####...",
-      "...............",
-      "......oo.......",
-      "......oo......."
+      "...ooo.....ooo.",
+      "...ooo.....ooo.",
+      "........###....",
+      "..###...#......",
+      "..#............",
+      "..#......c.....",
+      "....##....#....",
+      "...........#...",
+      "..oo...........",
+      "..oo..........."
     ]
   }),
   mine: buildLayout({

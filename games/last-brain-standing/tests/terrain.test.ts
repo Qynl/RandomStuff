@@ -342,12 +342,17 @@ describe("cover", () => {
     const first = lob(0.7);
     const hits = first.filter((event) => event.type === "crate-hit");
     expect(hits).toHaveLength(1);
-    expect(hits[0]).toMatchObject({ health: CRATE_HEALTH - 30, maxHealth: CRATE_HEALTH });
+    // A lob cracks cover rather than demolishing it: the burst does less
+    // structural work than it does to a body, so opening a crate at range is a
+    // commitment and not the fastest way to flatten the map.
+    expect(hits[0]).toMatchObject({ maxHealth: CRATE_HEALTH });
+    expect(hits[0].health).toBeLessThan(CRATE_HEALTH);
+    expect(hits[0].health).toBeGreaterThan(CRATE_HEALTH / 2);
     // Only the crate in the ring: a lob is not a map editor.
     expect(world.obstacles).toContain(elsewhere);
 
-    const second = lob(1);
-    expect(second.some((event) => event.type === "crate-broken")).toBe(true);
+    const later = [...lob(1), ...lob(1), ...lob(1)];
+    expect(later.some((event) => event.type === "crate-broken")).toBe(true);
     expect(world.obstacles).not.toContain(target);
     expect(world.pickups).toHaveLength(1);
     // The lane the wall and the crate were closing is the lane the class opens.

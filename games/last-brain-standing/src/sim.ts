@@ -424,6 +424,17 @@ export const BUSH_HIDE_RANGE = 170;
 /** Wading speed while standing in shallow water. Both sides get the same deal. */
 export const WATER_SPEED_SCALE = 0.78;
 
+/**
+ * What a lobbed shell does to a crate, as a share of what it does to a body.
+ *
+ * The sapper's whole promise is that it clears cover, so the shell has to hurt
+ * what it lands among - but a burst that clears a room of hostiles should not
+ * also be the fastest way to demolish the room, or the class stops flying its
+ * weapon and starts farming the map. Cracked cover after the first lob, open
+ * after four, is the trade the class card describes.
+ */
+const SHELL_COVER_SCALE = 0.6;
+
 /** How long firing leaves you lit up for. Shooting from cover is a real choice. */
 export const REVEAL_AFTER_FIRING = 1.15;
 
@@ -1558,7 +1569,7 @@ function updateShells(world: World, dt: number): void {
         const inRing = distance(shell.target, centre);
         if (inRing > shell.radius + half) continue;
         const share = inRing <= shell.radius - falloffWidth ? 1 : Math.max(0.35, (shell.radius + half - inRing) / (falloffWidth + half));
-        damageCrate(world, block, shell.damage * share);
+        damageCrate(world, block, shell.damage * share * SHELL_COVER_SCALE);
       }
       continue;
     }

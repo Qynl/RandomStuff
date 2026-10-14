@@ -80,9 +80,9 @@ run plays in, and the arena is part of what a run code replays.
 
 | Arena | Biome | Shape | What it changes |
 |---|---|---|---|
-| **FOUNDRY** | foundry | Four machine rooms with doorways | Fight through a bay, or go around and come in behind |
+| **FOUNDRY** | foundry | Four machine housings and ore crates | Broad lanes between the bays; go around and come in behind |
 | **CROSSROADS** | quarry | Long walls with gates punched through them | Every long sight line ends at a doorway |
-| **GARDENS** | garden | Hedge blocks and four walled plots | Hedges break every line; the plots break every dash |
+| **GARDENS** | garden | Hedge blocks and low planters | Hedges break every line, planters break every dash |
 | **GEM MINE** | quarry | Long banks, a wide central yard, ore crates in the corners | The middle is a killing field |
 | **SUNKEN PLAZA** | harbour | Shallow water and a handful of stone blocks | Almost nowhere to hide, and nowhere to run fast |
 | **BONEYARD** | foundry | Scattered cover at every range | Nothing blocks a shot for long, so keep moving |
@@ -97,7 +97,7 @@ window, the operative, hostiles (except the ones in cover) and any supply on the
 | Terrain | Blocks movement | Blocks shots | What it does |
 |---|---|---|---|
 | Walls | yes | yes | Permanent. The map is the map. |
-| Crates | yes | yes | 60 hit points, and only the operative's rounds take them apart. A broken crate opens the lane it was closing and leaves a supply: a medkit (26 health) or a dash charge. The Sapper's lob is the shortcut: it flies over the cover in the way and cracks the crates it lands among, so the class that cannot shoot past a crate can open one instead. |
+| Crates | yes | yes | 60 hit points, and only the operative's rounds take them apart. A broken crate opens the lane it was closing and leaves a supply: a medkit (26 health) or a dash charge. The Sapper's lob is the shortcut: it flies over the cover in the way and cracks the crates it lands among - four lobs open one, fired from behind a wall it cannot shoot through - so the class that cannot shoot past a crate can open one instead. |
 | Hedges | no | no | Hide whoever stands inside. Hostile sight cannot see into cover until it is within 170 units, and firing from a hedge gives you away for 1.15s. The HUD reads CONCEALED or EXPOSED. |
 | Water | no | no | Wading costs 22% of your speed, and hides nothing. |
 
@@ -119,6 +119,19 @@ broken in one run never damages the authored layout it came from. The current ar
 in the run feed, the side panel and the F3 overlay, and its cover is tinted with the layout's
 accent so the arena you are in reads at a glance.
 
+`tests/arena-balance.test.ts` flies the scripted policy over eight seeds in every arena and
+measures the geometry, so a map cannot quietly become a walkover or a death trap, and no two
+arenas can collapse into the same place:
+
+| Arena | Sight line | Hard cover | Soft cover | Crates | Wins (8 seeds) |
+|---|---|---|---|---|---|
+| FOUNDRY | 539 u | 6.1% | 2.4% | 8 | 6 |
+| CROSSROADS | 471 u | 9.1% | 2.4% | 4 | 6 |
+| GARDENS | 478 u | 8.5% | 9.4% | 4 | 7 |
+| GEM MINE | 412 u | 12.1% | 2.4% | 4 | 4 |
+| SUNKEN PLAZA | 588 u | 4.2% | 7.3% | 4 | 7 |
+| BONEYARD | 446 u | 9.7% | 2.4% | 4 | 5 |
+
 ## Difficulty
 
 | Level | Wind-up | Fire rate | Damage | Tracking | Wave size |
@@ -131,11 +144,11 @@ Measured with the scripted autoplay policy over 24 seeds per difficulty (`tests/
 
 | Level | Wins | Avg kills | Avg waves | Avg damage taken | Wind-up cuts (24 runs) | Fairness issues |
 |---|---|---|---|---|---|---|
-| RECRUIT | 17/24 | 17.2 | 4.4 | 17 | 181 | 0 |
-| STANDARD | 17/24 | 23.1 | 4.4 | 69 | 194 | 0 |
-| VETERAN | 8/24 | 20.5 | 3.7 | 125 | 161 | 0 |
+| RECRUIT | 19/24 | 17.3 | 4.5 | 17 | 194 | 0 |
+| STANDARD | 19/24 | 23.6 | 4.5 | 71 | 189 | 0 |
+| VETERAN | 10/24 | 21.5 | 4.0 | 131 | 161 | 0 |
 
-The same harness flies **every class over the same 24 seeds**, so a class cannot quietly become unplayable (`VANGUARD 17/24 · SAPPER 22/24 · MARKSMAN 17/24 · BREACHER 13/24 · GHOST 13/24 · CINDER 9/24`, each with zero fairness issues). The policy reacts to telegraphs perfectly, so it is a much stronger player than a first-timer: treat these as ordering and sanity figures, not a human win rate. Best score and best eliminations are stored per difficulty.
+The same harness flies **every class over the same 24 seeds**, so a class cannot quietly become unplayable (`VANGUARD 19/24 · SAPPER 22/24 · MARKSMAN 19/24 · BREACHER 15/24 · GHOST 16/24 · CINDER 9/24`, each with zero fairness issues). The policy reacts to telegraphs perfectly, so it is a much stronger player than a first-timer: treat these as ordering and sanity figures, not a human win rate. Best score and best eliminations are stored per difficulty.
 
 ## Look
 
@@ -300,4 +313,4 @@ Data flow: `App` owns the React state and mounts `ArenaGame` on the canvas. The 
 
 - The sandboxed preview environment has no network access, so the optional Google Fonts import degrades to system fonts (by design).
 - No headless browser is available here: runtime behavior is verified with the jsdom harness and the scripted autoplay policy rather than real-device playtests.
-- Veteran is the wall: the scripted policy clears it about one run in three while consistently reaching the later waves, and the difficulty table above is the honest ordering - hostiles wind up faster, shoot harder and track better. The cinder is the hardest class to fly with a scripted kiting policy, which is exactly the class that wants a human's judgement about when to commit.
+- Veteran is the wall: the scripted policy clears it about four runs in ten while consistently reaching the later waves, and the difficulty table above is the honest ordering - hostiles wind up faster, shoot harder and track better. The cinder is the hardest class to fly with a scripted kiting policy, which is exactly the class that wants a human's judgement about when to commit.
