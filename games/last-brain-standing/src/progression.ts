@@ -9,3 +9,8 @@ export function getNextWave(currentWave: number): number | null {
 export function getWaveSpawnCount(wave: number): number {
   return Math.max(0, Math.min(3 + wave - 1, 6));
 }
+
+/** Percentage filled by the current threat level, clamped to the five-wave run. */
+export function getWaveProgressPercent(wave: number): number {
+  return Math.max(0, Math.min(wave, MAX_WAVES)) / MAX_WAVES * 100;
+}
