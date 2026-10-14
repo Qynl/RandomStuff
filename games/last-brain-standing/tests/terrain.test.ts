@@ -10,6 +10,7 @@ import {
   PICKUP_LIFE,
   PICKUP_RADIUS,
   REVEAL_AFTER_FIRING,
+  setWorldLoadout,
   stepWorld,
   WATER_SPEED_SCALE,
   type SimInput,
@@ -314,5 +315,67 @@ describe("supplies", () => {
     fireAt(world, { x: 900, y: 425 }, 0.2);
     expect(world.pickups).toHaveLength(1);
     expect(world.player.health).toBe(world.player.maxHealth);
+  });
+});
+
+describe("cover", () => {
+  it("is cleared by the sapper's lob, which lands past whatever is in the way", () => {
+    const world = arena([wallBlock(450, 375), crate(495, 375), crate(900, 375)]);
+    // The world owns copies of what it was handed, so hold the copies.
+    const [block, target, elsewhere] = world.obstacles;
+    setWorldLoadout(world, "sapper");
+    world.player.position = { x: 400, y: 400 };
+    // A flat line at the crate is shut: the shell has to go over the wall, and
+    // the wall is the reason the class card promises cleared cover.
+    expect(segmentBlocked({ x: 400, y: 400 }, { x: 520, y: 400 }, world.obstacles)).toBe(true);
+    expect(segmentBlocked({ x: 400, y: 400 }, { x: 520, y: 400 }, [target])).toBe(true);
+
+    // Windows are sized to the lobber: it fires every 0.8s and a shell hangs in
+    // the air for 0.6s, so each window catches exactly one burst.
+    const lob = (seconds: number): ReturnType<typeof stepWorld> => {
+      const events: ReturnType<typeof stepWorld> = [];
+      const input: SimInput = { ...emptyInput(), aim: { x: 520, y: 400 }, firing: true };
+      for (let i = 0; i < Math.round(seconds / STEP); i += 1) events.push(...stepWorld(world, input, STEP));
+      return events;
+    };
+
+    const first = lob(0.7);
+    const hits = first.filter((event) => event.type === "crate-hit");
+    expect(hits).toHaveLength(1);
+    expect(hits[0]).toMatchObject({ health: CRATE_HEALTH - 30, maxHealth: CRATE_HEALTH });
+    // Only the crate in the ring: a lob is not a map editor.
+    expect(world.obstacles).toContain(elsewhere);
+
+    const second = lob(1);
+    expect(second.some((event) => event.type === "crate-broken")).toBe(true);
+    expect(world.obstacles).not.toContain(target);
+    expect(world.pickups).toHaveLength(1);
+    // The lane the wall and the crate were closing is the lane the class opens.
+    expect(segmentBlocked({ x: 400, y: 400 }, { x: 520, y: 400 }, world.obstacles)).toBe(true);
+    expect(segmentBlocked({ x: 400, y: 400 }, { x: 520, y: 400 }, world.obstacles.filter((entry) => entry !== block))).toBe(false);
+  });
+
+  it("is never cleared by a hostile shell", () => {
+    const world = arena([crate(495, 375)]);
+    const [target] = world.obstacles;
+    world.player.position = { x: 400, y: 400 };
+    world.shells.push({
+      position: { x: 900, y: 400 },
+      from: { x: 900, y: 400 },
+      target: { x: 520, y: 400 },
+      flight: 0.4,
+      totalFlight: 0.4,
+      radius: 84,
+      damage: 26,
+      kind: "mortar",
+      botId: -1,
+      owner: "bot"
+    });
+    const events: ReturnType<typeof stepWorld> = [];
+    for (let i = 0; i < Math.round(1 / STEP); i += 1) events.push(...stepWorld(world, emptyInput(), STEP));
+    expect(events.some((event) => event.type === "shell-landed")).toBe(true);
+    expect(events.some((event) => event.type === "crate-hit" || event.type === "crate-broken")).toBe(false);
+    expect(world.obstacles).toContain(target);
+    expect(target.health).toBeUndefined();
   });
 });

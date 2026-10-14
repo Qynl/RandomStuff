@@ -1547,6 +1547,19 @@ function updateShells(world: World, dt: number): void {
         const share = inRing <= shell.radius - falloffWidth ? 1 : Math.max(0.3, (shell.radius - inRing) / falloffWidth);
         damageBot(world, bot, shell.damage * share, shell.target, "shell");
       }
+      // And it clears cover, which is the half of the class card that the walls
+      // would otherwise argue with: the shell does not stop at the crate in its
+      // way, it lands past it and takes the crate with it.
+      for (let index = world.obstacles.length - 1; index >= 0; index -= 1) {
+        const block = world.obstacles[index];
+        if (!block || block.kind !== "crate") continue;
+        const centre = { x: block.x + block.w / 2, y: block.y + block.h / 2 };
+        const half = Math.hypot(block.w, block.h) / 2;
+        const inRing = distance(shell.target, centre);
+        if (inRing > shell.radius + half) continue;
+        const share = inRing <= shell.radius - falloffWidth ? 1 : Math.max(0.35, (shell.radius + half - inRing) / (falloffWidth + half));
+        damageCrate(world, block, shell.damage * share);
+      }
       continue;
     }
 
