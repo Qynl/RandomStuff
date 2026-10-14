@@ -4,8 +4,8 @@ You are continuing an existing browser game, not starting a new generic template
 
 ## Read first
 1. Read this file fully.
-2. Read `README.md`, then inspect `src/game.ts`, `src/ai.ts`, `src/arena.ts`, `src/types.ts`, `src/App.tsx`, `src/style.css`, and `tests/ai.test.ts`.
-3. Work only on branch `game/last-brain-standing`. Do not change or merge into `main`.
+2. Read `README.md`, then inspect `src/sim.ts`, `src/game.ts`, `src/ai.ts`, `src/arena.ts`, `src/types.ts`, `src/App.tsx`, `src/style.css`, and the `tests/` folder.
+3. Work on the branch you were given for the session. Never commit directly to `main` and never merge into it.
 
 ## Game identity
 **Last Brain Standing** is a tight top-down arena combat game. The core hook is that three opponents make meaningfully different decisions:
@@ -16,56 +16,41 @@ You are continuing an existing browser game, not starting a new generic template
 The goal is to make a small game feel polished, readable, fair, responsive, and replayable. Do not inflate scope with shops, inventories, online multiplayer, accounts, huge maps, or filler progression.
 
 ## Stack and boundaries
-- React + TypeScript + Vite.
-- Existing combat simulation/rendering stays in the Canvas engine in `src/game.ts`; React owns the surrounding interface and app lifecycle.
-- Keep the simulation independent from React rendering. Do not call React state updates every animation frame.
+- React + TypeScript + Vite. Tests run on vitest (node by default, jsdom for the runtime and shell tests).
+- The deterministic simulation lives in `src/sim.ts` and is pure: no DOM, no timers, no `Math.random`. `src/game.ts` is the presentation shell (loop, input, canvas, audio, HUD snapshots) and `src/App.tsx` is the React UI.
 - Keep AI decision helpers pure and testable in `src/ai.ts`.
 - No backend and no mandatory external assets/services. Preserve graceful font fallbacks.
 - Keep the existing dark industrial/neon art direction unless a deliberate, cohesive improvement is justified.
 
-## Your first milestone
-Do **not** add new game modes or lots of content. First make the current combat loop demonstrably better:
-1. Run `npm install`, `npm test`, and `npm run build`. Fix real failures before adding features.
-2. Inspect the code and identify the three highest-impact gameplay problems. Do not guess: trace the implementation and, if browser tooling is available, play a run.
-3. Improve one problem at a time. Prioritize responsive controls, fair readable damage, satisfying hit feedback, sensible enemy pressure, and a Mirror that adapts noticeably but not magically.
-4. Add/adjust deterministic unit tests for each AI or gameplay rule that can be tested without a browser.
-5. Verify desktop and narrow-screen layouts; make sure the arena and controls remain usable.
-6. If browser automation is available, launch the game and test start, movement, aim/fire, dash, pause/resume, death/restart, and console errors. If it is not available, say so clearly instead of claiming browser playtesting happened.
-
-## Required workflow for every change
-1. State the player-facing problem and the expected observable behavior.
-2. Make the smallest coherent change.
-3. Add or update a regression test.
-4. Run `npm test` and `npm run build`.
-5. Playtest the changed behavior if browser tooling is available.
-6. Review the diff for accidental scope creep, unused code, unfair AI, accessibility issues, and performance regressions.
-7. Commit a focused change with a clear message. Keep work on this branch.
-
-## Next improvement after verification
-The interface has a narrow-screen layout, but the game is not yet playable on touch-only devices because the core controls require a keyboard and mouse. Once the existing tests/build are green, prioritize a simple, polished mobile control scheme:
-- Left virtual stick for movement; right-side aim/fire control that does not block the arena view.
-- A dedicated dash button with a clear cooldown state.
-- Pointer/touch cancellation must always release held input, and controls must not trigger accidental page scrolling or text selection.
-- Hide or simplify touch controls on desktop; keep keyboard/mouse behavior unchanged.
-- Test small phone-sized viewports and avoid tiny controls or covering the HUD.
-- Add testable input helpers where practical; do not add a gamepad library or external service.
+## Milestones already done
+1. Simulation split from the renderer, seeded RNG, telegraphed combat with cancelled wind-ups, fairness rules (no untelegraphed shots, no shots through walls, no spawns on top of the player, no unexplained damage), body-check knockback, aim assist, and touch controls.
+2. A balance sweep (`tests/balance.test.ts`) with a scripted autoplay policy, runtime and React-shell test suites (jsdom harness in `tests/helpers/fake-dom.ts`), an adversarial input sweep (`tests/fuzz.test.ts`), and a fake-WebAudio suite for the sound engine. `npm test` currently runs 266 tests; `npm run coverage` reports 97% of statements / 89% of branches over `src/`.
+3. Replayable, shareable runs: seeds are canonicalised to six hex characters, so the seed label the HUD shows restores the exact fight; run codes (`#seed=1A2B3C&level=veteran`) are written to the URL and can be copied from the result screen.
 
 ## Quality bar
-- No fake polish: don't claim tests, builds, screenshots, or playtests passed unless you actually ran them.
+- No fake polish: don't claim tests, builds, screenshots, or playtests passed unless you actually ran them. There is no browser automation in this environment - say so instead of implying a playtest.
 - No giant rewrites just to make the code look different.
 - Avoid magic omniscient enemies. Bots must obey line-of-sight, cooldown, range, and readable telegraphs where relevant.
 - Controls should feel immediate. Avoid input lag, surprise movement, and unavoidable damage.
 - Keep the UI coherent, responsive, legible, and keyboard-accessible.
 - Prefer fewer excellent mechanics over many shallow ones.
 - Do not ask the user to choose among obvious implementation details. Make sound engineering decisions and report trade-offs.
-- Finish by reporting files changed, commands actually run and their outcomes, remaining issues, and the exact next best step.
 
-## Work already added on this branch (verify before building on it)
-- React now returns a cleanup callback from `useEffect`; `ArenaGame.destroy()` cancels its animation frame, aborts event listeners, and clears held input. This prevents duplicate listeners when React remounts the canvas.
-- Projectile collision now sweeps the bullet path for the frame instead of checking only the endpoint. This is intended to stop fast bullets skipping over targets between frames.
-- `src/arena.ts` exports `distanceToSegment` and `segmentHitsCircle`; `tests/arena.test.ts` covers geometry, arena bounds, line-of-sight, swept hits, and near-misses.
-- These changes have been committed, but **their tests/build have not been confirmed yet**. Do not assume they pass.
-- Wave progression now ends after wave five with a victory overlay instead of endlessly spawning another wave labelled 05. The pure rules live in `src/progression.ts` and are covered by `tests/progression.test.ts`.
+## Required workflow for every change
+1. State the player-facing problem and the expected observable behavior.
+2. Make the smallest coherent change.
+3. Add or update a regression test.
+4. Run `npm test` and `npm run build` (CI runs the same two commands, but only for pushes to `game/last-brain-standing`, so run them locally).
+5. Playtest the changed behavior if browser tooling is available; otherwise verify with the autoplay policy and the jsdom harness.
+6. Review the diff for accidental scope creep, unused code, unfair AI, accessibility issues, and performance regressions.
+7. Commit a focused change with a clear message.
 
-## Immediate task
-First run `npm install`, `npm test`, and `npm run build` against the current branch state. Fix any failures before adding features. Then inspect the swept projectile collision, React cleanup, and final-wave victory path carefully. Run the complete tests/build, fix any failures, and confirm the changes behave correctly. Only after that passes should you choose the next single highest-impact improvement. Do not claim the commands or a browser playtest ran unless you actually ran them.
+## Where to go next
+Pick one, verify it with measurements, and keep the diff focused:
+1. **Accessibility and readability pass.** Live-region wording, focus order, contrast, the telegraph legend and `aria-keyshortcuts` are in place; the open item is auditing colour contrast against WCAG AA for the denser panel text (the muted greys around `#5f7492` on `#0e1420` are the likely failures).
+2. **Balance with more samples.** The 12-seed sweep in `tests/balance.test.ts` is a smoke test, not proof: standard sits near a 50% win rate for the scripted policy. Widen the sample before changing any tuning constant, and never weaken the policy or the win band to make a number look better.
+3. **Deeper Mirror counterplay.** The Mirror now publishes its read and the HUD turns it into advice; the open question is whether the read should decay faster or be visible in the arena itself, not just in the panel.
+4. **Touch polish.** Verify the virtual stick, FIRE and DASH on a narrow viewport, including cancellation paths and safe-area insets.
+5. **Performance.** The simulation runs at 0.001-0.003 ms per step in tests; keep an eye on render cost as effects grow, and keep the offscreen background cache.
+6. **Arena variety is done, not finished.** Four hand-placed layouts (`ARENA_LAYOUTS` in `src/arena.ts`) are picked by seed, carried on the world as `world.obstacles`/`world.arenaName`, and each carries an `openness` value that hostiles scale their preferred ring by (`rangeScaleForOpenness`). If you add or resize blocks, keep the guarantees in `tests/layout.test.ts` (in bounds, non-overlapping, start free, no sealed pockets, block-wide cover) and re-run the balance sweep - the envelope table in the README is regenerated by hand from that run.
+7. **Invariant fuzzing.** `tests/fuzz.test.ts` feeds deliberately awkward input and checks the world stays sane; extend it whenever a new system is added (new projectile types, status effects, pickups) so the net keeps up with the game.
