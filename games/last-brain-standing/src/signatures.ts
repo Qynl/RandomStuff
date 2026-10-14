@@ -144,13 +144,90 @@ export function platingScale(
 }
 
 /**
+ * How each profile *aims* - the part of a hostile the player actually reads.
+ *
+ * The roster is a set of different aiming problems, not a set of different
+ * health bars: one sight slides in and locks, one barrel charges, one sprays
+ * from the hip, one opens a cone, one marks the floor, one raises a shield, one
+ * fans a volley, one runs a lane, and one does not aim at all.
+ *
+ * `acquire` is the tell that costs the shooter time: the Marksman spends it
+ * sliding its sight onto you in full view, and while it is acquiring it is
+ * standing still, which is the window to shoot back.
+ */
+export type AimTell = "sight" | "barrel" | "hip" | "cone" | "marker" | "guard" | "spore" | "ram" | "none";
+
+export interface AimSpec {
+  /** What is drawn while this profile is aiming. */
+  tell: AimTell;
+  /** Seconds spent visibly acquiring a target before the wind-up begins. */
+  acquire: number;
+  /** Fraction of the wind-up after which this profile stops re-aiming. */
+  lockAt: number;
+  /** A bright lens the player can spot across the arena while it aims. */
+  glint: boolean;
+  /** It plants its feet while aiming instead of walking the shot in. */
+  plants: boolean;
+}
+
+export const AIMS: Record<AgentState["kind"], AimSpec> = {
+  // Commits halfway: the barrel light is the tell and it stops tracking early.
+  hunter: { tell: "barrel", acquire: 0, lockAt: HUNTER_LOCK_PROGRESS, glint: false, plants: false },
+  // Never stops moving, so its tell is a short hip-flick instead of a lane.
+  flanker: { tell: "hip", acquire: 0, lockAt: 1, glint: false, plants: false },
+  // Copies your weapon and fires it from the hip, in your own class colour.
+  mirror: { tell: "hip", acquire: 0, lockAt: 1, glint: false, plants: false },
+  // The real sniper: a laser sight that slides onto you and locks, a glint you
+  // can spot across the arena, and a stance it will not break to walk.
+  sniper: { tell: "sight", acquire: 0.62, lockAt: 0.72, glint: true, plants: true },
+  // A cone of fire: the whole wedge is the danger, not a line.
+  pyro: { tell: "cone", acquire: 0.2, lockAt: 1, glint: false, plants: false },
+  // Marks the floor and holds its stance while the shell is in the air.
+  mortar: { tell: "marker", acquire: 0.3, lockAt: 1, glint: false, plants: true },
+  // No shot at all: the shield arc and the short reach are the whole tell.
+  shielder: { tell: "guard", acquire: 0.25, lockAt: 1, glint: false, plants: false },
+  // Fans a volley: three diverging lines rather than one.
+  splitter: { tell: "spore", acquire: 0.15, lockAt: 1, glint: false, plants: false },
+  // Marks a lane and paws the ground before it runs.
+  charger: { tell: "ram", acquire: 0.35, lockAt: 1, glint: false, plants: false },
+  shard: { tell: "none", acquire: 0, lockAt: 1, glint: false, plants: false }
+};
+
+/** The aim behaviour a profile uses. */
+export function aimFor(kind: AgentState["kind"]): AimSpec {
+  return AIMS[kind];
+}
+
+/**
  * Whether a hostile keeps re-aiming this far through its wind-up. The Hunter
- * commits; everyone else tracks all the way to the shot.
+ * commits halfway; the Marksman commits earlier still, because its sight is
+ * already frozen on the target by then.
  */
 export function botKeepsTracking(kind: AgentState["kind"], progress: number): boolean {
-  if (kind !== "hunter") return true;
-  return progress < HUNTER_LOCK_PROGRESS;
+  return progress < AIMS[kind].lockAt;
 }
+
+/**
+ * How fast a sight slides onto its target, in units per second.
+ *
+ * Slower than a running player on purpose: the sight crawls onto a strafing
+ * target, trails a fleeing one, and settles almost at once on somebody who
+ * stands still. That is the profile's whole bargain - it punishes a stationary
+ * player and loses to a moving one.
+ */
+export const SIGHT_SETTLE_RATE = 150;
+
+/**
+ * How fast a sight that has found its target follows it, in units per second.
+ *
+ * Much quicker than the crawl, because this is the part where the rifle is
+ * tracking you: it converges well before the aim locks, so the freeze at the
+ * end of the wind-up is a distinct, deliberate moment rather than a snap.
+ */
+export const SIGHT_TRACK_RATE = 900;
+
+/** Where a sight starts: out along the barrel, where the rifle is pointing. */
+export const SIGHT_START_RANGE = 420;
 
 /**
  * Pitch multiplier per profile, so the same cue sounds like whoever fired it:
@@ -215,7 +292,10 @@ export const ATTACKS: Record<BotAttack, AttackSpec> = {
   copy: { telegraphScale: 1, range: 470, requiresSight: true, rounds: 1, spread: 0.05 },
   // The marksman's telegraph is long and its line is drawn across the arena, so
   // the shot is always survivable; it also cannot chase, so cover resets it.
-  beam: { telegraphScale: 2.8, range: 620, requiresSight: true, rounds: 1, spread: 0.012, slug: { speedScale: 1.6, lifeScale: 1.5 } },
+  // The Marksman's own copy promises a 1.5 s aim line, and this makes it
+  // literally true: 0.62 s of sight sliding on plus a 0.88 s hold, at standard.
+  // Every other profile's tell is shorter; none of them is a sniper.
+  beam: { telegraphScale: 2.2, range: 620, requiresSight: true, rounds: 1, spread: 0.012, slug: { speedScale: 1.6, lifeScale: 1.5 } },
   // Six seconds of fire, one short round every 0.11 s: a wall of flame that
   // forces movement rather than one hit that has to be dodged.
   flame: { telegraphScale: 0.7, range: 210, requiresSight: true, spray: { duration: 0.55, interval: 0.055, spread: 0.34, speedScale: 0.95, lifeScale: 0.42, damageShare: 1 } },
@@ -231,6 +311,21 @@ export const ATTACKS: Record<BotAttack, AttackSpec> = {
 /** The attack a profile uses. */
 export function attackFor(kind: AgentState["kind"]): AttackSpec {
   return ATTACKS[BOT_PROFILES_ATTACK[kind]];
+}
+
+/**
+ * How much longer (`>1`) or shorter (`<1`) this profile's telegraph is than the
+ * base wind-up.
+ *
+ * The Mirror is the one profile whose tell depends on the player rather than on
+ * itself: it telegraphs the weapon it copied, so it takes its scale from the
+ * volley it is about to fire. Everyone else owes their tell to their own attack,
+ * which is how a marksman gets a sighting-in line and a cinder gets a snap
+ * before the flame.
+ */
+export function telegraphScaleFor(kind: AgentState["kind"], loadout: LoadoutId): number {
+  if (kind === "mirror") return volleyFor(kind, loadout).telegraphScale;
+  return attackFor(kind).telegraphScale;
 }
 
 /**

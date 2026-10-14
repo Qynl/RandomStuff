@@ -80,11 +80,17 @@ describe("balance sweep", () => {
   });
 
   it("keeps a competent player win rate in a meaningful band on standard", () => {
-    // Measured with the scripted policy in tests/helpers/autoplay.ts: currently
-    // around 70% on standard over 24 seeds. The policy reads telegraphs and
+    // Measured with the scripted policy in tests/helpers/autoplay.ts: 18/24 on
+    // standard, 22/24 on recruit and 5/24 on veteran as of the aim pass, which
+    // is the ~70% the band was tuned around. The policy reads telegraphs and
     // dodges them perfectly, so a human sits well below it; the band exists to
     // stop the tuning drifting into "always wins" or "never wins" at either end
     // rather than to pin the exact number.
+    //
+    // It is also why honest telegraph lengths are paid for out of the reload in
+    // `setCooldown`: a perfect dodger gets better the longer every tell is, so
+    // the extra warning has to come back at the other end of the cycle or the
+    // whole fight drifts soft.
     expect(standard.winRate).toBeGreaterThan(0.15);
     expect(standard.winRate).toBeLessThan(0.85);
   });

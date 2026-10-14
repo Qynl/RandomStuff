@@ -1,5 +1,5 @@
 import { BOT_KINDS, BOT_PROFILES, emptyKindTotals } from "./ai";
-import { attackFor, PROFILE_PITCH, volleyFor } from "./signatures";
+import { aimFor, attackFor, PROFILE_PITCH, volleyFor } from "./signatures";
 import { ARENA_LAYOUTS, firstBlockingFraction, layoutForSeed, rangeScaleForOpenness, WORLD } from "./arena";
 import { BLOCK, BOT_ART, BULLET, CLASS_ART, FLOOR, PLAYER_ART, STATUS, TELEGRAPH, TELEGRAPH_STYLE } from "./art";
 import { SoundEngine, type SoundName } from "./audio";
@@ -2150,11 +2150,134 @@ export class ArenaGame {
    * ring over the barrel), and where it will land (a reticle on the aim point).
    * All of it in the unit's own muted accent, no glow.
    */
+  /**
+   * The Marksman's sight, drawn for as long as it is pointing at the player.
+   *
+   * This is the whole reason the profile reads as a sniper: a thin line that
+   * slides across the arena, a glint on the lens, a reticle that closes as the
+   * aim settles, and then a hard snap when the barrel locks. It is drawn while
+   * the sight is still settling, too - the warning comes before the commitment,
+   * which is what makes the last-second sidestep work.
+   */
+  private drawSightTell(bot: AgentState): void {
+    const ctx = this.ctx;
+    const sight = bot.sight;
+    if (!sight) return;
+    const tint = TELEGRAPH[bot.kind];
+    const settle = bot.aimSettle ?? 0;
+    const locked = bot.windup > 0;
+    // The whole line is re-drawn every frame, and the far end is clipped by
+    // cover so the sight never draws through a wall it cannot shoot through.
+    const blocking = firstBlockingFraction(
+      bot.position,
+      sight,
+      this.world.obstacles
+    );
+    const reach = blocking === null ? 1 : Math.max(0.08, blocking);
+    const endX = bot.position.x + (sight.x - bot.position.x) * reach;
+    const endY = bot.position.y + (sight.y - bot.position.y) * reach;
+    const muzzleX = bot.position.x + Math.cos(bot.facing) * 20;
+    const muzzleY = bot.position.y + Math.sin(bot.facing) * 20;
+    const pulse = 0.5 + 0.5 * Math.sin(this.world.elapsed * 14);
+
+    ctx.save();
+    // The beam: thin, straight, brightest at the muzzle.
+    ctx.globalAlpha = 0.22 + settle * 0.3 + (locked ? 0.12 : 0);
+    ctx.strokeStyle = tint;
+    ctx.lineWidth = locked ? 1.6 : 1.4;
+    ctx.beginPath();
+    ctx.moveTo(muzzleX, muzzleY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+    // A darker core, so the line reads as a sight rather than a laser pointer.
+    ctx.globalAlpha *= 0.55;
+    ctx.strokeStyle = "rgba(24, 20, 14, 0.6)";
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(muzzleX, muzzleY);
+    ctx.lineTo(endX, endY);
+    ctx.stroke();
+
+    // The dot at the end, and a reticle that closes as the aim settles.
+    const spread = (1 - settle) * 26 + 5;
+    ctx.globalAlpha = 0.5 + settle * 0.45;
+    ctx.fillStyle = tint;
+    ctx.beginPath();
+    ctx.arc(endX, endY, locked ? 2.6 : 2.1 + pulse * 0.7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = tint;
+    ctx.lineWidth = locked ? 2 : 1.4;
+    ctx.beginPath();
+    for (const [sx, sy] of [[-1, -1], [-1, 1], [1, -1], [1, 1]] as const) {
+      ctx.moveTo(endX + sx * spread, endY + sy * spread);
+      ctx.lineTo(endX + sx * spread, endY + sy * (spread * 0.55));
+      ctx.lineTo(endX + sx * (spread * 0.55), endY + sy * (spread * 0.55));
+    }
+    ctx.stroke();
+    // A tick at the muzzle end, so the eye can find which hostile is shooting.
+    ctx.globalAlpha = 0.35 + settle * 0.4;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(muzzleX - Math.cos(bot.facing + 0.9) * 5, muzzleY - Math.sin(bot.facing + 0.9) * 5);
+    ctx.lineTo(muzzleX, muzzleY);
+    ctx.lineTo(muzzleX - Math.cos(bot.facing - 0.9) * 5, muzzleY - Math.sin(bot.facing - 0.9) * 5);
+    ctx.stroke();
+
+    // The lens glint: a small warm spark on the scope, only while the marksman
+    // is sighting in. It is the one part of the tell visible from off screen
+    // distance, so a player who is being lined up from across the arena has a
+    // moment to break the line before the reticle even arrives. Four short rays
+    // and a dot, no bloom - a glint is a reflection, not a light source.
+    if (aimFor(bot.kind).glint) {
+      const spark = 0.45 + 0.55 * pulse;
+      const ray = locked ? 7 : 5 + settle * 3;
+      ctx.globalAlpha = 0.35 + settle * 0.4;
+      ctx.strokeStyle = "rgba(24, 20, 14, 0.55)";
+      ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      for (const [sx, sy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        ctx.moveTo(muzzleX, muzzleY);
+        ctx.lineTo(muzzleX + sx * ray, muzzleY + sy * ray);
+      }
+      ctx.stroke();
+      ctx.globalAlpha = 0.5 + spark * 0.45;
+      ctx.strokeStyle = "rgba(255, 250, 232, 0.9)";
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      for (const [sx, sy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+        ctx.moveTo(muzzleX, muzzleY);
+        ctx.lineTo(muzzleX + sx * ray * 0.82, muzzleY + sy * ray * 0.82);
+      }
+      ctx.stroke();
+      ctx.fillStyle = tint;
+      ctx.beginPath();
+      ctx.arc(muzzleX, muzzleY, 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // While it is only settling, the gauge shows the aim crawling in; once the
+    // wind-up starts the barrel charge takes over.
+    if (!locked) {
+      ctx.save();
+      ctx.translate(bot.position.x, bot.position.y);
+      this.drawChargeGauge(ctx, tint, settle);
+      ctx.restore();
+    }
+  }
+
   private drawTelegraphs(): void {
     const ctx = this.ctx;
     const player = this.world.player.position;
     for (const bot of this.world.bots) {
-      if (!bot.alive || bot.windup <= 0) continue;
+      if (!bot.alive) continue;
+      // A Marksman that is still settling its sight is already pointing at the
+      // player: that is the warning, so it is drawn before the wind-up starts.
+      if ((bot.acquire ?? 0) > 0) {
+        this.drawSightTell(bot);
+        continue;
+      }
+      if (bot.windup <= 0) continue;
       const tint = TELEGRAPH[bot.kind];
       const progress = clamp(1 - bot.windup / Math.max(0.001, bot.windupDuration), 0, 1);
       const direction = { x: Math.cos(bot.facing), y: Math.sin(bot.facing) };
@@ -2193,6 +2316,25 @@ export class ArenaGame {
         ctx.beginPath();
         ctx.arc(target.x, target.y, radius * Math.max(0.05, 1 - progress), 0, Math.PI * 2);
         ctx.stroke();
+        ctx.restore();
+        // The lob itself: a dotted arc from the tube to the marker, so it reads
+        // as indirect fire rather than a shot that happens to land.
+        ctx.save();
+        ctx.globalAlpha = 0.25 + progress * 0.35;
+        ctx.strokeStyle = tint;
+        ctx.lineWidth = 1.2;
+        ctx.setLineDash([2, 5]);
+        ctx.beginPath();
+        const steps = 16;
+        for (let step = 0; step <= steps; step += 1) {
+          const t = step / steps;
+          const arcX = bot.position.x + (target.x - bot.position.x) * t;
+          const arcY = bot.position.y + (target.y - bot.position.y) * t - Math.sin(t * Math.PI) * 46;
+          if (step === 0) ctx.moveTo(arcX, arcY);
+          else ctx.lineTo(arcX, arcY);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
         ctx.restore();
         ctx.save();
         ctx.translate(bot.position.x, bot.position.y);
@@ -2253,6 +2395,62 @@ export class ArenaGame {
         ctx.moveTo(bot.position.x, bot.position.y);
         ctx.arc(bot.position.x, bot.position.y, reach, bot.facing - 0.5, bot.facing + 0.5);
         ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+        ctx.save();
+        ctx.translate(bot.position.x, bot.position.y);
+        this.drawChargeGauge(ctx, tint, progress);
+        ctx.restore();
+        continue;
+      }
+
+      if (style === "spore") {
+        // A volley, not a shot: three diverging lines show the width of the
+        // spread without pretending to be precise.
+        const spread = attackFor(bot.kind).spread ?? 0.22;
+        ctx.save();
+        ctx.strokeStyle = tint;
+        for (const offset of [-spread, 0, spread]) {
+          ctx.globalAlpha = (0.16 + progress * 0.3) * (offset === 0 ? 0.9 : 0.6);
+          ctx.lineWidth = offset === 0 ? 1.6 : 1;
+          const angle = bot.facing + offset;
+          ctx.beginPath();
+          ctx.moveTo(bot.position.x + Math.cos(angle) * 16, bot.position.y + Math.sin(angle) * 16);
+          ctx.lineTo(bot.position.x + Math.cos(angle) * length, bot.position.y + Math.sin(angle) * length);
+          ctx.stroke();
+        }
+        ctx.restore();
+        ctx.save();
+        ctx.translate(bot.position.x, bot.position.y);
+        this.drawChargeGauge(ctx, tint, progress);
+        ctx.restore();
+        continue;
+      }
+
+      if (style === "hip") {
+        // Fired from the hip while moving: a short flick at the muzzle instead
+        // of a lane across the room. There is nothing to walk out of because
+        // the shooter is not standing still either.
+        ctx.save();
+        ctx.globalAlpha = 0.14 + progress * 0.34;
+        ctx.strokeStyle = tint;
+        ctx.lineWidth = 1.6;
+        const flick = 34 + progress * 26;
+        ctx.beginPath();
+        ctx.moveTo(bot.position.x + direction.x * 10, bot.position.y + direction.y * 10);
+        ctx.lineTo(bot.position.x + direction.x * flick, bot.position.y + direction.y * flick);
+        ctx.stroke();
+        ctx.globalAlpha = 0.4 + progress * 0.4;
+        ctx.lineWidth = 2.2;
+        ctx.beginPath();
+        ctx.moveTo(
+          bot.position.x + direction.x * flick + direction.y * 5,
+          bot.position.y + direction.y * flick - direction.x * 5
+        );
+        ctx.lineTo(
+          bot.position.x + direction.x * flick - direction.y * 5,
+          bot.position.y + direction.y * flick + direction.x * 5
+        );
         ctx.stroke();
         ctx.restore();
         ctx.save();

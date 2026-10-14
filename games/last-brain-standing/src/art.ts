@@ -266,15 +266,17 @@ export const BOT_SYMBOLS: Record<AgentState["kind"], string> = {
 };
 
 /** How each profile warns you: a lane, a cone, a floor marker, a guard arc. */
-export const TELEGRAPH_STYLE: Record<AgentState["kind"], "lane" | "beam" | "cone" | "marker" | "guard" | "ram" | "none"> = {
+export const TELEGRAPH_STYLE: Record<AgentState["kind"], "lane" | "beam" | "cone" | "marker" | "guard" | "ram" | "spore" | "hip" | "none"> = {
   hunter: "lane",
-  flanker: "lane",
-  mirror: "lane",
+  // Fired from the hip on the move: a flick at the muzzle, not a lane.
+  flanker: "hip",
+  mirror: "hip",
+  // The sniper's own tell, drawn by `drawSightTell` from the bot's live sight.
   sniper: "beam",
   pyro: "cone",
   mortar: "marker",
   shielder: "guard",
-  splitter: "lane",
+  splitter: "spore",
   charger: "ram",
   shard: "none"
 };

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  AIMS,
   angleApart,
   attackFor,
   botKeepsTracking,
@@ -21,7 +22,7 @@ import {
   volleyDamage,
   volleyFor
 } from "../src/signatures";
-import { BOT_KINDS, BOT_PROFILES, chooseBotSpeedScale, emptyKindTotals } from "../src/ai";
+import { BOT_KINDS, BOT_PROFILES, chooseBotSpeedScale, emptyKindTotals, windupDuration } from "../src/ai";
 import { BOT_ART, TELEGRAPH } from "../src/art";
 import type { BotKind, SimEvent } from "../src/types";
 import {
@@ -603,6 +604,7 @@ describe("the new profiles", () => {
   it("gives every profile its own attack, movement, silhouette, tint and pitch", () => {
     const attacks = new Set<string>();
     const movements = new Set<string>();
+    const tells = new Set<string>();
     const silhouettes = new Set<string>();
     const tints = new Set<string>();
     const pitches = new Set<number>();
@@ -618,6 +620,21 @@ describe("the new profiles", () => {
     // moving. Nothing is a re-skin of anything else.
     expect(attacks.size).toBe(10);
     expect(movements.size).toBe(10);
+    // How they aim is the strongest read in a fight, so it is checked the same
+    // way: eight ways of aiming across ten profiles, and the sniper's is its
+    // own. Two profiles share the hip-flick because both fire on the move.
+    for (const kind of [...BOT_KINDS, "shard" as BotKind]) tells.add(AIMS[kind].tell);
+    expect(tells.size).toBeGreaterThanOrEqual(8);
+    expect(AIMS.sniper.tell).toBe("sight");
+    expect(AIMS.sniper.glint).toBe(true);
+    expect(AIMS.sniper.plants).toBe(true);
+    expect(AIMS.sniper.acquire).toBeGreaterThan(0);
+    // Everyone else is either instant or nearly so: only the sniper takes an
+    // age over it, which is what makes the sight a warning.
+    for (const kind of [...BOT_KINDS, "shard" as BotKind]) {
+      if (kind === "sniper") continue;
+      expect(AIMS[kind].acquire).toBeLessThan(AIMS.sniper.acquire);
+    }
     expect(silhouettes.size).toBe(10);
     expect(tints.size).toBe(10);
     expect(pitches.size).toBe(10);
@@ -634,24 +651,127 @@ describe("the new profiles", () => {
     }
   });
 
+  /** Runs a world and samples each sniper slug's speed as it leaves the muzzle. */
+  const slugRun = (world: ReturnType<typeof soloWorld>, seconds: number) => {
+    const events: SimEvent[] = [];
+    const speeds: number[] = [];
+    for (let i = 0; i < Math.round(seconds * 60); i += 1) {
+      const frame = stepWorld(world, emptyInput(), 1 / 60);
+      for (const event of frame) {
+        if (event.type !== "bot-fired" || event.kind !== "sniper") continue;
+        const slugs = world.bullets.filter((bullet) => bullet.source === "sniper");
+        const newest = slugs[slugs.length - 1];
+        if (newest) speeds.push(Math.hypot(newest.velocity.x, newest.velocity.y));
+      }
+      events.push(...frame);
+    }
+    return { events, speeds };
+  };
+
   it("has the marksman hold long range and fire one rail slug", () => {
     const world = soloWorld("sniper", "sniper-range");
     const bot = world.bots[0];
-    const events = runFor(world, 6);
+    const { events, speeds } = slugRun(world, 6);
     const fired = events.filter((event) => event.type === "bot-fired" && event.kind === "sniper");
     const windups = events.filter((event) => event.type === "bot-windup" && event.kind === "sniper");
     expect(windups.length).toBeGreaterThan(0);
     expect(fired.length).toBeGreaterThan(0);
-    // One round per completed telegraph, and it is a fast one.
+    // One round per completed telegraph.
     expect(fired.length).toBeLessThanOrEqual(windups.length);
-    for (const shot of fired) {
-      if (shot.type !== "bot-fired") continue;
-      const speed = Math.hypot(world.bullets[0]?.velocity.x ?? 0, world.bullets[0]?.velocity.y ?? 0);
-      expect(speed).toBeGreaterThan(600);
-    }
+    // A rail slug is fast: measured off the bullet as it leaves, because a
+    // bullet this quick is usually already gone by the end of the run.
+    expect(speeds.length).toBeGreaterThan(0);
+    expect(speeds.every((speed) => speed > 600)).toBe(true);
     // It never closes: a marksman is the profile that punishes standing still.
     expect(Math.hypot(bot.position.x - world.player.position.x, bot.position.y - world.player.position.y)).toBeGreaterThan(120);
     expect(attackFor("sniper").telegraphScale).toBeGreaterThan(2);
+    // The profile's own blurb advertises "1.5 S AIM LINE", so the codex would be
+    // lying if the sight did not last exactly that long at standard: the crawl
+    // onto the target plus the hold while the rail charges.
+    const aimLine = AIMS.sniper.acquire + windupDuration("sniper", 1, 0) * attackFor("sniper").telegraphScale;
+    expect(aimLine).toBeCloseTo(1.5, 2);
+  });
+
+  it("has the marksman aim in before it commits, in full view", () => {
+    const world = soloWorld("sniper", "sniper-sight");
+    const bot = world.bots[0];
+    bot.position = { x: 760, y: 140 };
+    world.player.position = { x: 200, y: 470 };
+    const walk = { ...emptyInput(), move: { x: 0.8, y: -1 } };
+    const events: SimEvent[] = [];
+    let sightFrames = 0;
+    let movedFrames = 0;
+    let lags = 0;
+    let lockedFrames = 0;
+    let lockedDrift = 0;
+    let previousSight: { x: number; y: number } | null = null;
+    let lockedAt: { x: number; y: number } | null = null;
+    let firstAimAt = -1;
+    let firstWindupAt = -1;
+    let firstShotAt = -1;
+    for (let step = 0; step < 900; step += 1) {
+      const frame = stepWorld(world, walk, 1 / 120);
+      events.push(...frame);
+      const sight = bot.sight ?? null;
+      // While it is sighting in, the reticle is live: it crawls after the
+      // player and it trails a player who is moving.
+      if ((bot.acquire ?? 0) > 0 && sight) {
+        sightFrames += 1;
+        if (previousSight && Math.hypot(sight.x - previousSight.x, sight.y - previousSight.y) > 0.5) movedFrames += 1;
+        const gap = Math.hypot(world.player.position.x - sight.x, world.player.position.y - sight.y);
+        if (gap > 8) lags += 1;
+        previousSight = { ...sight };
+      }
+      // It re-aims for most of the wind-up, then commits: past the lock point
+      // the reticle stops dead even though the player is still walking, and the
+      // shot goes exactly where it was left. That is the last-second sidestep.
+      const progress = bot.windupDuration > 0 ? 1 - bot.windup / bot.windupDuration : 0;
+      if (bot.windup > 0 && sight && progress >= AIMS.sniper.lockAt) {
+        lockedFrames += 1;
+        lockedAt ??= { ...sight };
+        lockedDrift = Math.max(lockedDrift, Math.hypot(sight.x - lockedAt.x, sight.y - lockedAt.y));
+      }
+      if (firstAimAt < 0 && frame.some((event) => event.type === "bot-aim")) firstAimAt = step;
+      if (firstWindupAt < 0 && frame.some((event) => event.type === "bot-windup")) firstWindupAt = step;
+      if (firstShotAt < 0 && frame.some((event) => event.type === "bot-fired")) firstShotAt = step;
+    }
+    expect(sightFrames).toBeGreaterThan(30);
+    expect(movedFrames).toBeGreaterThan(20);
+    expect(lags).toBeGreaterThan(20);
+    // Acquire, then wind up, then fire: the sight never skips its warning.
+    expect(firstAimAt).toBeGreaterThanOrEqual(0);
+    expect(firstWindupAt).toBeGreaterThan(firstAimAt);
+    expect(firstShotAt).toBeGreaterThan(firstWindupAt);
+    // It committed: the reticle stayed put for the whole wind-up.
+    expect(lockedFrames).toBeGreaterThan(10);
+    expect(lockedDrift).toBeLessThan(0.5);
+    // And it told the world it was aiming, so the HUD can say so.
+    expect(events.filter((event) => event.type === "bot-aim").length).toBeGreaterThan(0);
+  });
+
+  it("stands its ground while it aims, so closing on a marksman works", () => {
+    const world = soloWorld("sniper", "sniper-planted");
+    const bot = world.bots[0];
+    bot.position = { x: 720, y: 480 };
+    world.player.position = { x: 180, y: 480 };
+    let planted = 0;
+    for (let step = 0; step < 600; step += 1) {
+      stepWorld(world, emptyInput(), 1 / 120);
+      if ((bot.acquire ?? 0) > 0) {
+        planted += 1;
+        if (planted > 24) {
+          // Three tenths of a second of aiming, measured over the whole
+          // stance: half a metre of drift, not a jog.
+          const before = { ...bot.position };
+          for (let inner = 0; inner < 36; inner += 1) stepWorld(world, emptyInput(), 1 / 120);
+          expect(Math.hypot(bot.position.x - before.x, bot.position.y - before.y)).toBeLessThan(30);
+          return;
+        }
+      } else if (planted > 0) {
+        break;
+      }
+    }
+    throw new Error("the marksman never settled in for a shot");
   });
 
   it("sprays fire that dies on walls instead of crossing the room", () => {

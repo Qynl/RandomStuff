@@ -126,6 +126,24 @@ export interface AgentState {
   chargeDirection: Vec2;
   /** Seconds left of a continuous attack, for profiles that spray. */
   sprayTime: number;
+  /**
+   * Seconds left of *aiming in* before the wind-up starts.
+   *
+   * A profile with an acquisition time gives the player a second warning before
+   * the shot is even committed: the sight slides onto you, settles, and only
+   * then does the barrel start charging. The Marksman is the one that uses it,
+   * so these three are only meaningful for profiles with `aimFor(kind).acquire`.
+   */
+  acquire?: number;
+  /** Total acquisition time, so the renderer can size the settling reticle. */
+  acquireTotal?: number;
+  /**
+   * Where this hostile is currently pointing its sight, for the renderer.
+   * Absent when it is not aiming at anything.
+   */
+  sight?: Vec2 | null;
+  /** 0..1: how settled the sight is. 1 means it has stopped moving. */
+  aimSettle?: number;
   /** Seconds left burning, from a Cinder's flames. */
   burn?: number;
   /** Damage per second while burning. */
@@ -216,6 +234,7 @@ export type SimEvent =
   | { type: "player-focus"; position: Vec2; direction: Vec2 }
   | { type: "player-dodged"; position: Vec2; kind: BotKind | "unknown" }
   | { type: "bot-windup"; botId: number; kind: BotKind; position: Vec2; duration: number }
+  | { type: "bot-aim"; botId: number; kind: BotKind; position: Vec2; duration: number }
   | { type: "bot-windup-cancel"; botId: number; kind: BotKind; position: Vec2 }
   | { type: "bot-fired"; botId: number; kind: BotKind; position: Vec2; direction: Vec2 }
   | { type: "bot-hit"; botId: number; kind: BotKind; position: Vec2; amount: number; health: number; plated?: boolean }

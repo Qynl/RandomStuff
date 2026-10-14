@@ -1,6 +1,11 @@
 import {
+  aimFor,
   attackFor,
   botKeepsTracking,
+  SIGHT_SETTLE_RATE,
+  SIGHT_START_RANGE,
+  SIGHT_TRACK_RATE,
+  telegraphScaleFor,
   diveSpeedScale,
   FLANKER_DIVE,
   flankerHoldsFire,
@@ -650,6 +655,8 @@ function updateBots(world: World, dt: number): void {
     const allies = collectAllies(world, bot);
     if (bot.windup > 0) {
       updateWindup(world, bot, dt, seesPlayer);
+    } else if ((bot.acquire ?? 0) > 0) {
+      updateAcquire(world, bot, dt, seesPlayer);
     } else if (bot.spawnGuard <= 0) {
       // The Flanker's discipline: no second gun from the same angle.
       // A Flanker only yields its shot to another Flanker: the discipline is a
@@ -670,7 +677,13 @@ function updateBots(world: World, dt: number): void {
               difficultyFireScale: difficulty.fireScale
             });
         const wantsCharge = attack.charge !== undefined && inRange && !holdsFire;
-        if (intent.shouldFire || wantsCharge) startWindup(world, bot);
+        const wantsShot = intent.shouldFire || wantsCharge;
+        // A profile that aims in front of the shot spends its acquisition time
+        // standing still first. That is a warning and a window at once: the
+        // player can see the sight crawling onto them and shoot back.
+        const aim = aimFor(bot.kind);
+        if (wantsShot && aim.acquire > 0) beginAcquire(world, bot, aim.acquire);
+        else if (wantsShot) startWindup(world, bot);
       }
     }
 
@@ -744,10 +757,15 @@ function updateBots(world: World, dt: number): void {
       blindTime: bot.blindTime,
       detour: { sign: bot.detourSign, strength: Math.min(1, bot.detourTime / DETOUR_RAMP) }
     });
+    // A planted profile holds its ground while it aims: a Marksman that is
+    // sighting in does not walk, which is what makes closing on it work.
+    const aiming = windingUp || (bot.acquire ?? 0) > 0;
+    const plant = aiming && aimFor(bot.kind).plants ? 0.05 : 1;
     const speedScale =
       chooseBotSpeedScale(bot.kind, range, { advancing: decision.intent === "advance", windingUp }) *
       diveSpeedScale(bot.kind, bot.diveTime) *
       pressureSpeedScale(world.pressure) *
+      plant *
       (burning ? BURN_SLOW : 1);
     const speed = profile.speed * plan.speedMultiplier * speedScale;
     const steered = steerSafely(world, bot, decision.direction, Math.max(30, speed * 0.34));
@@ -805,11 +823,128 @@ function contactNormal(botPosition: Vec2, playerPosition: Vec2, world: World): V
   return awayFromAim.x !== 0 || awayFromAim.y !== 0 ? awayFromAim : { x: 1, y: 0 };
 }
 
+/**
+ * Starts a profile's aim-in: the sight slides onto the player, in full view,
+ * before the barrel starts charging.
+ *
+ * The sight lives on the bot so the renderer draws exactly what the shot will
+ * follow - there is no second aim model in the renderer to drift away from this
+ * one.
+ */
+function beginAcquire(world: World, bot: AgentState, duration: number): void {
+  // The difficulty stretches the whole tell, and the aim-in is part of the
+  // tell: a recruit's marksman takes its time sliding onto you, a veteran's
+  // barely lets the sight settle before the trigger goes.
+  const scaled = duration * preset(world).windupScale;
+  bot.acquire = scaled;
+  bot.acquireTotal = scaled;
+  // The sight does not appear on the player: it appears out along the barrel,
+  // where the rifle happens to be pointing, and then slides across the arena
+  // onto them. A player already in the line gets a shorter warning than one off
+  // to the side, and either way the swing is visible.
+  bot.sight = clampToArena({
+    x: bot.position.x + Math.cos(bot.facing) * SIGHT_START_RANGE,
+    y: bot.position.y + Math.sin(bot.facing) * SIGHT_START_RANGE
+  });
+  bot.aimSettle = 0;
+  world.events.push({
+    type: "bot-aim",
+    botId: bot.id,
+    kind: bot.kind,
+    position: { ...bot.position },
+    duration
+  });
+}
+
+/** Cancels an aim-in, whether the line broke or the target vanished. */
+function cancelAcquire(world: World, bot: AgentState, cooldown: number): void {
+  if ((bot.acquire ?? 0) <= 0) return;
+  bot.acquire = 0;
+  bot.acquireTotal = 0;
+  bot.aimSettle = 0;
+  bot.sight = null;
+  bot.fireCooldown = Math.max(bot.fireCooldown, cooldown);
+  world.events.push({ type: "bot-windup-cancel", botId: bot.id, kind: bot.kind, position: { ...bot.position } });
+}
+
+/**
+ * The Marksman's aim-in.
+ *
+ * The sight crawls toward wherever the player is *now* at a fixed rate, so a
+ * player who keeps moving is harder to settle on and a player who stands still
+ * gets the shortest possible warning. When the time is up the sight is frozen
+ * and the wind-up begins: the shot goes where the sight came to rest, which is
+ * why the last-second sidestep is the counterplay.
+ */
+function updateAcquire(world: World, bot: AgentState, dt: number, seesPlayer: boolean): void {
+  const remaining = bot.acquire ?? 0;
+  if (!seesPlayer || bot.spawnGuard > 0) {
+    cancelAcquire(world, bot, 0.35);
+    return;
+  }
+  const total = Math.max(0.001, bot.acquireTotal ?? remaining);
+  const sight = bot.sight ?? { ...world.player.position };
+  const toTarget = {
+    x: world.player.position.x - sight.x,
+    y: world.player.position.y - sight.y
+  };
+  const gap = Math.hypot(toTarget.x, toTarget.y);
+  const step = Math.min(gap, SIGHT_SETTLE_RATE * dt);
+  bot.sight = clampToArena(
+    gap > 0.001
+      ? { x: sight.x + (toTarget.x / gap) * step, y: sight.y + (toTarget.y / gap) * step }
+      : { x: world.player.position.x, y: world.player.position.y }
+  );
+  // The rifle swings onto the sight at a rate that makes the barrel arrive
+  // about when the sight does, never long before it.
+  const desired = Math.atan2(bot.sight.y - bot.position.y, bot.sight.x - bot.position.x);
+  bot.facing = shortestAngleLerp(bot.facing, desired, windupTurnRate(bot.kind, preset(world).windupScale) * 0.8 * dt);
+  bot.acquire = Math.max(0, remaining - dt);
+  bot.aimSettle = clamp01(1 - (bot.acquire ?? 0) / total);
+  if ((bot.acquire ?? 0) > 0) return;
+  // Settled: the sight is now where the shot is committed to go.
+  bot.acquire = 0;
+  startWindup(world, bot);
+}
+
+/**
+ * Slides a settling sight toward where the shot should go.
+ *
+ * The crawl onto a target is slow and the tracking that follows it is quick, so
+ * the reticle reads as "found you, following you, locked" instead of blinking
+ * from one place to another. Faster than any hostile can move, slower than a
+ * teleport, and it is capped by the distance left to cover so it never
+ * overshoots the point it is aiming at.
+ */
+function glideSight(bot: AgentState, aimPoint: { x: number; y: number }, dt: number): { x: number; y: number } {
+  const sight = bot.sight ?? { ...aimPoint };
+  const gap = Math.hypot(aimPoint.x - sight.x, aimPoint.y - sight.y);
+  if (gap <= 0.01) return { x: aimPoint.x, y: aimPoint.y };
+  const step = Math.min(gap, SIGHT_TRACK_RATE * dt);
+  return {
+    x: sight.x + ((aimPoint.x - sight.x) / gap) * step,
+    y: sight.y + ((aimPoint.y - sight.y) / gap) * step
+  };
+}
+
+/** Keeps an aim point inside the arena, with a little margin. */
+function clampToArena(point: { x: number; y: number }): { x: number; y: number } {
+  return {
+    x: Math.max(10, Math.min(WORLD.width - 10, point.x)),
+    y: Math.max(10, Math.min(WORLD.height - 10, point.y))
+  };
+}
+
 function startWindup(world: World, bot: AgentState): void {
   const difficulty = preset(world);
   const profile = BOT_PROFILES[bot.kind];
-  const volley = volleyFor(bot.kind, world.loadout.id);
-  const duration = windupDuration(bot.kind, difficulty.windupScale, world.rng.range(-0.05, 0.06)) * volley.telegraphScale;
+  // The telegraph length is the profile's own: a marksman sights in for nearly
+  // three times as long as a rifleman, and a cinder snaps its flame out faster.
+  // Getting this from the volley alone (as it used to) quietly gave every late
+  // profile the Mirror's timing instead of its own.
+  const duration =
+    windupDuration(bot.kind, difficulty.windupScale, world.rng.range(-0.05, 0.06)) *
+    telegraphScaleFor(bot.kind, world.loadout.id);
   bot.windup = duration;
   bot.windupDuration = duration;
   bot.windupTurnRate = windupTurnRate(bot.kind, difficulty.windupScale);
@@ -861,6 +996,8 @@ function updateWindup(world: World, bot: AgentState, dt: number, seesPlayer: boo
   if (!seesPlayer || bot.spawnGuard > 0) {
     bot.windup = 0;
     bot.windupDuration = 0;
+    bot.sight = null;
+    bot.aimSettle = 0;
     bot.fireCooldown = Math.max(bot.fireCooldown, 0.3);
     world.events.push({ type: "bot-windup-cancel", botId: bot.id, kind: bot.kind, position: { ...bot.position } });
     return;
@@ -882,7 +1019,17 @@ function updateWindup(world: World, bot: AgentState, dt: number, seesPlayer: boo
   if (botKeepsTracking(bot.kind, progress)) {
     const desired = Math.atan2(aimPoint.y - bot.position.y, aimPoint.x - bot.position.x);
     bot.facing = shortestAngleLerp(bot.facing, desired, bot.windupTurnRate * dt);
+    // Kept inside the arena: a sight pinned against the wall is a warning the
+    // player can read, where a sight hanging off the edge is just a missing line.
+    // It follows the target rather than jumping to it, so the reticle the player
+    // sees is always where the rifle is actually pointed.
+    if (aimFor(bot.kind).tell === "sight") bot.sight = clampToArena(glideSight(bot, aimPoint, dt));
+  } else if (aimFor(bot.kind).tell === "sight" && bot.sight) {
+    // Committed: the sight stays exactly where it was when the barrel locked,
+    // so the reticle on screen is the line the slug will take.
+    bot.facing = Math.atan2(bot.sight.y - bot.position.y, bot.sight.x - bot.position.x);
   }
+  if (aimFor(bot.kind).tell === "sight") bot.aimSettle = progress < aimFor(bot.kind).lockAt ? progress : 1;
   bot.windup -= dt;
   if (bot.windup > 0) return;
 
@@ -896,6 +1043,8 @@ function updateWindup(world: World, bot: AgentState, dt: number, seesPlayer: boo
   const direct = attack.rounds !== undefined || attack.slug !== undefined;
 
   if (direct && !attack.spray && segmentBlocked(bot.position, player.position, world.obstacles)) {
+    bot.sight = null;
+    bot.aimSettle = 0;
     bot.fireCooldown = Math.max(bot.fireCooldown, 0.45);
     world.events.push({ type: "bot-windup-cancel", botId: bot.id, kind: bot.kind, position: { ...bot.position } });
     return;
@@ -1028,10 +1177,28 @@ function startVolley(world: World, bot: AgentState): void {
   setCooldown(world, bot);
 }
 
+/**
+ * Time this profile spends telegraphing that a plain rifleman does not: its
+ * aim-in plus the part of its charge that is longer than a standard pull.
+ *
+ * Every profile's tell is now honest - the Marksman really does hold its aim
+ * line for a second and a half - which would otherwise make the fight slower
+ * and softer for everyone. So the time is paid for out of the reload: a profile
+ * that has been standing in the open, aiming, is already cycling its action.
+ * The cadence of a fight is unchanged, and the warning is in plain sight.
+ */
+function tellOverhead(world: World, kind: AgentState["kind"]): number {
+  const difficulty = preset(world);
+  const base = windupDuration(kind, difficulty.windupScale, 0);
+  const tell = aimFor(kind).acquire * difficulty.windupScale + base * telegraphScaleFor(kind, world.loadout.id);
+  return Math.max(0, tell - base);
+}
+
 /** Sets the profile's next shot time, scaled by difficulty and arena pressure. */
 function setCooldown(world: World, bot: AgentState): void {
   const fireScale = preset(world).fireScale * pressureFireScale(world.pressure);
-  bot.fireCooldown = BOT_PROFILES[bot.kind].fireRate / Math.max(0.5, fireScale) + world.rng.range(-0.08, 0.14);
+  const reload = BOT_PROFILES[bot.kind].fireRate / Math.max(0.5, fireScale) - tellOverhead(world, bot.kind);
+  bot.fireCooldown = Math.max(0.24, reload) + world.rng.range(-0.08, 0.14);
 }
 
 /** Ticks a continuous attack while it lasts. */
@@ -1426,7 +1593,11 @@ function summonShards(world: World, parent: AgentState, kind: AgentState["kind"]
       stun: 0,
       chargeTime: 0,
       chargeDirection: { x: 0, y: 0 },
-      sprayTime: 0
+      sprayTime: 0,
+      acquire: 0,
+      acquireTotal: 0,
+      sight: null,
+      aimSettle: 0
     });
     world.nextBotId += 1;
   }
@@ -1503,6 +1674,10 @@ function materialiseBot(world: World, pending: PendingSpawn): void {
     windup: 0,
     windupDuration: 0,
     windupTurnRate: windupTurnRate(pending.kind, difficulty.windupScale),
+    acquire: 0,
+    acquireTotal: 0,
+    sight: null,
+    aimSettle: 0,
     facing: Math.atan2(world.player.position.y - pending.position.y, world.player.position.x - pending.position.x),
     spawnGuard: 0.55,
     strafeSign: world.rng.chance(0.5) ? 1 : -1,
