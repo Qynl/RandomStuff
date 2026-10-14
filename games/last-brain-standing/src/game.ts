@@ -54,7 +54,8 @@ export class ArenaGame {
     overlayCopy: document.querySelector<HTMLElement>("#overlay-copy")!,
     startButton: document.querySelector<HTMLButtonElement>("#start-button")!,
     arenaMessage: document.querySelector<HTMLElement>("#arena-message")!,
-    pauseButton: document.querySelector<HTMLButtonElement>("#pause-button")!
+    pauseButton: document.querySelector<HTMLButtonElement>("#pause-button")!,
+    simulationStatus: document.querySelector<HTMLElement>("#simulation-status")!
   };
 
   constructor(private readonly canvas: HTMLCanvasElement) {
@@ -80,6 +81,7 @@ export class ArenaGame {
     this.ui.pauseButton.textContent = "Ⅱ";
     this.ui.pauseButton.setAttribute("aria-label", "Pause game");
     this.ui.pauseButton.title = "Pause (Esc)";
+    this.ui.simulationStatus.textContent = "SIMULATION ACTIVE";
     this.ui.arenaMessage.textContent = "ELIMINATE HOSTILES";
     this.lastFrame = performance.now();
     cancelAnimationFrame(this.frameId);
@@ -341,6 +343,7 @@ export class ArenaGame {
     this.ui.overlayCopy.textContent = "All five threat levels cleared. You eliminated " + this.kills + " opponents and outlasted every profile. Ready for another run?";
     this.ui.startButton.innerHTML = "<span>RUN IT BACK</span><span aria-hidden=\"true\">↻</span>";
     this.ui.overlay.classList.remove("hidden");
+    this.ui.simulationStatus.textContent = "ARENA CONQUERED";
     this.ui.arenaMessage.textContent = "SIMULATION COMPLETE";
     this.addFeed("All threat levels cleared. Arena conquered.");
   }
@@ -353,6 +356,7 @@ export class ArenaGame {
     this.ui.overlayCopy.textContent = "You eliminated " + this.kills + " opponent" + (this.kills === 1 ? "" : "s") + ". The arena keeps score. Think you can do better?";
     this.ui.startButton.innerHTML = "<span>RUN IT BACK</span><span aria-hidden=\"true\">↻</span>";
     this.ui.overlay.classList.remove("hidden");
+    this.ui.simulationStatus.textContent = "SIMULATION TERMINATED";
     this.ui.arenaMessage.textContent = "SIMULATION TERMINATED";
     this.addFeed("Run terminated. Press R to retry.");
   }
@@ -373,6 +377,7 @@ export class ArenaGame {
     this.ui.pauseButton.textContent = "▶";
     this.ui.pauseButton.setAttribute("aria-label", "Resume game");
     this.ui.pauseButton.title = "Resume (Esc)";
+    this.ui.simulationStatus.textContent = "SIMULATION PAUSED";
     this.ui.overlayTitle.innerHTML = "TAKE A<br /><span>BREATHER.</span>";
     this.ui.overlayCopy.textContent = "The bots aren't going anywhere. Ready when you are.";
     this.ui.startButton.innerHTML = "<span>RESUME RUN</span><span aria-hidden=\"true\">↗</span>";
