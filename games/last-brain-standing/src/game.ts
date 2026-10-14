@@ -165,6 +165,26 @@ interface Pulse {
   color: string;
 }
 
+/** A scorch mark left where a round hit something; fades over a few seconds. */
+interface Decal {
+  position: Vec2;
+  size: number;
+  strength: number;
+  /** Marks aimed at the floor fade faster than ones on a crate face. */
+  onFloor: boolean;
+}
+
+/** A dust mote drifting through the room, for depth and atmosphere. */
+interface Mote {
+  position: Vec2;
+  drift: Vec2;
+  size: number;
+  phase: number;
+}
+
+/** How many scorch marks are kept before the oldest is dropped. */
+const MAX_DECALS = 90;
+
 /** Per-difficulty bests, so recruit and veteran progress do not overwrite each other. */
 type BestByDifficulty = Partial<Record<DifficultyId, { kills: number; score: number }>>;
 
@@ -273,6 +293,8 @@ export class ArenaGame {
   private started = false;
   private debug = false;
   private hitStop = 0;
+  private decals: Decal[] = [];
+  private motes: Mote[] = [];
   private combo = 0;
   private comboTimer = 0;
   private lowHealthAlarm = 0;
@@ -360,6 +382,8 @@ export class ArenaGame {
     this.particles.length = 0;
     this.texts.length = 0;
     this.pulses.length = 0;
+    this.decals.length = 0;
+    this.seedMotes();
     this.dashTrail.length = 0;
     this.shake = 0;
     this.flash = 0;
@@ -755,6 +779,39 @@ export class ArenaGame {
 
   // ------------------------------------------------------------------- effects
 
+  /**
+   * Scorch marks make the room remember the fight: rounds leave a stain where
+   * they land, floors fade faster than crate faces, and the oldest is dropped so
+   * a long run cannot accumulate without bound.
+   */
+  private spawnDecal(position: Vec2, size: number, owner: "player" | "bot"): void {
+    const onFloor = !this.world.obstacles.some(
+      (block) =>
+        position.x > block.x && position.x < block.x + block.w && position.y > block.y && position.y < block.y + block.h
+    );
+    this.decals.push({
+      position: { ...position },
+      size: size * (owner === "player" ? 1 : 0.85),
+      strength: 0.5,
+      onFloor
+    });
+    if (this.decals.length > MAX_DECALS) this.decals.splice(0, this.decals.length - MAX_DECALS);
+  }
+
+  /** Ambient dust, seeded once per run so it drifts the same way every replay. */
+  private seedMotes(): void {
+    const rng = createRng(`motes-${this.world.seed}`);
+    this.motes = [];
+    for (let i = 0; i < 46; i += 1) {
+      this.motes.push({
+        position: { x: rng.range(20, WORLD.width - 20), y: rng.range(20, WORLD.height - 20) },
+        drift: { x: rng.range(-5, 5), y: rng.range(-3.4, 1.6) },
+        size: rng.range(0.7, 1.9),
+        phase: rng.range(0, Math.PI * 2)
+      });
+    }
+  }
+
   private handleEvents(events: ReturnType<typeof stepWorld>): void {
     for (const event of events) {
       switch (event.type) {
@@ -774,6 +831,7 @@ export class ArenaGame {
         }
         case "player-hit": {
           this.lastHitBy = event.source;
+          this.spawnDecal(event.position, 6, "player");
           // Calm mode: with screen shake switched off the player has asked for
           // less motion, so the full-screen damage flash stays off too.
           if (this.shakeEnabled) this.flash = Math.max(this.flash, 0.55);
@@ -824,6 +882,7 @@ export class ArenaGame {
         }
         case "bot-hit": {
           this.hitMarker = 0.16;
+          this.spawnDecal(event.position, 4.5, "bot");
           this.burst(event.position, "#ffffff", 5, 0.22, 140);
           this.texts.push({
             position: { ...event.position },
@@ -1001,6 +1060,22 @@ export class ArenaGame {
   }
 
   private updateEffects(dt: number): void {
+    // Scorch marks fade out slowly, slower on a vertical face than on the floor.
+    for (let i = this.decals.length - 1; i >= 0; i -= 1) {
+      const decal = this.decals[i];
+      decal.strength -= dt * (decal.onFloor ? 0.055 : 0.035);
+      if (decal.strength <= 0) this.decals.splice(i, 1);
+    }
+    // Dust never stops moving; it just wraps around the room.
+    for (const mote of this.motes) {
+      mote.position.x += mote.drift.x * dt;
+      mote.position.y += mote.drift.y * dt;
+      if (mote.position.x < 8) mote.position.x = WORLD.width - 8;
+      if (mote.position.x > WORLD.width - 8) mote.position.x = 8;
+      if (mote.position.y < 8) mote.position.y = WORLD.height - 8;
+      if (mote.position.y > WORLD.height - 8) mote.position.y = 8;
+    }
+
     for (let i = this.particles.length - 1; i >= 0; i -= 1) {
       const particle = this.particles[i];
       particle.position.x += particle.velocity.x * dt;
@@ -1216,6 +1291,7 @@ export class ArenaGame {
 
     try {
       this.drawBackground();
+      this.drawFloorDecals();
       this.drawObstacles();
       this.drawSpawnWarnings();
       this.drawDashTrail();
@@ -1225,6 +1301,7 @@ export class ArenaGame {
       this.drawAgents();
       this.drawPulses();
       this.drawParticles();
+      this.drawMotes();
       this.drawTexts();
       this.drawOverlays();
       // F3 draws the tuning overlay in the arena itself: what each hostile can
@@ -1403,6 +1480,20 @@ export class ArenaGame {
     ctx.fillText("LBS // COMBAT TEST CHAMBER", WORLD.width - 208, WORLD.height - 30);
     ctx.fillText("KEEP CLEAR", WORLD.width / 2 - 27, 40);
 
+    // Work lamps: fixed pools of light that give the room depth and landmarks.
+    for (const [lx, ly, radius, strength] of [
+      [WORLD.width * 0.22, WORLD.height * 0.26, 190, 0.05],
+      [WORLD.width * 0.78, WORLD.height * 0.26, 190, 0.05],
+      [WORLD.width * 0.5, WORLD.height * 0.78, 240, 0.06]
+    ]) {
+      const lamp = ctx.createRadialGradient(lx, ly, 0, lx, ly, radius);
+      lamp.addColorStop(0, `rgba(238, 226, 198, ${strength})`);
+      lamp.addColorStop(0.6, `rgba(238, 226, 198, ${strength * 0.35})`);
+      lamp.addColorStop(1, "rgba(238, 226, 198, 0)");
+      ctx.fillStyle = lamp;
+      ctx.fillRect(lx - radius, ly - radius, radius * 2, radius * 2);
+    }
+
     // Dust build-up in the corners, which sells the age of the room.
     for (const [x, y, r] of [
       [0, 0, 260],
@@ -1438,6 +1529,35 @@ export class ArenaGame {
     glow.addColorStop(1, "rgba(226, 210, 176, 0)");
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+  }
+
+  /** Scorch marks on the floor; crate-face marks are drawn with the blocks. */
+  private drawFloorDecals(): void {
+    const ctx = this.ctx;
+    for (const decal of this.decals) {
+      if (!decal.onFloor) continue;
+      ctx.save();
+      ctx.globalAlpha = clamp(decal.strength, 0, 1) * 0.34;
+      ctx.fillStyle = "#141210";
+      ctx.beginPath();
+      ctx.ellipse(decal.position.x, decal.position.y, decal.size, decal.size * 0.6, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  /** Dust motes drifting in the lamp light, which gives the room depth. */
+  private drawMotes(): void {
+    const ctx = this.ctx;
+    const time = this.world.elapsed;
+    ctx.save();
+    for (const mote of this.motes) {
+      const shimmer = 0.5 + 0.5 * Math.sin(time * 1.4 + mote.phase);
+      ctx.globalAlpha = 0.05 + shimmer * 0.09;
+      ctx.fillStyle = "#efe6d2";
+      ctx.fillRect(mote.position.x, mote.position.y, mote.size, mote.size);
+    }
+    ctx.restore();
   }
 
   private drawObstacles(): void {

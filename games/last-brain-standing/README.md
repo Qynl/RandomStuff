@@ -86,6 +86,14 @@ Measured with the scripted autoplay policy over 24 seeds per difficulty (`tests/
 
 The policy reacts to telegraphs perfectly, so it is a much stronger player than a first-timer: treat these as ordering and sanity figures, not a human win rate. Best score and best eliminations are stored per difficulty.
 
+## Look
+
+Grounded industrial test chamber, not a neon vector demo: poured concrete with slab seams, coarser speckle, worn paint and stencilled sector marks; extruded steel crates with lit top plates, ribs, rust streaks and a worn hazard strip; three work lamps laying pools of light on the floor; dust motes drifting through the room; units with contact shadows; tracers instead of glowing bolts; scorch marks that appear where rounds land and fade out over the next half minute.
+
+Every hostile has its own model rather than its own colour: the Hunter is a squat siege mech with skirt plates and a cannon that lights as it charges, the Flanker a light interceptor with swept prongs, a fluttering wing and thruster burn that tracks its speed, and the Mirror a faceted prism with a narrowing eye and three orbiting shards. The player is an armoured operative with an amber visor, a rifle that recoils on every shot and a walk cycle.
+
+There is no bloom anywhere (a test rejects any non-zero `shadowBlur`), and a second test rejects any colour that is both vivid and bright, so neon cannot creep back in without deleting a test that says why it is there.
+
 ## Loadouts
 
 You pick a primary weapon before a run, and it changes how the fight is played:

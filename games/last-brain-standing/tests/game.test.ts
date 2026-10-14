@@ -18,6 +18,44 @@ describe("ArenaGame engine shell", () => {
   let canvasProto: ReturnType<typeof installFakeCanvasPrototype>;
 
   /** Drops a lethal bot round on the player through the world surface. */
+  /** Drops a hostile at a spot and fires a player round straight at it. */
+  const fireRoundAt = (target: ArenaGame, at: { x: number; y: number }, damage = 40) => {
+    const world = target.activeWorld;
+    world.bots.push({
+      id: 900,
+      kind: "hunter",
+      position: { ...at },
+      velocity: { x: 0, y: 0 },
+      health: damage,
+      maxHealth: 48,
+      fireCooldown: 5,
+      windup: 0,
+      windupDuration: 0.6,
+      windupTurnRate: 2,
+      facing: 0,
+      spawnGuard: 0,
+      strafeSign: 1,
+      strafeLock: 0,
+      alive: true,
+      hitFlash: 0,
+      blindTime: 0
+    });
+    world.bullets.push({
+      position: { ...world.player.position },
+      velocity: { x: 0, y: 0 },
+      owner: "player",
+      damage,
+      life: 1,
+      color: "#fff",
+      source: "player",
+      travelled: 0
+    });
+    // Place the round right on the target so the next step registers the hit.
+    const shot = world.bullets[world.bullets.length - 1];
+    shot.position = { x: at.x - 1, y: at.y };
+    shot.velocity = { x: 600, y: 0 };
+  };
+
   const killPlayer = (target: ArenaGame, kind: "hunter" | "flanker" | "mirror" = "hunter") => {
     const world = target.activeWorld;
     world.player.invulnerability = 0;
@@ -75,6 +113,56 @@ describe("ArenaGame engine shell", () => {
     canvasProto.restore();
     canvas.remove();
     vi.restoreAllMocks();
+  });
+
+  it("leaves scorch marks where rounds land and fades them out", () => {
+    const decalsOf = (target: ArenaGame) => (target as unknown as { decals: Array<{ strength: number }> }).decals;
+    game = createGame();
+    game.beginRun("decals");
+    frames.advance(30);
+    const world = game.activeWorld;
+    pinLayout(world);
+    world.waveState = "idle";
+    world.player.position = { x: 100, y: 100 };
+    world.bots.length = 0;
+    expect(decalsOf(game)).toHaveLength(0);
+
+    // A round that lands on a hostile leaves a mark where it hit.
+    fireRoundAt(game, { x: 300, y: 100 });
+    frames.advance(4);
+    expect(world.stats.kills + world.stats.damageDealt).toBeGreaterThan(0);
+    expect(decalsOf(game).length).toBeGreaterThan(0);
+
+    // The mark fades out on its own rather than sitting there for the whole run.
+    const strength = decalsOf(game)[0].strength;
+    frames.advance(60);
+    const faded = decalsOf(game)[0]?.strength ?? 0;
+    expect(faded).toBeLessThan(strength);
+    frames.advance(60 * 25);
+    expect(decalsOf(game)).toHaveLength(0);
+  });
+
+  it("seeds ambient dust when a run starts and keeps it inside the arena", () => {
+    game = createGame();
+    game.beginRun("motes");
+    frames.advance(20);
+    // The dust is seeded from the run seed, so two engines on the same seed
+    // drift identically; here we only check it exists and is bounded.
+    const particles = (game as unknown as { motes: Array<{ position: { x: number; y: number } }> }).motes;
+    expect(particles.length).toBeGreaterThan(10);
+    for (const mote of particles) {
+      expect(mote.position.x).toBeGreaterThanOrEqual(8);
+      expect(mote.position.x).toBeLessThanOrEqual(WORLD.width - 8);
+      expect(mote.position.y).toBeGreaterThanOrEqual(8);
+      expect(mote.position.y).toBeLessThanOrEqual(WORLD.height - 8);
+    }
+    // Let them drift a while and confirm they wrap rather than leave the room.
+    frames.advance(200);
+    for (const mote of particles) {
+      expect(Number.isFinite(mote.position.x)).toBe(true);
+      expect(mote.position.y).toBeGreaterThanOrEqual(8);
+      expect(mote.position.y).toBeLessThanOrEqual(WORLD.height - 8);
+    }
   });
 
   it("keeps the run alive when drawing fails", () => {
