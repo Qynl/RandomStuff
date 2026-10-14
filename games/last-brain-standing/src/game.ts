@@ -1,6 +1,7 @@
 import { BOT_PROFILES, chooseBotDirection, distance, normalize, shouldBotFire } from "./ai";
 import { circleHitsRect, moveWithCollisions, OBSTACLES, segmentBlocked, segmentHitsCircle, WORLD } from "./arena";
 import type { AgentState, BotKind, Bullet, PlayerTelemetry, Vec2 } from "./types";
+import { getNextWave, getWaveSpawnCount, MAX_WAVES } from "./progression";
 
 interface Particle { position: Vec2; velocity: Vec2; life: number; maxLife: number; color: string; size: number }
 interface FloatingText { position: Vec2; text: string; life: number; color: string }
@@ -280,8 +281,13 @@ export class ArenaGame {
 
   private spawnWaveIfClear(): void {
     if (this.bots.some((bot) => bot.alive)) return;
-    this.wave = Math.min(5, this.wave + 1);
-    const count = Math.min(3 + this.wave - 1, 6);
+    const nextWave = getNextWave(this.wave);
+    if (nextWave === null) {
+      this.finishRun();
+      return;
+    }
+    this.wave = nextWave;
+    const count = getWaveSpawnCount(this.wave);
     const kinds: BotKind[] = this.wave >= 3 ? ["hunter", "flanker", "mirror", "hunter", "flanker", "mirror"].slice(0, count) : this.profileKinds.slice(0, count);
     for (let i = 0; i < count; i += 1) {
       const angle = (Math.PI * 2 * i) / count + randomBetween(-0.2, 0.2);
@@ -322,6 +328,19 @@ export class ArenaGame {
     this.paused = false;
     this.running = false;
     this.start();
+  }
+
+  private finishRun(): void {
+    this.over = true;
+    this.running = false;
+    this.paused = false;
+    cancelAnimationFrame(this.frameId);
+    this.ui.overlayTitle.innerHTML = "ARENA<br /><span>CONQUERED.</span>";
+    this.ui.overlayCopy.textContent = "All five threat levels cleared. You eliminated " + this.kills + " opponents and outlasted every profile. Ready for another run?";
+    this.ui.startButton.innerHTML = "<span>RUN IT BACK</span><span aria-hidden=\"true\">↻</span>";
+    this.ui.overlay.classList.remove("hidden");
+    this.ui.arenaMessage.textContent = "SIMULATION COMPLETE";
+    this.addFeed("All threat levels cleared. Arena conquered.");
   }
 
   private endRun(): void {
@@ -389,7 +408,7 @@ export class ArenaGame {
 
   private updateHud(): void {
     this.ui.kills.textContent = String(this.kills).padStart(2, "0");
-    this.ui.wave.innerHTML = String(this.wave).padStart(2, "0") + " <i>/ 05</i>";
+    this.ui.wave.innerHTML = String(this.wave).padStart(2, "0") + " <i>/ " + String(MAX_WAVES).padStart(2, "0") + "</i>";
     this.ui.waveProgress.style.width = (this.kills % 5) * 20 + "%";
     this.ui.healthText.textContent = this.health + "%";
     this.ui.healthBar.style.width = this.health + "%";
