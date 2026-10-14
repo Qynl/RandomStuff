@@ -1,6 +1,7 @@
 name: Last Brain Standing checks
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - game/last-brain-standing
