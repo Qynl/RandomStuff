@@ -16,13 +16,23 @@ export interface FakeCanvas {
   calls: RecordedCanvasCalls;
   /** Every string passed to fillText/strokeText, in draw order. */
   texts: string[];
+  /**
+   * Ordered log of the frame: `fillRect()` for calls, `strokeStyle=#abc` for
+   * style assignments. Colour-level assertions ("the burning hostile gets an
+   * ember ring") read this instead of guessing from call counts.
+   */
+  trace: string[];
   /** Total 2D calls recorded, useful for "did it actually draw" assertions. */
   total(): number;
   reset(): void;
 }
 
 /** Builds a CanvasRenderingContext2D-shaped object that records every call. */
-export function createFakeCanvasContext(calls: RecordedCanvasCalls = {}, texts: string[] = []): CanvasRenderingContext2D {
+export function createFakeCanvasContext(
+  calls: RecordedCanvasCalls = {},
+  texts: string[] = [],
+  trace: string[] = []
+): CanvasRenderingContext2D {
   const gradient = { addColorStop: () => undefined };
   const target: Record<string, unknown> = {
     canvas: null,
@@ -42,12 +52,14 @@ export function createFakeCanvasContext(calls: RecordedCanvasCalls = {}, texts: 
         if (typeof value === "function") {
           return (...args: unknown[]) => {
             calls[property] = (calls[property] ?? 0) + 1;
+            trace.push(`${property}()`);
             return (value as (...inner: unknown[]) => unknown)(...args);
           };
         }
         return value;
       }
       calls[property] = (calls[property] ?? 0) + 1;
+      trace.push(`${property}()`);
       if (property === "fillText" || property === "strokeText") {
         return (value: unknown) => {
           texts.push(String(value));
@@ -57,6 +69,7 @@ export function createFakeCanvasContext(calls: RecordedCanvasCalls = {}, texts: 
     },
     set(object, property: string, value: unknown) {
       object[property] = value;
+      if (typeof value === "string" || typeof value === "number") trace.push(`${property}=${value}`);
       return true;
     }
   }) as unknown as CanvasRenderingContext2D;
@@ -66,7 +79,8 @@ export function createFakeCanvasContext(calls: RecordedCanvasCalls = {}, texts: 
 export function installFakeCanvasContext(canvas: HTMLCanvasElement): FakeCanvas {
   const calls: RecordedCanvasCalls = {};
   const texts: string[] = [];
-  const context = createFakeCanvasContext(calls, texts);
+  const trace: string[] = [];
+  const context = createFakeCanvasContext(calls, texts, trace);
   (context as unknown as { canvas: HTMLCanvasElement }).canvas = canvas;
   canvas.getContext = ((type: string) => (type === "2d" ? context : null)) as HTMLCanvasElement["getContext"];
   // jsdom reports a zero-sized rect; the arena maps pointer input through it.
@@ -76,10 +90,12 @@ export function installFakeCanvasContext(canvas: HTMLCanvasElement): FakeCanvas 
     context,
     calls,
     texts,
+    trace,
     total: () => Object.values(calls).reduce((sum, value) => sum + value, 0),
     reset: () => {
       for (const key of Object.keys(calls)) delete calls[key];
       texts.length = 0;
+      trace.length = 0;
     }
   };
 }

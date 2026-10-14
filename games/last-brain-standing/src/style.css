@@ -511,3 +511,6 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
   .home-sheet{padding:10px}
   .sheet-card{padding:16px 14px 20px}
 }
+.kit-row strong.ready{color:var(--brass)}
+.kit-track{height:4px;margin-top:6px;border-radius:2px;background:#14171b;border:1px solid #2c3037;overflow:hidden}
+.kit-track span{display:block;height:100%;background:linear-gradient(90deg,#8fb0cf,var(--brass))}

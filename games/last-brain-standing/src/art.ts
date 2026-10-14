@@ -71,6 +71,64 @@ export const PLAYER_ART: UnitArt = {
   silhouette: "trooper"
 };
 
+/**
+ * Operative classes.
+ *
+ * The player used to be one fixed palette, which made a class swap invisible
+ * outside the HUD. Each class now carries its own metals and trim, so the
+ * operative you picked is the one standing on the floor: blue-grey line
+ * infantry, brown siege plate, slate marksman, violet-tinged infiltrator,
+ * scorched fire crew, and mossy engineer.
+ */
+export const CLASS_ART: Record<"vanguard" | "breacher" | "marksman" | "ghost" | "cinder" | "sapper", UnitArt> = {
+  vanguard: PLAYER_ART,
+  breacher: {
+    body: "#3a3029",
+    plate: "#55463a",
+    shade: "#1c1613",
+    accent: "#d0705c",
+    ink: "#120c0a",
+    detail: "#d8b08a",
+    silhouette: "trooper"
+  },
+  marksman: {
+    body: "#2e3540",
+    plate: "#47505e",
+    shade: "#171b21",
+    accent: "#cfa25f",
+    ink: "#0d1014",
+    detail: "#cfd8e2",
+    silhouette: "trooper"
+  },
+  ghost: {
+    body: "#2b2a36",
+    plate: "#45445a",
+    shade: "#16161d",
+    accent: "#a08ec0",
+    ink: "#0d0d12",
+    detail: "#c6bcdd",
+    silhouette: "trooper"
+  },
+  cinder: {
+    body: "#332a24",
+    plate: "#4d3f33",
+    shade: "#1a1411",
+    accent: "#c9975a",
+    ink: "#120d0a",
+    detail: "#e0b48a",
+    silhouette: "trooper"
+  },
+  sapper: {
+    body: "#2b332e",
+    plate: "#414c45",
+    shade: "#161a18",
+    accent: "#8fb48c",
+    ink: "#0d100e",
+    detail: "#bcd0b8",
+    silhouette: "trooper"
+  }
+};
+
 const BASE_BOT_ART: Record<"hunter" | "flanker" | "mirror", UnitArt> = {
   // A squat siege mech: heavy plates, a single amber sensor slit, a stubby
   // cannon. Reads as slow and direct at a glance.
@@ -250,5 +308,11 @@ export const STATUS = {
   healthTrack: "rgba(16, 18, 22, 0.75)",
   warning: "#d8a25e",
   hit: "#f2ede2",
-  shadow: "rgba(6, 7, 9, 0.5)"
+  shadow: "rgba(6, 7, 9, 0.5)",
+  /** Marksman focus gauge: painted brass, no glow. */
+  brassArc: "#cfa25f",
+  /** Ghost phase outline: cold steel, barely lit. */
+  phaseInk: "#9fb6cc",
+  /** Burning hostile ring. */
+  ember: "#8a6a3f"
 } as const;

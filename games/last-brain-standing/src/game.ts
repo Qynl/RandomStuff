@@ -1,7 +1,7 @@
 import { BOT_KINDS, BOT_PROFILES, emptyKindTotals } from "./ai";
 import { attackFor, PROFILE_PITCH, volleyFor } from "./signatures";
 import { ARENA_LAYOUTS, firstBlockingFraction, layoutForSeed, rangeScaleForOpenness, WORLD } from "./arena";
-import { BLOCK, BOT_ART, BULLET, FLOOR, PLAYER_ART, STATUS, TELEGRAPH, TELEGRAPH_STYLE } from "./art";
+import { BLOCK, BOT_ART, BULLET, CLASS_ART, FLOOR, PLAYER_ART, STATUS, TELEGRAPH, TELEGRAPH_STYLE } from "./art";
 import { SoundEngine, type SoundName } from "./audio";
 import { BOT_RADIUS, DIFFICULTIES, MAX_PARTICLES, PLAYER_MAX_HEALTH, PLAYER_RADIUS } from "./constants";
 import {
@@ -45,6 +45,12 @@ import type { PlayerState } from "./sim";
 
 /** Seconds of standing still a Marksman needs: mirrored from the simulation. */
 const FOCUS_WINDOW = 0.7;
+/** Same value, kept here so the renderer never imports simulation state. */
+const FOCUS_DRAW_WINDOW = 0.7;
+/** How long a Ghost's phase lasts, in seconds. */
+const PHASE_DRAW_SPAN = 0.34;
+/** Burn duration, for scaling the flame overlay. */
+const BURN_DRAW_SPAN = 2.5;
 
 export interface GameSnapshot {
   phase: SimPhase;
@@ -2332,7 +2338,8 @@ export class ArenaGame {
   private drawShells(): void {
     const ctx = this.ctx;
     for (const shell of this.world.shells) {
-      const art = BOT_ART[shell.kind];
+      const fromPlayer = shell.owner === "player";
+      const art = fromPlayer ? PLAYER_ART : BOT_ART[shell.kind];
       const remaining = clamp(shell.flight / Math.max(0.001, shell.totalFlight), 0, 1);
       // Ballistic arc: the shadow stays on the floor while the shell climbs.
       const at = { x: shell.from.x + (shell.target.x - shell.from.x) * (1 - remaining), y: shell.from.y + (shell.target.y - shell.from.y) * (1 - remaining) };
@@ -2360,8 +2367,17 @@ export class ArenaGame {
       ctx.fillRect(-1.4, -3.4, 2.8, 1.6);
       ctx.restore();
 
-      // Landing ring: dark ink plus the profile tint, closing as it falls.
+      // Landing ring: dark ink plus the tint, closing as it falls. The sapper's
+      // own shell also paints the burst radius it is going to clear.
       ctx.save();
+      if (fromPlayer) {
+        ctx.globalAlpha = 0.14 + (1 - remaining) * 0.18;
+        ctx.strokeStyle = PLAYER_ART.accent;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(shell.target.x, shell.target.y, shell.radius, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       ctx.globalAlpha = 0.3 + (1 - remaining) * 0.45;
       ctx.strokeStyle = art.accent;
       ctx.lineWidth = 2;
@@ -2470,6 +2486,10 @@ export class ArenaGame {
       ctx.scale(0.72 + materialise * 0.28, 0.72 + materialise * 0.28);
       this.drawBotModel(ctx, bot, art);
       ctx.restore();
+      // Kit states sit on top of the model in world space: a burning hostile
+      // and a staggered one have to be tellable apart mid-fight.
+      if (bot.burn && bot.burn > 0) this.drawBurnOverlay(bot);
+      if (bot.stun > 0) this.drawStaggerMark(bot);
     }
 
     this.drawOperator(this.world.player);
@@ -3034,11 +3054,214 @@ export class ArenaGame {
     }
   }
 
+  /**
+   * A hostile that is on fire: licking flame puffs climbing off its shoulders,
+   * pulsing at the tick rate, plus a scorched ring on the floor. The flames are
+   * drawn in warm paint strokes, never as a glow.
+   */
+  private drawBurnOverlay(bot: AgentState): void {
+    const ctx = this.ctx;
+    const burn = bot.burn ?? 0;
+    const strength = clamp(burn / BURN_DRAW_SPAN, 0, 1);
+    const time = this.world.elapsed;
+    ctx.save();
+    ctx.translate(bot.position.x, bot.position.y);
+    // Scorched floor ring.
+    ctx.globalAlpha = 0.3 * strength;
+    ctx.strokeStyle = STATUS.ember;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 4]);
+    ctx.lineDashOffset = -time * 14;
+    ctx.beginPath();
+    ctx.arc(0, 2, BOT_RADIUS + 3, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    // Three tongues of flame, each on its own flicker phase.
+    for (let i = 0; i < 3; i += 1) {
+      const phase = time * (7 + i * 1.7) + i * 2.1;
+      const flicker = 0.55 + 0.45 * Math.sin(phase);
+      const x = -BOT_RADIUS * 0.6 + i * BOT_RADIUS * 0.6;
+      const lift = 4 + flicker * 7;
+      ctx.globalAlpha = (0.34 + flicker * 0.4) * strength;
+      ctx.fillStyle = i === 1 ? STATUS.warning : "#a8552f";
+      ctx.beginPath();
+      ctx.moveTo(x - 3.4, 0);
+      ctx.quadraticCurveTo(x - 1.6, -lift * 0.7, x, -lift);
+      ctx.quadraticCurveTo(x + 1.6, -lift * 0.7, x + 3.4, 0);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  /** A staggered hostile wears two amber ticks: it cannot act, so take the shot. */
+  private drawStaggerMark(bot: AgentState): void {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.translate(bot.position.x, bot.position.y);
+    ctx.rotate(this.world.elapsed * 1.4);
+    ctx.strokeStyle = "#c9975a";
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.85;
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.arc(0, 0, BOT_RADIUS + 7, side > 0 ? -0.5 : Math.PI - 0.5, side > 0 ? 0.5 : Math.PI + 0.5);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /**
+   * The Marksman's focus bank: a brass arc that fills while the operative holds
+   * still, closing into a full bracket the moment the next round is heavy.
+   */
+  private drawFocusGauge(player: PlayerState): void {
+    const ctx = this.ctx;
+    const ready = player.focusTime >= FOCUS_DRAW_WINDOW;
+    const progress = clamp(player.focusTime / FOCUS_DRAW_WINDOW, 0, 1);
+    ctx.save();
+    ctx.translate(player.position.x, player.position.y);
+    ctx.strokeStyle = STATUS.brassArc;
+    ctx.lineWidth = ready ? 2.4 : 2;
+    ctx.globalAlpha = ready ? 0.95 : 0.5 + progress * 0.3;
+    ctx.beginPath();
+    ctx.arc(0, 0, PLAYER_RADIUS + 9, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+    ctx.stroke();
+    if (ready) {
+      // Crosshair ticks, so "charged" reads even in a busy frame.
+      for (let i = 0; i < 4; i += 1) {
+        const angle = (Math.PI / 2) * i;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(angle) * (PLAYER_RADIUS + 5), Math.sin(angle) * (PLAYER_RADIUS + 5));
+        ctx.lineTo(Math.cos(angle) * (PLAYER_RADIUS + 13), Math.sin(angle) * (PLAYER_RADIUS + 13));
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+  }
+
+  /**
+   * The Ghost mid-phase: the operative fades to an outline with two afterimages
+   * behind it and a countdown arc, because "nothing can see me" has to be
+   * obvious enough to dash through a firing line on purpose.
+   */
+  private drawPhaseGhost(player: PlayerState): void {
+    const ctx = this.ctx;
+    const path = player.moveIntent;
+    const length = Math.hypot(path.x, path.y) || 1;
+    ctx.save();
+    ctx.strokeStyle = STATUS.phaseInk;
+    ctx.lineWidth = 1.4;
+    for (let i = 1; i <= 2; i += 1) {
+      ctx.globalAlpha = 0.3 / i;
+      ctx.beginPath();
+      ctx.arc(
+        player.position.x - (path.x / length) * i * 11,
+        player.position.y - (path.y / length) * i * 11,
+        PLAYER_RADIUS * (1 - i * 0.12),
+        0,
+        Math.PI * 2
+      );
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    ctx.arc(player.position.x, player.position.y, PLAYER_RADIUS + 10, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * clamp(player.phaseTime / PHASE_DRAW_SPAN, 0, 1));
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  /**
+   * The class weapon, drawn in the operative's hands. Each one is a different
+   * object on purpose: a long service rifle, a fat scattergun, a rail with a
+   * scope, a stubby carbine, a projector with a tank, and a drum-fed lobber.
+   */
+  private drawClassWeapon(ctx: CanvasRenderingContext2D, id: LoadoutId, art: (typeof CLASS_ART)["vanguard"], recoil: number): void {
+    ctx.fillStyle = art.ink;
+    switch (id) {
+      case "vanguard": {
+        ctx.fillRect(2 - recoil, -2.4, 9, 4.8);
+        ctx.fillRect(9 - recoil, -1.4, 12, 2.8);
+        ctx.fillStyle = art.shade;
+        ctx.fillRect(0 - recoil, -3.4, 6, 6.8);
+        ctx.fillRect(5 - recoil, 2.2, 3, 4.2);
+        break;
+      }
+      case "breacher": {
+        ctx.fillRect(1 - recoil, -3.6, 11, 7.2);
+        ctx.fillRect(11 - recoil, -4.4, 9, 8.8);
+        // Muzzle brake fins.
+        ctx.fillStyle = art.accent;
+        ctx.fillRect(19 - recoil, -4.4, 1.6, 8.8);
+        ctx.fillRect(16 - recoil, -4.8, 1.4, 2.4);
+        ctx.fillRect(16 - recoil, 2.4, 1.4, 2.4);
+        break;
+      }
+      case "marksman": {
+        ctx.fillRect(2 - recoil, -1.2, 26, 2.4);
+        ctx.fillStyle = art.shade;
+        ctx.fillRect(4 - recoil, 1.2, 4, 4.6);
+        ctx.fillStyle = art.ink;
+        ctx.fillRect(6 - recoil, -6.2, 8, 3.4);
+        ctx.strokeStyle = art.accent;
+        ctx.lineWidth = 0.9;
+        ctx.beginPath();
+        ctx.moveTo(12 - recoil, 1.2);
+        ctx.lineTo(12 - recoil, 6.4);
+        ctx.stroke();
+        break;
+      }
+      case "ghost": {
+        ctx.fillRect(2 - recoil, -2.2, 8, 4.4);
+        ctx.fillRect(10 - recoil, -1.6, 11, 3.2);
+        ctx.fillStyle = art.shade;
+        ctx.fillRect(0 - recoil, -3.2, 4, 6.4);
+        break;
+      }
+      case "cinder": {
+        // Fuel tank on the back, hose over the shoulder, wide nozzle in front.
+        ctx.fillStyle = art.shade;
+        ctx.fillRect(-17, -7.5, 7, 15);
+        ctx.fillStyle = art.accent;
+        ctx.fillRect(-16, -5.5, 2, 3);
+        ctx.fillStyle = art.ink;
+        ctx.fillRect(2 - recoil, -2.6, 9, 5.2);
+        ctx.beginPath();
+        ctx.moveTo(11 - recoil, -4.6);
+        ctx.lineTo(19 - recoil, -6);
+        ctx.lineTo(19 - recoil, 6);
+        ctx.lineTo(11 - recoil, 4.6);
+        ctx.closePath();
+        ctx.fill();
+        break;
+      }
+      case "sapper": {
+        ctx.fillStyle = art.shade;
+        ctx.beginPath();
+        ctx.arc(4 - recoil * 0.5, 0, 6.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = art.ink;
+        ctx.fillRect(6 - recoil, -4.4, 12, 8.8);
+        ctx.fillStyle = art.accent;
+        ctx.beginPath();
+        ctx.arc(4 - recoil * 0.5, 0, 3.4, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
+      default:
+        break;
+    }
+  }
+
   /** The player: an armoured operative with a visor, a rifle and a walk cycle. */
   private drawOperator(player: PlayerState): void {
     const ctx = this.ctx;
-    const art = PLAYER_ART;
+    const loadoutId = this.world.loadout.id;
+    const art = CLASS_ART[loadoutId] ?? PLAYER_ART;
     const invulnerable = player.invulnerability > 0;
+    const phasing = player.phaseTime > 0;
+    const focusReady = this.world.loadout.trait === "focus" && player.focusTime >= FOCUS_DRAW_WINDOW;
+    const kick = this.world.loadout.trait === "siege" && player.dashTimer > 0 ? 1.12 : 1;
     const speed = Math.hypot(player.velocity.x, player.velocity.y);
     const walk = this.world.elapsed * 11;
     const step = speed > 12 ? Math.sin(walk) * 2.2 : 0;
@@ -3047,7 +3270,13 @@ export class ArenaGame {
     ctx.save();
     ctx.translate(player.position.x, player.position.y);
     this.drawUnitShadow(ctx, PLAYER_RADIUS + 5);
-    ctx.globalAlpha = invulnerable && Math.floor(this.world.elapsed * 24) % 2 === 0 ? 0.45 : 1;
+    // Phasing blinks the operative half-there; i-frames blink faster.
+    ctx.globalAlpha = phasing
+      ? (Math.floor(this.world.elapsed * 18) % 2 === 0 ? 0.34 : 0.62)
+      : invulnerable && Math.floor(this.world.elapsed * 24) % 2 === 0
+        ? 0.45
+        : 1;
+    if (kick !== 1) ctx.scale(kick, kick);
     ctx.rotate(Math.atan2(player.aimDirection.y, player.aimDirection.x));
 
     // Boots, cycled with movement.
@@ -3088,13 +3317,9 @@ export class ArenaGame {
     ctx.fillRect(-11, 1.5, 2, 2);
     ctx.globalAlpha /= 0.55;
 
-    // Rifle: stock, receiver, barrel, and a muzzle that recoils on fire.
+    // The class weapon: stock, receiver, barrel, and a muzzle that recoils.
     const recoil = player.fireCooldown > 0 ? clamp(player.fireCooldown / 0.14, 0, 1) * 2.4 : 0;
-    ctx.fillStyle = art.ink;
-    ctx.fillRect(2 - recoil, -2.4, 9, 4.8);
-    ctx.fillRect(9 - recoil, -1.4, 12, 2.8);
-    ctx.fillStyle = art.shade;
-    ctx.fillRect(0 - recoil, -3.4, 6, 6.8);
+    this.drawClassWeapon(ctx, loadoutId, art, recoil);
 
     // Helmet: dome, brow and an amber visor band.
     ctx.fillStyle = art.plate;
@@ -3105,7 +3330,7 @@ export class ArenaGame {
     ctx.beginPath();
     ctx.arc(-2.6, 0, 6.4, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = art.accent;
+    ctx.fillStyle = focusReady ? STATUS.brassArc : art.accent;
     ctx.beginPath();
     ctx.moveTo(4.4, -3.6);
     ctx.lineTo(4.4, 3.6);
@@ -3124,6 +3349,10 @@ export class ArenaGame {
     ctx.lineTo(-10, -8.5);
     ctx.stroke();
     ctx.restore();
+
+    // Kit readouts, drawn over the model: focus bank, phase window.
+    if (this.world.loadout.trait === "focus" && (player.focusTime > 0.05 || focusReady)) this.drawFocusGauge(player);
+    if (phasing) this.drawPhaseGhost(player);
 
     // Invulnerability bubble: a thin ring, no glow.
     if (invulnerable) {

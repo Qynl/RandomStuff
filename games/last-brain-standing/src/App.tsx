@@ -662,10 +662,23 @@ export default function App({ onGameReady }: AppProps = {}) {
               </div>
             ) : null}
             {snapshot ? (
-              <div className="meta-row">
-                <span>WEAPON</span>
-                <strong>{LOADOUTS[activeLoadout].name}</strong>
-              </div>
+              <>
+                <div className="meta-row">
+                  <span>WEAPON</span>
+                  <strong>{LOADOUTS[activeLoadout].name}</strong>
+                </div>
+                <div className="meta-row kit-row" data-class={activeLoadout}>
+                  <span>CLASS KIT · {LOADOUTS[activeLoadout].traitName}</span>
+                  <strong className={kitState(activeLoadout, snapshot).ready ? "ready" : ""}>
+                    {kitState(activeLoadout, snapshot).label}
+                  </strong>
+                </div>
+                {kitState(activeLoadout, snapshot).meter > 0 ? (
+                  <div className="kit-track" aria-hidden="true">
+                    <span style={{ width: `${Math.round(kitState(activeLoadout, snapshot).meter * 100)}%` }} />
+                  </div>
+                ) : null}
+              </>
             ) : null}
           </div>
 
@@ -997,6 +1010,38 @@ function describeAnnouncement(uiState: UiState, snapshot: GameSnapshot | null, r
   if (snapshot.hostileCount === 0 && snapshot.waveState === "cleared") return `Threat level ${snapshot.wave} clear.`;
   if (snapshot.health / Math.max(1, snapshot.maxHealth) <= 0.35) return `Integrity critical: ${Math.round((snapshot.health / Math.max(1, snapshot.maxHealth)) * 100)} percent.`;
   return "";
+}
+
+/**
+ * One line describing what the equipped class's kit is doing right now, plus a
+ * 0..1 meter where the kit charges. The simulation owns the truth; this only
+ * reads the snapshot.
+ */
+function kitState(
+  id: LoadoutId,
+  snapshot: GameSnapshot
+): { label: string; ready: boolean; meter: number } {
+  const weapon = LOADOUTS[id];
+  switch (weapon.trait) {
+    case "focus":
+      return snapshot.focusReady
+        ? { label: "READY · +60% ROUND", ready: true, meter: 1 }
+        : { label: `CHARGING ${Math.round(snapshot.focus * 100)}% · HOLD STILL`, ready: false, meter: snapshot.focus };
+    case "phase":
+      return snapshot.phaseTime > 0
+        ? { label: `UNSEEN ${snapshot.phaseTime.toFixed(2)}S`, ready: true, meter: snapshot.phaseTime / 0.34 }
+        : { label: "DASH BLANKS THEIR AIM", ready: false, meter: 0 };
+    case "siege":
+      return { label: "CHARGE TO STAGGER 1.1S", ready: false, meter: 0 };
+    case "ignite":
+      return { label: "BURN 3/S · SLOW 15%", ready: false, meter: 0 };
+    case "arc":
+      return { label: "SHELLS CLEAR 74 UNITS", ready: false, meter: 0 };
+    case "steady":
+      return { label: "KILLS RETURN 35% DASH", ready: false, meter: 0 };
+    default:
+      return { label: weapon.traitRule, ready: false, meter: 0 };
+  }
 }
 
 function statusLabel(uiState: UiState, snapshot: GameSnapshot | null): string {

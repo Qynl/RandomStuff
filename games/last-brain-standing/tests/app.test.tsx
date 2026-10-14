@@ -242,6 +242,9 @@ describe("React app shell", () => {
     click(Array.from(sapperCard.querySelectorAll("button")).at(-1));
     expect(engine?.getLoadoutId()).toBe("sapper");
     click(button("✕"));
+    // The lobby's operative is repainted for the class that was just equipped.
+    expect(container.querySelectorAll('.operator-figure[data-class="sapper"]')).toHaveLength(1);
+    expect(text(".stage-plate")).toContain("SAPPER");
 
     // Arena sheet: the four layouts, drawn from their own obstacle lists.
     click(button("ARENAS"));
@@ -546,6 +549,41 @@ describe("React app shell", () => {
     click(button("BACK TO COMMAND"));
     expect(query(".profile-rank")).toBeNull();
     expect(button("ENTER THE ARENA")).toBeTruthy();
+  });
+
+  it("reports what the equipped class kit is doing in the run panel", () => {
+    // Marksman: the focus bank charges while the operative holds still.
+    const cards = () => Array.from(container.querySelectorAll(".loadout-card")) as HTMLButtonElement[];
+    click(cards().find((card) => card.textContent?.includes("MARKSMAN")));
+    click(button("ENTER THE ARENA"));
+    advance(8);
+    expect(text(".kit-row")).toContain("FOCUS");
+    expect(text(".kit-row")).toContain("CHARGING");
+    expect(container.querySelector(".kit-track")).toBeTruthy();
+    // A second of standing still banks the round.
+    advance(56);
+    expect(text(".kit-row")).toContain("READY");
+    expect(container.querySelector(".kit-row strong")?.classList.contains("ready")).toBe(true);
+  });
+
+  it("reports a ghost's phase window while it is invisible", () => {
+    remount();
+    const cards = () => Array.from(container.querySelectorAll(".loadout-card")) as HTMLButtonElement[];
+    click(cards().find((card) => card.textContent?.includes("GHOST")));
+    click(button("ENTER THE ARENA"));
+    advance(8);
+    expect(text(".kit-row")).toContain("PHASE");
+
+    // Dash: the phase window opens and the panel reports the seconds left.
+    act(() => {
+      engine?.queueDash();
+    });
+    // Long enough for the panel to refresh, short enough to stay inside the window.
+    advance(8);
+    expect(engine?.activeWorld.player.phaseTime).toBeGreaterThan(0);
+    expect(text(".kit-row")).toContain("UNSEEN");
+    advance(30);
+    expect(text(".kit-row")).toContain("DASH BLANKS THEIR AIM");
   });
 
   it("records the finished run against the weapon that was used", () => {
