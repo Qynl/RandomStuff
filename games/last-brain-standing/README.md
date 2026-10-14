@@ -11,7 +11,8 @@ A small, fast top-down arena combat game built around one idea: opponents should
   - **The Hunter** pressures directly and leads moving targets.
   - **The Flanker** controls angles and circles around the player.
   - **The Mirror** watches recent movement and counters repeated directional habits.
-- Health, dash cooldown, eliminations, threat waves, local best score, combat feed, hit flashes, particles, and screen shake.
+- Health, dash cooldown, eliminations, five escalating threat waves, a clear victory state, local best score, combat feed, hit flashes, particles, and screen shake.
+- Swept projectile collision checks so fast shots do not skip over targets between frames.
 - Deterministic, separately testable AI decision helpers.
 - No backend, account, external asset, or runtime service required. Google Fonts are optional; the game falls back to system fonts.
 
@@ -45,13 +46,15 @@ npm run build
 ## Architecture
 
 - `src/App.tsx`: React UI shell and canvas engine lifecycle.
-- `src/arena.ts`: world bounds, obstacles, collision helpers.
+- `src/arena.ts`: world bounds, obstacles, collision helpers, and swept collision geometry.
+- `src/progression.ts`: deterministic wave progression and enemy-count rules.
 - `src/ai.ts`: bot profiles and movement / firing decisions.
 - `src/game.ts`: simulation, input, combat, rendering, effects, and existing HUD DOM updates.
 - `src/types.ts`: shared game data contracts.
 - `src/main.tsx`: React browser entry point.
 - `tests/ai.test.ts`: regression suite for AI decision primitives.
 - `tests/arena.test.ts`: regression suite for arena geometry and swept projectile hit checks.
+- `tests/progression.test.ts`: regression suite for finite wave progression and enemy scaling.
 - `NEXT_AI_TASK.md`: mandatory handoff and next implementation task.
 
 ## Known limitations
