@@ -51,7 +51,13 @@ npm run build
 - `src/types.ts`: shared game data contracts.
 - `src/main.tsx`: React browser entry point.
 - `tests/ai.test.ts`: regression suite for AI decision primitives.
+- `tests/arena.test.ts`: regression suite for arena geometry and swept projectile hit checks.
 - `NEXT_AI_TASK.md`: mandatory handoff and next implementation task.
+
+## Known limitations
+
+- The layout adapts to narrow screens, but full touch controls (movement stick, aim/fire, dash) are not implemented yet. Desktop keyboard + mouse remains the supported control scheme.
+- The React lifecycle cleanup and swept projectile collision changes are on this branch; verify them with the test/build commands above before treating them as validated.
 
 ## Quality rule
 
