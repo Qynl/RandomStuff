@@ -22,6 +22,11 @@ export function distanceToSegment(point: Vec2, start: Vec2, end: Vec2): number {
   return Math.hypot(point.x - closestX, point.y - closestY);
 }
 
+/** Returns whether a moving circle's center path passes within radius of a target point. */
+export function segmentHitsCircle(start: Vec2, end: Vec2, center: Vec2, radius: number): boolean {
+  return distanceToSegment(center, start, end) <= radius;
+}
+
 export function circleHitsRect(point: Vec2, radius: number, rect: Rect): boolean {
   const nearestX = Math.max(rect.x, Math.min(point.x, rect.x + rect.w));
   const nearestY = Math.max(rect.y, Math.min(point.y, rect.y + rect.h));
