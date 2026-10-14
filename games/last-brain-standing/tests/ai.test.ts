@@ -40,9 +40,10 @@ describe("AI movement primitives", () => {
     const cautious = telemetry();
     const habitual = telemetry();
     habitual.recentDirections = Array.from({ length: 8 }, () => ({ x: 1, y: 0 }));
-    const bot = { kind: "mirror" as const, position: { x: 400, y: 300 }, strafeSign: 1 };
-    const cautiousDirection = chooseBotDirection(bot, { x: 500, y: 300 }, cautious, 2);
-    const habitualDirection = chooseBotDirection(bot, { x: 500, y: 300 }, habitual, 2);
+    const bot = { kind: "mirror" as const, position: { x: 200, y: 300 }, strafeSign: 1 };
+    const player = { x: 500, y: 300 };
+    const cautiousDirection = chooseBotDirection(bot, player, cautious, 2);
+    const habitualDirection = chooseBotDirection(bot, player, habitual, 2);
     expect(habitualDirection.x).not.toBeCloseTo(cautiousDirection.x, 2);
   });
 });
