@@ -15,6 +15,7 @@ const randomBetween = (min: number, max: number) => min + Math.random() * (max -
 export class ArenaGame {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly keys = new Set<string>();
+  private readonly eventController = new AbortController();
   private readonly bots: AgentState[] = [];
   private readonly bullets: Bullet[] = [];
   private readonly particles: Particle[] = [];
@@ -83,7 +84,17 @@ export class ArenaGame {
     this.addFeed("Simulation started. Keep moving.");
   }
 
+  destroy(): void {
+    this.running = false;
+    this.paused = true;
+    cancelAnimationFrame(this.frameId);
+    this.eventController.abort();
+    this.keys.clear();
+    this.pointerDown = false;
+  }
+
   private bindEvents(): void {
+    const options = { signal: this.eventController.signal };
     window.addEventListener("keydown", (event) => {
       const key = event.key.toLowerCase();
       if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"].includes(key)) event.preventDefault();
@@ -92,19 +103,19 @@ export class ArenaGame {
       if (key === " " && !event.repeat) this.tryShoot();
       if (key === "shift" && !event.repeat) this.tryDash();
       if (key === "r" && this.started) this.restart();
-    });
-    window.addEventListener("keyup", (event) => this.keys.delete(event.key.toLowerCase()));
+    }, options);
+    window.addEventListener("keyup", (event) => this.keys.delete(event.key.toLowerCase()), options);
     this.canvas.addEventListener("pointermove", (event) => {
       const rect = this.canvas.getBoundingClientRect();
       this.aim = { x: ((event.clientX - rect.left) / rect.width) * WORLD.width, y: ((event.clientY - rect.top) / rect.height) * WORLD.height };
-    });
+    }, options);
     this.canvas.addEventListener("pointerdown", (event) => {
       if (event.button === 0) { this.pointerDown = true; this.tryShoot(); }
-    });
-    window.addEventListener("pointerup", () => { this.pointerDown = false; });
-    this.ui.startButton.addEventListener("click", () => this.start());
-    this.ui.pauseButton.addEventListener("click", () => this.togglePause());
-    window.addEventListener("blur", () => { this.keys.clear(); this.pointerDown = false; if (this.running) this.pause(); });
+    }, options);
+    window.addEventListener("pointerup", () => { this.pointerDown = false; }, options);
+    this.ui.startButton.addEventListener("click", () => this.start(), options);
+    this.ui.pauseButton.addEventListener("click", () => this.togglePause(), options);
+    window.addEventListener("blur", () => { this.keys.clear(); this.pointerDown = false; if (this.running) this.pause(); }, options);
   }
 
   private loop = (now: number): void => {
