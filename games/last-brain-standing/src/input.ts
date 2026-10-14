@@ -61,10 +61,46 @@ export function dashChargeFraction(cooldown: number, total: number): number {
   return Math.max(0, Math.min(1, 1 - cooldown / total));
 }
 
-/** Decides whether touch controls should be shown based on pointer capability. */
-export function shouldShowTouchControls(options: { coarsePointer: boolean; touchEvents: boolean; userOverride: boolean | null }): boolean {
+export interface TouchControlContext {
+  /** `(pointer: coarse)` - the primary input is a finger or stylus. */
+  coarsePointer: boolean;
+  /** `(pointer: fine)` - a mouse or trackpad is also available. */
+  finePointer?: boolean;
+  /** The user agent names a phone or tablet. */
+  mobileUserAgent?: boolean;
+  /** Viewport width in CSS pixels, or 0 when it cannot be measured. */
+  viewportWidth?: number;
+  /** Any touch support at all, which is *not* the same as being a phone. */
+  touchEvents: boolean;
+  /** Explicit choice from the settings toggle, or null to decide automatically. */
+  userOverride: boolean | null;
+}
+
+const MOBILE_USER_AGENT = /android|iphone|ipad|ipod|iemobile|windows phone|mobile|silk|kindle/i;
+
+/** True when a user agent string looks like a phone or tablet. */
+export function isMobileUserAgent(userAgent: string): boolean {
+  return MOBILE_USER_AGENT.test(userAgent);
+}
+
+/**
+ * Decides whether the on-screen sticks should be shown.
+ *
+ * Touch *capability* is not the same as being on a phone: plenty of laptops have
+ * a touchscreen and still have a keyboard and a mouse, and `ontouchstart` is
+ * even defined in some desktop browsers. The sticks are for phones and tablets,
+ * so the automatic answer requires a coarse pointer from a device that either
+ * identifies as mobile or has no fine pointer at all on a small screen. Either
+ * way the settings toggle overrides the guess.
+ */
+export function shouldShowTouchControls(options: TouchControlContext): boolean {
   if (options.userOverride !== null) return options.userOverride;
-  return options.coarsePointer || options.touchEvents;
+  if (!options.coarsePointer) return false;
+  if (options.mobileUserAgent) return true;
+  const finePointer = options.finePointer ?? false;
+  const width = options.viewportWidth ?? 0;
+  const smallScreen = width > 0 && width <= 900;
+  return !finePointer && smallScreen;
 }
 
 /** Tags that swallow keyboard input. Game hotkeys must never steal their keys. */

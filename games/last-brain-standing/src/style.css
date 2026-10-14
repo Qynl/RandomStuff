@@ -82,15 +82,8 @@ button{font:inherit;color:inherit}
 .seed-row input{flex:1;min-width:0;padding:9px 10px;border-radius:5px;border:1px solid #33363d;background:#0b1220;color:#dbe9f7;font:11px "DM Mono",monospace;letter-spacing:1.4px;text-transform:uppercase}
 .seed-row input::placeholder{color:#718dae}
 .predictability-track span.live{background:linear-gradient(90deg,#cfa25f,#8fb0cf)}
-.counter-hint strong{color:#d98a78}
-.mirror-advice.hot{color:#c9b3ff}
-.history-list li.best{color:#c9dff5}
 .history-rank{color:#718db3}
-.legend-ring.hunter{color:#d26e5e}
-.legend-ring.flanker{color:#8fb0cf}
-.legend-ring.mirror{color:#a08ec0}
 .best-line{margin-top:-4px}
-.best-line strong{color:#dbe9f7}
 .overlay-foot{justify-content:space-between;font-size:8px;margin-top:16px;color:#758ca9}
 .summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin:0 0 18px;padding:14px;border:1px solid #23303f;border-radius:8px;background:#0a1119aa}
 .summary-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px}

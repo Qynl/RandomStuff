@@ -3,7 +3,7 @@ import { ArenaGame, type FeedLine, type GameSnapshot, type RunResult } from "./g
 import { DIFFICULTIES, DIFFICULTY_ORDER } from "./constants";
 import { buildRunSummary } from "./scoring";
 import { BOT_KINDS, BOT_PROFILES, summarizeMirrorRead } from "./ai";
-import { shouldShowTouchControls, stickVectorFromPointer } from "./input";
+import { isMobileUserAgent, shouldShowTouchControls, stickVectorFromPointer } from "./input";
 import { layoutRecordForSeed } from "./arena";
 import { isUnlocked, LOADOUTS, LOADOUT_ORDER, type LoadoutId } from "./loadouts";
 import { createRandomSeed, formatSeed, normalizeSeed } from "./rng";
@@ -105,13 +105,27 @@ export default function App({ onGameReady }: AppProps = {}) {
 
   // ---------------------------------------------------------- input capability
   useEffect(() => {
-    const coarse = typeof window.matchMedia === "function" ? window.matchMedia("(pointer: coarse)").matches : false;
+    const query = (value: string) => (typeof window.matchMedia === "function" ? window.matchMedia(value) : null);
     const hasTouch = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+    // Remembered as a capability for the settings toggle, which decides what it
+    // flips to; it is deliberately not the same thing as "is a phone".
     setTouchCapable(hasTouch);
-    setTouchOverride(shouldShowTouchControls({ coarsePointer: coarse, touchEvents: hasTouch, userOverride: null }));
-    const onFirstTouch = () => setTouchOverride(true);
-    window.addEventListener("touchstart", onFirstTouch, { once: true, passive: true });
-    return () => window.removeEventListener("touchstart", onFirstTouch);
+    const decide = () =>
+      setTouchOverride(
+        shouldShowTouchControls({
+          coarsePointer: query("(pointer: coarse)")?.matches ?? false,
+          finePointer: query("(pointer: fine)")?.matches ?? false,
+          mobileUserAgent: isMobileUserAgent(navigator.userAgent ?? ""),
+          viewportWidth: window.innerWidth ?? 0,
+          touchEvents: hasTouch,
+          userOverride: null
+        })
+      );
+    decide();
+    // Rotating a phone or resizing a window can change the answer, so re-decide
+    // instead of latching the first guess.
+    window.addEventListener("resize", decide);
+    return () => window.removeEventListener("resize", decide);
   }, []);
 
   const career = snapshot?.career ?? null;

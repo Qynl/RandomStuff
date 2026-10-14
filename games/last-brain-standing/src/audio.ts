@@ -15,6 +15,7 @@ export type SoundName =
   | "elimination"
   | "damage"
   | "dash"
+  | "dive"
   | "wave-incoming"
   | "spawn"
   | "victory"
@@ -80,7 +81,12 @@ export class SoundEngine {
     }
   }
 
-  play(name: SoundName, intensity = 1): void {
+  /**
+   * Plays a synthesised cue. `pitch` transposes it (and shifts noise filters
+   * with it), which is how the three profiles end up sounding like themselves
+   * even when they use the same cue.
+   */
+  play(name: SoundName, intensity = 1, pitch = 1): void {
     if (this.muted || this.unavailable) return;
     const context = this.context;
     const master = this.master;
@@ -99,16 +105,16 @@ export class SoundEngine {
           this.blip(context, master, { type: "square", from: 880, to: 300, duration: 0.075, gain: 0.075, level });
           break;
         case "bot-shot":
-          this.blip(context, master, { type: "sawtooth", from: 420, to: 190, duration: 0.11, gain: 0.05, level });
+          this.blip(context, master, { type: "sawtooth", from: 420 * pitch, to: 190 * pitch, duration: 0.11, gain: 0.05, level });
           break;
         case "telegraph":
-          this.blip(context, master, { type: "triangle", from: 240, to: 520, duration: 0.14, gain: 0.035, level });
+          this.blip(context, master, { type: "triangle", from: 240 * pitch, to: 520 * pitch, duration: 0.14, gain: 0.035, level });
           break;
         case "impact":
           this.noiseBurst(context, master, { duration: 0.07, gain: 0.11, filterFrom: 2600, filterTo: 700, level });
           break;
         case "enemy-impact":
-          this.noiseBurst(context, master, { duration: 0.16, gain: 0.13, filterFrom: 1400, filterTo: 320, level });
+          this.noiseBurst(context, master, { duration: 0.16, gain: 0.13, filterFrom: 1400 * pitch, filterTo: 320 * pitch, level });
           break;
         case "elimination":
           this.blip(context, master, { type: "triangle", from: 300, to: 90, duration: 0.32, gain: 0.11, level });
@@ -121,11 +127,16 @@ export class SoundEngine {
         case "dash":
           this.noiseBurst(context, master, { duration: 0.2, gain: 0.075, filterFrom: 400, filterTo: 3200, level });
           break;
+        case "dive":
+          // A committed dive: a whoosh that falls away, plus a low thump.
+          this.noiseBurst(context, master, { duration: 0.28, gain: 0.07, filterFrom: 2800 * pitch, filterTo: 260 * pitch, level });
+          this.blip(context, master, { type: "sine", from: 190 * pitch, to: 90 * pitch, duration: 0.24, gain: 0.05, level });
+          break;
         case "wave-incoming":
           this.blip(context, master, { type: "sine", from: 200, to: 420, duration: 0.5, gain: 0.06, level });
           break;
         case "spawn":
-          this.blip(context, master, { type: "triangle", from: 640, to: 200, duration: 0.22, gain: 0.07, level });
+          this.blip(context, master, { type: "triangle", from: 640 * pitch, to: 200 * pitch, duration: 0.22, gain: 0.07, level });
           break;
         case "victory":
           [523, 659, 784, 1046].forEach((frequency, index) => {

@@ -6,6 +6,7 @@ import {
   keyboardMoveVector,
   mergeMoveInputs,
   screenToWorld,
+  isMobileUserAgent,
   shouldShowTouchControls,
   stickVectorFromPointer
 } from "../src/input";
@@ -80,14 +81,35 @@ describe("dash button state", () => {
 
 describe("touch control visibility", () => {
   it("shows touch controls on coarse pointers and touch devices", () => {
-    expect(shouldShowTouchControls({ coarsePointer: true, touchEvents: false, userOverride: null })).toBe(true);
-    expect(shouldShowTouchControls({ coarsePointer: false, touchEvents: true, userOverride: null })).toBe(true);
-    expect(shouldShowTouchControls({ coarsePointer: false, touchEvents: false, userOverride: null })).toBe(false);
+    // A phone: coarse pointer and a mobile user agent.
+    expect(shouldShowTouchControls({ coarsePointer: true, mobileUserAgent: true, touchEvents: true, userOverride: null })).toBe(true);
+    // A touchscreen laptop: coarse is also true there, but it has a mouse, a
+    // keyboard and a desktop user agent, so the sticks stay out of the way.
+    expect(
+      shouldShowTouchControls({ coarsePointer: true, finePointer: true, mobileUserAgent: false, viewportWidth: 1440, touchEvents: true, userOverride: null })
+    ).toBe(false);
+    // A desktop browser that merely reports touch support gets nothing either.
+    expect(shouldShowTouchControls({ coarsePointer: false, finePointer: true, mobileUserAgent: false, viewportWidth: 1280, touchEvents: true, userOverride: null })).toBe(false);
+    // An iPad in desktop mode: no fine pointer, small screen, fingers only.
+    expect(shouldShowTouchControls({ coarsePointer: true, finePointer: false, mobileUserAgent: false, viewportWidth: 834, touchEvents: true, userOverride: null })).toBe(true);
+    // Fingers but no mobile signature and a wide screen: a tablet-ish laptop.
+    expect(shouldShowTouchControls({ coarsePointer: true, finePointer: false, mobileUserAgent: false, viewportWidth: 1600, touchEvents: true, userOverride: null })).toBe(false);
   });
 
   it("lets the player override detection in both directions", () => {
     expect(shouldShowTouchControls({ coarsePointer: false, touchEvents: false, userOverride: true })).toBe(true);
-    expect(shouldShowTouchControls({ coarsePointer: true, touchEvents: true, userOverride: false })).toBe(false);
+    expect(shouldShowTouchControls({ coarsePointer: true, mobileUserAgent: true, touchEvents: true, userOverride: false })).toBe(false);
+    // The manual toggle can also force them on for a desktop player who wants them.
+    expect(shouldShowTouchControls({ coarsePointer: false, finePointer: true, mobileUserAgent: false, viewportWidth: 1440, touchEvents: false, userOverride: true })).toBe(true);
+  });
+
+  it("recognises phone and tablet user agents, and nothing else", () => {
+    expect(isMobileUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)")).toBe(true);
+    expect(isMobileUserAgent("Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36")).toBe(true);
+    expect(isMobileUserAgent("Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)")).toBe(true);
+    expect(isMobileUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120")).toBe(false);
+    expect(isMobileUserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605")).toBe(false);
+    expect(isMobileUserAgent("")).toBe(false);
   });
 });
 

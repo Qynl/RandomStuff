@@ -69,6 +69,58 @@ describe("React app shell", () => {
     });
     advance(10);
   };
+  /**
+   * Pretends the page is running on a phone: coarse pointer, no mouse, a mobile
+   * user agent and a phone-sized viewport. The shell decides whether to show the
+   * on-screen sticks during mount, so this has to remount.
+   */
+  const simulatePhone = () => {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: (media: string) => ({
+        matches: media.includes("coarse"),
+        media,
+        onchange: null,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        dispatchEvent: () => false
+      })
+    });
+    Object.defineProperty(window.navigator, "userAgent", {
+      configurable: true,
+      value: "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148"
+    });
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 390 });
+    remount();
+  };
+
+  /** Pretends the page is running on a desktop with a touchscreen. */
+  const simulateTouchLaptop = () => {
+    Object.defineProperty(window, "matchMedia", {
+      configurable: true,
+      writable: true,
+      value: (media: string) => ({
+        matches: media.includes("coarse") || media.includes("fine"),
+        media,
+        onchange: null,
+        addEventListener: () => undefined,
+        removeEventListener: () => undefined,
+        addListener: () => undefined,
+        removeListener: () => undefined,
+        dispatchEvent: () => false
+      })
+    });
+    Object.defineProperty(window.navigator, "userAgent", {
+      configurable: true,
+      value: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
+    });
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+    remount();
+  };
+
   /** Tears the shell down and mounts it again, the way a page load would. */
   const remount = () => {
     act(() => root.unmount());
@@ -508,9 +560,10 @@ describe("React app shell", () => {
   });
 
   it("teaches the aim mode the player actually has on touch", () => {
+    simulatePhone();
     click(button("ENTER THE ARENA"));
     advance(4);
-    // Touch layer is on in jsdom, so the hint reflects the current aim mode.
+    // On a phone the touch layer is on, so the hint reflects the current aim mode.
     expect(container.querySelector(".touch-hint")?.textContent).toContain("DRAG THE ARENA TO AIM");
     click(button("ASSISTED"));
     advance(4);
@@ -518,6 +571,42 @@ describe("React app shell", () => {
     click(button("MOUSE"));
     advance(4);
     expect(container.querySelector(".touch-hint")?.textContent).toContain("DRAG THE ARENA TO AIM");
+  });
+
+  it("keeps the on-screen sticks off a desktop that merely reports touch support", () => {
+    // A touchscreen laptop: `ontouchstart` exists and the primary pointer is
+    // coarse, but there is a mouse, a keyboard and a desktop user agent.
+    expect("ontouchstart" in window).toBe(true);
+    simulateTouchLaptop();
+    click(button("ENTER THE ARENA"));
+    advance(4);
+    expect(query(".touch-hint")).toBeNull();
+    expect(query(".touch-button")).toBeNull();
+    expect(query(".touch-stick")).toBeNull();
+  });
+
+  it("shows the on-screen sticks on a phone", () => {
+    simulatePhone();
+    click(button("ENTER THE ARENA"));
+    advance(4);
+    expect(query(".touch-stick")).toBeTruthy();
+    expect(query(".touch-button")).toBeTruthy();
+  });
+
+  it("lets the settings toggle override the automatic touch decision", () => {
+    simulateTouchLaptop();
+    const toggle = () => {
+      const row = Array.from(container.querySelectorAll(".setting-row")).find((row) => row.textContent?.includes("TOUCH CONTROLS"));
+      return row?.querySelector("button") ?? undefined;
+    };
+    expect(toggle()?.getAttribute("aria-pressed")).toBe("false");
+    click(toggle());
+    expect(toggle()?.getAttribute("aria-pressed")).toBe("true");
+    click(button("ENTER THE ARENA"));
+    advance(4);
+    expect(query(".touch-stick")).toBeTruthy();
+    click(toggle());
+    expect(toggle()?.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("shows which arena a typed seed will play in, and can pick a fresh seed", () => {
@@ -713,6 +802,7 @@ describe("React app shell", () => {
   });
 
   it("advertises its keyboard shortcuts to assistive technology", () => {
+    simulatePhone();
     expect(container.querySelector('.icon-button[aria-keyshortcuts="M"]')).toBeTruthy();
     expect(container.querySelector('.icon-button[aria-keyshortcuts="F3"]')).toBeTruthy();
     expect(container.querySelector('.icon-button[aria-keyshortcuts="Escape"]')).toBeTruthy();

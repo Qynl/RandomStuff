@@ -1,5 +1,5 @@
 import { BOT_KINDS, BOT_PROFILES } from "./ai";
-import { volleyFor } from "./signatures";
+import { PROFILE_PITCH, volleyFor } from "./signatures";
 import { ARENA_LAYOUTS, firstBlockingFraction, layoutForSeed, rangeScaleForOpenness, WORLD } from "./arena";
 import { BLOCK, BOT_ART, BULLET, FLOOR, PLAYER_ART, STATUS, TELEGRAPH } from "./art";
 import { SoundEngine, type SoundName } from "./audio";
@@ -971,7 +971,7 @@ export class ArenaGame {
             life: 0.36
           });
           this.burst(event.position, BOT_PROFILES[event.kind].color, 10, 0.3, 150);
-          this.playSound("dash", 0.45);
+          this.playSound("dive", 0.9, PROFILE_PITCH[event.kind]);
           break;
         }
         case "arena-pressure": {
@@ -981,7 +981,7 @@ export class ArenaGame {
         }
         case "bot-fired": {
           this.burst(event.position, BOT_PROFILES[event.kind].color, 3, 0.2, 100);
-          this.playSound("bot-shot");
+          this.playSound("bot-shot", 1, PROFILE_PITCH[event.kind]);
           break;
         }
         case "bot-hit": {
@@ -1045,13 +1045,13 @@ export class ArenaGame {
         }
         case "spawn-warning": {
           this.pulses.push({ position: { ...event.position }, radius: 6, life: 0.7, maxLife: 0.7, color: BOT_PROFILES[event.kind].color });
-          this.playSound("telegraph", 0.5);
+          this.playSound("telegraph", 0.5, PROFILE_PITCH[event.kind]);
           break;
         }
         case "bot-spawned": {
           this.burst(event.position, BOT_PROFILES[event.kind].color, 14, 0.4, 160);
           this.pulses.push({ position: { ...event.position }, radius: BOT_RADIUS, life: 0.42, maxLife: 0.42, color: BOT_PROFILES[event.kind].color });
-          this.playSound("spawn", 0.8);
+          this.playSound("spawn", 0.8, PROFILE_PITCH[event.kind]);
           break;
         }
         case "wave-start": {
@@ -1178,8 +1178,8 @@ export class ArenaGame {
     this.emitSnapshot(true);
   }
 
-  private playSound(name: SoundName, intensity = 1): void {
-    this.sound.play(name, intensity);
+  private playSound(name: SoundName, intensity = 1, pitch = 1): void {
+    this.sound.play(name, intensity, pitch);
   }
 
   private burst(position: Vec2, color: string, count: number, life = 0.4, speed = 150): void {

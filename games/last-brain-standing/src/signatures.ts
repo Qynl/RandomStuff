@@ -152,6 +152,18 @@ export function botKeepsTracking(kind: AgentState["kind"], progress: number): bo
   return progress < HUNTER_LOCK_PROGRESS;
 }
 
+/**
+ * Pitch multiplier per profile, so the same cue sounds like whoever fired it:
+ * the Hunter is heavy and low, the Flanker light and high, the Mirror in
+ * between with a flat electronic edge. A player can hear which profile is
+ * winding up behind them without turning around.
+ */
+export const PROFILE_PITCH: Record<AgentState["kind"], number> = {
+  hunter: 0.78,
+  flanker: 1.22,
+  mirror: 0.98
+};
+
 // ------------------------------------------------------------------ the Flanker
 
 /** An ally further than this from the player is not part of the same attack. */
