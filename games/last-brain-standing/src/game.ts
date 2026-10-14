@@ -1,5 +1,5 @@
 import { BOT_PROFILES, chooseBotDirection, distance, normalize, shouldBotFire } from "./ai";
-import { circleHitsRect, distanceToSegment, moveWithCollisions, OBSTACLES, segmentBlocked, WORLD } from "./arena";
+import { circleHitsRect, moveWithCollisions, OBSTACLES, segmentBlocked, segmentHitsCircle, WORLD } from "./arena";
 import type { AgentState, BotKind, Bullet, PlayerTelemetry, Vec2 } from "./types";
 
 interface Particle { position: Vec2; velocity: Vec2; life: number; maxLife: number; color: string; size: number }
@@ -198,7 +198,7 @@ export class ArenaGame {
       if (out || blocked || bullet.life <= 0) { this.bullets.splice(i, 1); continue; }
       if (bullet.owner === "player") {
         // Sweep the whole frame movement so fast shots cannot skip over a target between frames.
-        const target = this.bots.find((bot) => bot.alive && distanceToSegment(bot.position, previous, bullet.position) < BOT_RADIUS + 3);
+        const target = this.bots.find((bot) => bot.alive && segmentHitsCircle(previous, bullet.position, bot.position, BOT_RADIUS + 3));
         if (target) {
           target.health -= bullet.damage;
           target.hitFlash = 0.14;
@@ -206,7 +206,7 @@ export class ArenaGame {
           this.bullets.splice(i, 1);
           if (target.health <= 0) this.eliminateBot(target);
         }
-      } else if (this.invulnerability <= 0 && distanceToSegment(this.player, previous, bullet.position) < PLAYER_RADIUS + 3) {
+      } else if (this.invulnerability <= 0 && segmentHitsCircle(previous, bullet.position, this.player, PLAYER_RADIUS + 3)) {
         this.bullets.splice(i, 1);
         this.damagePlayer(bullet.damage, bullet.position);
       }
