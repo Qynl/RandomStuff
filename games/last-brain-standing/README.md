@@ -4,7 +4,8 @@ A small, fast top-down arena combat game built around one idea: opponents should
 
 ## Current foundation
 
-- Responsive canvas arena with a restrained neon/industrial visual identity.
+- React + TypeScript + Vite application.
+- Responsive Canvas arena with a restrained neon/industrial visual identity.
 - Keyboard movement, mouse aiming, click/Space firing, Shift dash, Esc pause, and R restart.
 - Three readable bot profiles:
   - **The Hunter** pressures directly and leads moving targets.
@@ -43,15 +44,15 @@ npm run build
 
 ## Architecture
 
+- `src/App.tsx`: React UI shell and canvas engine lifecycle.
 - `src/arena.ts`: world bounds, obstacles, collision helpers.
 - `src/ai.ts`: bot profiles and movement / firing decisions.
-- `src/game.ts`: simulation, input, combat, rendering, effects, and HUD updates.
+- `src/game.ts`: simulation, input, combat, rendering, effects, and existing HUD DOM updates.
 - `src/types.ts`: shared game data contracts.
-- `src/main.ts`: browser entry point.
-- `tests/ai.test.ts`: small regression suite for AI decision primitives.
+- `src/main.tsx`: React browser entry point.
+- `tests/ai.test.ts`: regression suite for AI decision primitives.
+- `NEXT_AI_TASK.md`: mandatory handoff and next implementation task.
 
 ## Quality rule
 
-Do not add a new bot, weapon, or mode until the current combat loop feels good. For every gameplay change: define expected behavior, implement the smallest change, run tests and build, play it in the browser, then keep or revert the change based on actual feel.
-
-This is the first playable foundation, not the finished game. The next milestone should focus on combat balance and making the Mirror's adaptation obvious and fair to the player.
+Do not add a new bot, weapon, or mode until the current combat loop feels good. For every gameplay change: define expected behavior, implement the smallest change, run tests and build, play it in the browser, then keep or revert the change based on actual feel. Never claim a test or playtest was run unless it really was.
