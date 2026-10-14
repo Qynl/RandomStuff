@@ -1,7 +1,8 @@
+import { createRoot } from "react-dom/client";
+import App from "./App";
 import "./style.css";
-import { ArenaGame } from "./game";
 
-const canvas = document.querySelector<HTMLCanvasElement>("#game");
-if (!canvas) throw new Error("Game canvas was not found.");
+const rootElement = document.getElementById("root");
+if (!rootElement) throw new Error("React root element was not found.");
 
-new ArenaGame(canvas);
+createRoot(rootElement).render(<App />);
