@@ -296,6 +296,12 @@ describe("React app shell", () => {
     const log = container.querySelectorAll(".contract-log li");
     expect(log.length).toBeGreaterThan(0);
     expect(Array.from(log).map((row) => row.textContent).join(" | ")).toContain("SIGNED");
+    // The threat dossier tells the player how each profile aims as well as what
+    // it fires: the roster is a briefing for the fight it is describing.
+    const aims = Array.from(container.querySelectorAll(".dossier-aim")).map((row) => row.textContent ?? "");
+    expect(aims).toHaveLength(9);
+    expect(aims.join(" | ")).toContain("LASER SIGHT");
+    expect(aims.join(" | ")).toContain("FLOOR MARKER");
   });
 
   it("keeps the switches a player sets once inside the settings sheet", () => {

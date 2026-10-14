@@ -130,6 +130,7 @@ button{font:inherit;color:inherit}
 .sniper-symbol{color:#cbb37f}.pyro-symbol{color:#d08a4a}.mortar-symbol{color:#a9926a}.shielder-symbol{color:#8a97a6}
 .splitter-symbol{color:#8fb48c}.charger-symbol{color:#c9744f}.shard-symbol{color:#a9c7a4}
 .opponent-attack{color:var(--ink-dim);letter-spacing:.04em}
+.opponent-aim{color:#9fb4c9;letter-spacing:.5px}
 .opponent-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
 .opponent-copy strong{font-size:9px;letter-spacing:.6px}
 .opponent-copy small{font:7px "DM Mono",monospace;color:#768fa8;letter-spacing:.6px}
@@ -295,6 +296,8 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .dossier-tally{font:8px "DM Mono",monospace;letter-spacing:.6px;color:#a4abb4;text-align:right}
 .dossier-signature{display:block;margin:4px 0 3px;font:8px/1.5 "DM Mono",monospace;letter-spacing:.5px;color:var(--brass);font-style:normal}
 .dossier-list small{display:block;font:8px/1.5 "DM Mono",monospace;letter-spacing:.4px;color:#9aa3ad}
+.dossier-aim{margin:0 0 2px;color:#cbd3dc}
+.dossier-aim strong{color:var(--brass);letter-spacing:.6px}
 .profile-empty{margin:0;font:9px/1.6 "DM Mono",monospace;color:#9aa3ad}
 .recent-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
 .recent-list li{display:grid;grid-template-columns:70px 1fr auto auto;gap:8px;align-items:baseline;font:8px "DM Mono",monospace;letter-spacing:.5px;color:#a4abb4}

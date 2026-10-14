@@ -3,6 +3,7 @@ import { ArenaGame, type FeedLine, type GameSnapshot, type RunResult } from "./g
 import { DIFFICULTIES } from "./constants";
 import { buildRunSummary } from "./scoring";
 import { BOT_KINDS, BOT_PROFILES, summarizeMirrorRead } from "./ai";
+import { AIMS } from "./signatures";
 import { BOT_SYMBOLS } from "./art";
 import { isMobileUserAgent, shouldShowTouchControls, stickVectorFromPointer } from "./input";
 import { layoutForSeed, layoutRecordForSeed } from "./arena";
@@ -777,6 +778,8 @@ export default function App({ onGameReady }: AppProps = {}) {
                     <strong>{BOT_PROFILES[kind].name}</strong>
                     <small>
                       {BOT_PROFILES[kind].tactic} · <span className="opponent-attack">{BOT_PROFILES[kind].attackLabel}</span>
+                      {" · "}
+                      <span className="opponent-aim">AIM {AIMS[kind].label}</span>
                     </small>
                     <em className="opponent-signature">{BOT_PROFILES[kind].signature}</em>
                   </div>
@@ -791,7 +794,9 @@ export default function App({ onGameReady }: AppProps = {}) {
                 <i className="legend-ring mirror" />
               </span>
               <span>
-                A RING MEANS THAT PROFILE IS ABOUT TO FIRE. BREAK COVER OR DASH THE LINE.
+                A RING MEANS THAT PROFILE IS ABOUT TO FIRE, AND EVERY PROFILE AIMS ITS OWN WAY: A
+                SLIDING SIGHT, A BARREL LIGHT, A HIP FLICK, A WEDGE, A MARKED FLOOR. READ THE TELL
+                AND YOU KNOW HOW LONG YOU HAVE.
               </span>
             </div>
           </div>
@@ -973,6 +978,9 @@ export default function App({ onGameReady }: AppProps = {}) {
                         </span>
                       </div>
                       <em className="dossier-signature">{profile.signature}</em>
+                      <small className="dossier-aim">
+                        aim · <strong>{AIMS[kind].label}</strong> — {AIMS[kind].note}
+                      </small>
                       <small>{profile.counter.toLowerCase()}.</small>
                     </li>
                   );

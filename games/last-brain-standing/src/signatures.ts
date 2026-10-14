@@ -168,29 +168,73 @@ export interface AimSpec {
   glint: boolean;
   /** It plants its feet while aiming instead of walking the shot in. */
   plants: boolean;
+  /** Two or three words for the codex: what the tell looks like on screen. */
+  label: string;
+  /** How the tell behaves and what it costs the player, in one line. */
+  note: string;
 }
 
 export const AIMS: Record<AgentState["kind"], AimSpec> = {
   // Commits halfway: the barrel light is the tell and it stops tracking early.
-  hunter: { tell: "barrel", acquire: 0, lockAt: HUNTER_LOCK_PROGRESS, glint: false, plants: false },
+  hunter: {
+    tell: "barrel", acquire: 0, lockAt: HUNTER_LOCK_PROGRESS, glint: false, plants: false,
+    label: "BARREL LIGHT",
+    note: "The light commits halfway: it stops tracking you, then fires two rounds."
+  },
   // Never stops moving, so its tell is a short hip-flick instead of a lane.
-  flanker: { tell: "hip", acquire: 0, lockAt: 1, glint: false, plants: false },
+  flanker: {
+    tell: "hip", acquire: 0, lockAt: 1, glint: false, plants: false,
+    label: "HIP FLICK",
+    note: "A flick at the muzzle while it runs: it never plants, so it never leads."
+  },
   // Copies your weapon and fires it from the hip, in your own class colour.
-  mirror: { tell: "hip", acquire: 0, lockAt: 1, glint: false, plants: false },
+  mirror: {
+    tell: "hip", acquire: 0, lockAt: 1, glint: false, plants: false,
+    label: "COPIED KIT",
+    note: "Your own weapon, from the hip, in your class colour: the round is familiar."
+  },
   // The real sniper: a laser sight that slides onto you and locks, a glint you
   // can spot across the arena, and a stance it will not break to walk.
-  sniper: { tell: "sight", acquire: 0.62, lockAt: 0.72, glint: true, plants: true },
+  sniper: {
+    tell: "sight", acquire: 0.62, lockAt: 0.72, glint: true, plants: true,
+    label: "LASER SIGHT",
+    note: "A glint, then a sight that slides onto you and locks: break the line or step at the freeze."
+  },
   // A cone of fire: the whole wedge is the danger, not a line.
-  pyro: { tell: "cone", acquire: 0.2, lockAt: 1, glint: false, plants: false },
+  pyro: {
+    tell: "cone", acquire: 0.2, lockAt: 1, glint: false, plants: false,
+    label: "FLAME CONE",
+    note: "A wedge, not a line: everything in front of it burns, cover does not help."
+  },
   // Marks the floor and holds its stance while the shell is in the air.
-  mortar: { tell: "marker", acquire: 0.3, lockAt: 1, glint: false, plants: true },
+  mortar: {
+    tell: "marker", acquire: 0.3, lockAt: 1, glint: false, plants: true,
+    label: "FLOOR MARKER",
+    note: "Marks the floor it will land on: walk out of the ring and the shell is wasted."
+  },
   // No shot at all: the shield arc and the short reach are the whole tell.
-  shielder: { tell: "guard", acquire: 0.25, lockAt: 1, glint: false, plants: false },
+  shielder: {
+    tell: "guard", acquire: 0.25, lockAt: 1, glint: false, plants: false,
+    label: "SHIELD ARC",
+    note: "The arc is the tell and the answer: nothing gets through the front, go round it."
+  },
   // Fans a volley: three diverging lines rather than one.
-  splitter: { tell: "spore", acquire: 0.15, lockAt: 1, glint: false, plants: false },
+  splitter: {
+    tell: "spore", acquire: 0.15, lockAt: 1, glint: false, plants: false,
+    label: "SPORE FAN",
+    note: "Three diverging lines: the gap between them is the dodge, and it splits again."
+  },
   // Marks a lane and paws the ground before it runs.
-  charger: { tell: "ram", acquire: 0.35, lockAt: 1, glint: false, plants: false },
-  shard: { tell: "none", acquire: 0, lockAt: 1, glint: false, plants: false }
+  charger: {
+    tell: "ram", acquire: 0.35, lockAt: 1, glint: false, plants: false,
+    label: "PAWED LANE",
+    note: "Paws the ground and marks a lane before it runs: step out and it staggers."
+  },
+  shard: {
+    tell: "none", acquire: 0, lockAt: 1, glint: false, plants: false,
+    label: "NO TELL",
+    note: "No tell at all. It is a shard: kill it before it touches you."
+  }
 };
 
 /** The aim behaviour a profile uses. */

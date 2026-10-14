@@ -635,6 +635,17 @@ describe("the new profiles", () => {
       if (kind === "sniper") continue;
       expect(AIMS[kind].acquire).toBeLessThan(AIMS.sniper.acquire);
     }
+    // Every one of those tells is named and explained in the codex, so the
+    // roster a player reads between runs describes the fight they are about to
+    // have rather than a fight from three passes ago.
+    const labels = new Set<string>();
+    for (const kind of [...BOT_KINDS, "shard" as BotKind]) {
+      expect(AIMS[kind].label.trim().length).toBeGreaterThan(3);
+      expect(AIMS[kind].note.trim().length).toBeGreaterThan(20);
+      labels.add(AIMS[kind].label);
+    }
+    expect(labels.size).toBe(10);
+    expect(AIMS.sniper.label).toContain("SIGHT");
     expect(silhouettes.size).toBe(10);
     expect(tints.size).toBe(10);
     expect(pitches.size).toBe(10);
