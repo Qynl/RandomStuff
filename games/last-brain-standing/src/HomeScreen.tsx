@@ -3,6 +3,7 @@ import { DIFFICULTIES } from "./constants";
 import { DEFAULT_LOADOUT, LOADOUTS, LOADOUT_ORDER, type LoadoutId } from "./loadouts";
 import { ARENA_LAYOUTS, ARENA_ORDER, layoutForSeed, type ArenaLayoutId } from "./arena";
 import { dailySeed, dailySeedCountdown, dailySeedLabel } from "./rng";
+import type { ContractBoard } from "./contracts";
 import type { CareerSummary } from "./game";
 import SettingsPanel from "./SettingsPanel";
 import type { AimMode, DifficultyId } from "./types";
@@ -100,6 +101,8 @@ export default function HomeScreen({
   // The account's own attempt at today's fight, if it has one.
   const dailyRun = recent.find((run) => run.seed === daily) ?? null;
   const badgesEarned = career?.badgesEarned ?? 0;
+  // The board never empties: a finished career simply keeps count orders open.
+  const contracts: ContractBoard = career?.contracts ?? { active: [], completed: [], total: 0 };
   const badgeTotal = career?.badges.length ?? 0;
 
   const statRow = (id: LoadoutId) => {
@@ -282,6 +285,33 @@ export default function HomeScreen({
         </section>
 
         <aside className="home-side" aria-label="Briefing">
+          <div className="side-card">
+            <div className="side-kicker">
+              CONTRACT BOARD · {contracts.completed.length}/{contracts.total} SIGNED
+            </div>
+            <ul className="contract-list">
+              {contracts.active.map((order) => (
+                <li key={order.id}>
+                  <div className="contract-head">
+                    <strong>{order.name}</strong>
+                    <span>
+                      {order.value} / {order.target}
+                    </span>
+                  </div>
+                  <div className="contract-track" aria-hidden="true">
+                    <i style={{ width: `${Math.round(order.progress * 100)}%` }} />
+                  </div>
+                  <small>{order.requirement}</small>
+                </li>
+              ))}
+            </ul>
+            {contracts.completed.length > 0 ? (
+              <p className="side-empty">
+                SIGNED OFF: {contracts.completed.slice(-3).map((order) => order.name).join(" · ")}
+              </p>
+            ) : null}
+          </div>
+
           <div className="side-card">
             <div className="side-kicker">NEXT DEPLOYMENT</div>
             <div className="brief-level">

@@ -891,6 +891,63 @@ describe("ArenaGame engine shell", () => {
     game.destroy();
   });
 
+  it("opens a contract board and signs orders off as runs land", () => {
+    window.localStorage.clear();
+    game = createGame();
+    // A brand new account is handed three orders before it has played anything.
+    let board = game.getContractBoard();
+    expect(board.active.map((order) => order.id)).toEqual(["first-contact", "field-test", "spotter"]);
+    expect(board.completed).toEqual([]);
+    expect(board.total).toBeGreaterThanOrEqual(12);
+
+    game.beginRun("contract-a");
+    frames.advance(40);
+    game.activeWorld.stats.kills = 3;
+    killPlayer(game, "hunter");
+    expect(results[0]).toBeTruthy();
+    expect(results[0].contractsSigned).toEqual([]);
+
+    // Two more runs finish the "finish 3 runs" order, and the bottom of the
+    // board moves up into the slot it freed.
+    for (const seed of ["contract-b", "contract-c"]) {
+      game.beginRun(seed);
+      frames.advance(40);
+      killPlayer(game, "hunter");
+    }
+    expect(results[2].contractsSigned).toContain("FIRST CONTACT");
+    board = game.getContractBoard();
+    expect(board.completed.map((order) => order.id)).toContain("first-contact");
+    expect(board.active.length).toBe(3);
+    // The queue moves in board order, so the fourth order takes the slot.
+    expect(board.active.map((order) => order.id)).toEqual(["field-test", "spotter", "pest-control"]);
+    // The feed says what happened, in the game's own voice.
+    expect(feed.some((line) => line.text.includes("Contract signed off: first contact"))).toBe(true);
+
+    // The board is part of the account, so a fresh engine reads it back.
+    const stored = window.localStorage.getItem("lbs-contracts");
+    expect(stored).toBeTruthy();
+    game.destroy();
+    game = createGame();
+    const reloaded = game.getContractBoard();
+    expect(reloaded.completed.map((order) => order.id)).toContain("first-contact");
+    expect(reloaded.active.length).toBe(3);
+  });
+
+  it("repairs a contract board it cannot trust", () => {
+    window.localStorage.clear();
+    window.localStorage.setItem(
+      "lbs-contracts",
+      JSON.stringify({ active: [{ id: "nonsense", baseline: 4 }], completed: ["also-nonsense"] })
+    );
+    game = createGame();
+    const board = game.getContractBoard();
+    // Junk ids are dropped and the empty slots are filled from the board again.
+    expect(board.active.map((order) => order.id)).toEqual(["first-contact", "field-test", "spotter"]);
+    expect(board.completed).toEqual([]);
+    // Reading it did not leave the junk in storage either.
+    expect(window.localStorage.getItem("lbs-contracts")).not.toContain("nonsense");
+  });
+
   it("keeps a per-profile dossier of kills and the runs that ended", () => {
     window.localStorage.clear();
     game = createGame();

@@ -121,12 +121,19 @@ const ALL_SOUNDS: SoundName[] = [
   "elimination",
   "damage",
   "dash",
+  "dive",
   "wave-incoming",
   "spawn",
   "victory",
   "defeat",
+  "contract",
   "ui"
 ];
+
+// Every sound in the union has to be named above: adding one without listing it
+// is a type error, so the audit below cannot silently skip the new sound.
+const everySoundListed: Exclude<SoundName, (typeof ALL_SOUNDS)[number]> extends never ? true : never = true;
+void everySoundListed;
 
 describe("sound engine", () => {
   let graph: FakeGraph | null = null;

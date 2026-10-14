@@ -76,6 +76,8 @@ export interface RunSummaryDetail {
   perfect?: boolean;
   /** Arena layout the run was played in. */
   arenaName?: string;
+  /** Contract orders this run signed off, by name. */
+  contractsSigned?: string[];
 }
 
 /** "3× HUNTER · 1× MIRROR" - empty when the run ended before any kill. */
@@ -128,6 +130,11 @@ export function buildRunSummary(
     rows.push({ label: "BEST ON THIS LEVEL", value: String(detail.bestScoreOnDifficulty) });
   }
 
+  // A contract signed off during the run is the run's own trophy, so it is a
+  // row of its own rather than a footnote.
+  for (const name of detail.contractsSigned ?? []) {
+    rows.splice(2, 0, { label: "CONTRACT SIGNED OFF", value: name, emphasis: true });
+  }
   if (detail.arenaName) rows.push({ label: "ARENA", value: detail.arenaName });
   if (detail.endedBy) rows.push({ label: "ENDED BY", value: describeEnding(detail.endedBy) });
   if (detail.perfect) rows.push({ label: "CLEAN SWEEP", value: "NO DAMAGE TAKEN", emphasis: true });

@@ -20,6 +20,7 @@ export type SoundName =
   | "spawn"
   | "victory"
   | "defeat"
+  | "contract"
   | "ui";
 
 interface Voice {
@@ -163,6 +164,12 @@ export class SoundEngine {
               delay: index * 0.16
             });
           });
+          break;
+        case "contract":
+          // A stamped order: two rising notes, quiet enough to sit under the
+          // run summary it interrupts.
+          this.blip(context, master, { type: "triangle", from: 420, to: 560, duration: 0.12, gain: 0.07, level });
+          this.blip(context, master, { type: "triangle", from: 620, to: 880, duration: 0.22, gain: 0.06, level });
           break;
         case "ui":
           this.blip(context, master, { type: "square", from: 660, to: 880, duration: 0.05, gain: 0.04, level });

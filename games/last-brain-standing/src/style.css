@@ -536,3 +536,17 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .deploy-rank-track i{display:block;height:100%;background:linear-gradient(90deg,#8a6a3f,#cfa25f)}
 .deploy-rank-next{font:8px "DM Mono",monospace;letter-spacing:1.2px;color:#94a1ae}
 .daily-clock{color:#c8b083 !important}
+.contract-list{display:flex;flex-direction:column;gap:10px;margin:10px 0 0;padding:0;list-style:none}
+.contract-list li{display:flex;flex-direction:column;gap:5px}
+.contract-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.contract-head strong{font:10px "DM Mono",monospace;letter-spacing:1.4px;color:#f0ece1}
+.contract-head span{font:9px "DM Mono",monospace;letter-spacing:1.2px;color:#c8b083}
+.contract-track{height:6px;border-radius:999px;border:1px solid #3a3e45;background:#14171b;overflow:hidden}
+.contract-track i{display:block;height:100%;background:linear-gradient(90deg,#6f7a86,#cfa25f)}
+.contract-list small{font:8px "DM Mono",monospace;letter-spacing:1.1px;color:#8794a1}
+.contract-log{display:flex;flex-direction:column;gap:8px;margin:0;padding:0;list-style:none}
+.contract-log li{display:grid;grid-template-columns:minmax(120px,1fr) 2fr auto;gap:10px;align-items:baseline;padding:7px 10px;border:1px solid #2f343b;border-left:2px solid #8a919b;border-radius:7px;background:#191b1f}
+.contract-log li.open{border-left-color:var(--brass)}
+.contract-log-name{font:10px "DM Mono",monospace;letter-spacing:1.4px;color:#f0ece1}
+.contract-log-req{font:10px "DM Mono",monospace;letter-spacing:.6px;color:#94a1ae}
+.contract-log-count{font:9px "DM Mono",monospace;letter-spacing:1.2px;color:#c8b083}

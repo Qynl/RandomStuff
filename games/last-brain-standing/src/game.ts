@@ -25,6 +25,17 @@ import {
   resolveLoadout,
   type LoadoutId
 } from "./loadouts";
+import {
+  advanceContracts,
+  contractBoard,
+  contractName,
+  emptyContractState,
+  fillContractSlots,
+  normalizeContractState,
+  type ContractBoard,
+  type ContractState,
+  type ContractStats
+} from "./contracts";
 import { getWaveBriefing, getWaveHint, MAX_WAVES } from "./progression";
 import { computeScore, formatDuration, gradeRun, type RunGrade, type ScoreBreakdown } from "./scoring";
 import {
@@ -146,10 +157,14 @@ export interface CareerSummary {
   deathsByKind: Record<BotKind, number>;
   /** Finished runs, newest first, for the account's recent-run list. */
   recentRuns: RunRecord[];
+  /** The contract board: three open orders plus everything signed off. */
+  contracts: ContractBoard;
 }
 
 export interface RunResult {
   victory: boolean;
+  /** Contract orders this run signed off, by name, for the result card. */
+  contractsSigned: string[];
   /** Arena layout the run was played in. */
   arenaName: string;
   /** Won without taking a single point of damage: the rare badge. */
@@ -273,7 +288,8 @@ const STORAGE = {
   careerLevels: "lbs-career-levels",
   weaponRecords: "lbs-weapon-records",
   careerKillsByKind: "lbs-career-kills-by-kind",
-  careerDeathsByKind: "lbs-career-deaths-by-kind"
+  careerDeathsByKind: "lbs-career-deaths-by-kind",
+  contracts: "lbs-contracts"
 } as const;
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -373,6 +389,8 @@ export class ArenaGame {
   private weaponRecords: WeaponRecords = emptyWeaponRecords();
   private careerKillsByKind: Record<BotKind, number> = emptyKindTotals();
   private careerDeathsByKind: Record<BotKind, number> = emptyKindTotals();
+  /** The open contract orders and everything signed off so far. */
+  private contracts: ContractState = emptyContractState();
   private history: RunRecord[] = [];
   private killsByKind: Record<BotKind, number> = emptyKindTotals();
   private lastHitBy: BotKind | "unknown" | null = null;
@@ -416,6 +434,9 @@ export class ArenaGame {
     this.careerKillsByKind = this.readKindTotals(STORAGE.careerKillsByKind);
     this.careerDeathsByKind = this.readKindTotals(STORAGE.careerDeathsByKind);
     this.history = this.readHistory();
+    // The contract board is filled on load, so a player who has never opened the
+    // lobby still sees three standing orders waiting for them.
+    this.contracts = this.readContracts();
     this.world = createWorld({ seed: createRandomSeed(), difficulty });
     this.applyLoadout();
     // The engine owns keyboard input, so it owns being focusable: without a
@@ -596,6 +617,39 @@ export class ArenaGame {
     };
   }
 
+  /** Every career counter a contract can read, in one reading. */
+  private contractStats(): ContractStats {
+    return {
+      ...this.badgeContext(),
+      killsByKind: { ...this.careerKillsByKind },
+      deathsByKind: { ...this.careerDeathsByKind }
+    };
+  }
+
+  /** The board as the UI draws it. */
+  getContractBoard(): ContractBoard {
+    return contractBoard(this.contracts, this.contractStats());
+  }
+
+  private readContracts(): ContractState {
+    let raw: unknown = null;
+    try {
+      const stored = this.readString(STORAGE.contracts);
+      raw = stored ? JSON.parse(stored) : null;
+    } catch {
+      raw = null;
+    }
+    const state = normalizeContractState(raw);
+    const stats = this.contractStats();
+    const filled = fillContractSlots(state, stats);
+    // Sign off anything the career had already passed, then open fresh orders to
+    // replace it, so the board never shows an order that is already done.
+    const advanced = advanceContracts(filled, stats);
+    const settled = advanceContracts(advanced.state, stats).state;
+    this.write(STORAGE.contracts, JSON.stringify(settled));
+    return settled;
+  }
+
   /** Everything the profile screen needs, in one object. */
   getCareer(): CareerSummary {
     const score = this.getCareerScore();
@@ -630,7 +684,8 @@ export class ArenaGame {
       badgesEarned: badges.filter((badge) => badge.earned).length,
       killsByKind: { ...this.careerKillsByKind },
       deathsByKind: { ...this.careerDeathsByKind },
-      recentRuns: [...this.history].slice(-RECENT_RUNS).reverse()
+      recentRuns: [...this.history].slice(-RECENT_RUNS).reverse(),
+      contracts: this.getContractBoard()
     };
   }
 
@@ -1228,6 +1283,26 @@ export class ArenaGame {
     if (runKiller && runKiller !== "unknown") this.careerDeathsByKind[runKiller] += 1;
     this.write(STORAGE.careerKillsByKind, JSON.stringify(this.careerKillsByKind));
     this.write(STORAGE.careerDeathsByKind, JSON.stringify(this.careerDeathsByKind));
+    // The contract board is read after every counter above has moved, so an
+    // order completed by this run is signed off here and nowhere else.
+    const contractsBefore = this.contracts;
+    const advance = advanceContracts(this.contracts, this.contractStats());
+    this.contracts = advance.state;
+    this.write(STORAGE.contracts, JSON.stringify(this.contracts));
+    const signedOff = [
+      ...new Set([
+        ...advance.signedOff,
+        // An order can also close while filling the slots it inherited.
+        ...this.contracts.completed.filter((id) => !contractsBefore.completed.includes(id))
+      ])
+    ];
+    if (signedOff.length > 0) {
+      // One sting for the run, however many orders it closed.
+      this.playSound("contract", 0.9, 1);
+      for (const id of signedOff) {
+        this.pushFeed(`Contract signed off: ${contractName(id).toLowerCase()}.`, "good");
+      }
+    }
     this.playSound(result === "victory" ? "victory" : "defeat");
     this.shake = Math.max(this.shake, result === "victory" ? 6 : 13);
     const endedBy = result === "defeat" ? this.lastHitBy : null;
@@ -1251,7 +1326,8 @@ export class ArenaGame {
       isDifficultyBest,
       previousBestScore: previousOnDifficulty.score,
       perfect: result === "victory" && stats.damageTaken === 0,
-      arenaName: this.world.arenaName
+      arenaName: this.world.arenaName,
+      contractsSigned: signedOff.map(contractName)
     });
     this.emitSnapshot(true);
   }

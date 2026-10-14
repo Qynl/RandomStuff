@@ -319,7 +319,8 @@ export default function App({ onGameReady }: AppProps = {}) {
             perfect: result.perfect,
             arenaName: result.arenaName,
             bestScoreOnDifficulty: result.previousBestScore,
-            isDifficultyBest: result.isDifficultyBest
+            isDifficultyBest: result.isDifficultyBest,
+            contractsSigned: result.contractsSigned
           })
         : [],
     [result]
@@ -929,6 +930,29 @@ export default function App({ onGameReady }: AppProps = {}) {
                         <i style={{ width: `${Math.round(badge.progress * 100)}%` }} />
                       </span>
                     )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="profile-block">
+              <h2>
+                CONTRACTS · {career?.contracts.completed.length ?? 0}/{career?.contracts.total ?? 0} SIGNED OFF
+              </h2>
+              <ul className="contract-log">
+                {(career?.contracts.active ?? []).map((order) => (
+                  <li key={order.id} className="open">
+                    <span className="contract-log-name">{order.name}</span>
+                    <span className="contract-log-req">{order.requirement}</span>
+                    <span className="contract-log-count">
+                      {order.value} / {order.target}
+                    </span>
+                  </li>
+                ))}
+                {[...(career?.contracts.completed ?? [])].reverse().map((order) => (
+                  <li key={order.id}>
+                    <span className="contract-log-name">{order.name}</span>
+                    <span className="contract-log-req">{order.requirement}</span>
+                    <span className="contract-log-count">SIGNED</span>
                   </li>
                 ))}
               </ul>

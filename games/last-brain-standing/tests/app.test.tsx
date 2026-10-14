@@ -233,6 +233,53 @@ describe("React app shell", () => {
     expect(container.querySelector(".home-sheet")).toBeNull();
   });
 
+  it("shows three standing contract orders in the lobby, and signs them off in the profile", () => {
+    const card = container.querySelector(".contract-list");
+    expect(card).toBeTruthy();
+    const orders = Array.from(container.querySelectorAll(".contract-list li"));
+    expect(orders).toHaveLength(3);
+    const orderText = orders.map((order) => order.textContent ?? "").join(" | ");
+    expect(orderText).toContain("FIRST CONTACT");
+    expect(orderText).toContain("0 / 3");
+    expect(container.textContent).toContain("CONTRACT BOARD");
+
+    // A finished run that closes an order shows it on the result card, and the
+    // board and the profile both move on. Two runs are already banked, so this
+    // one finishes the "finish 3 runs" order the board is already holding.
+    window.localStorage.setItem("lbs-career-runs", "2");
+    window.localStorage.setItem(
+      "lbs-contracts",
+      JSON.stringify({
+        active: [
+          { id: "first-contact", baseline: 0 },
+          { id: "field-test", baseline: 0 },
+          { id: "spotter", baseline: 0 }
+        ],
+        completed: []
+      })
+    );
+    remount();
+    engine?.beginRun("contract-ui");
+    advance(40);
+    endRunNow();
+    advance(6);
+    expect(text("#overlay")).toContain("CONTRACT SIGNED OFF");
+    expect(text("#overlay")).toContain("FIRST CONTACT");
+    click(button("RETURN TO COMMAND"));
+    advance(6);
+    expect(container.querySelector(".home-screen")).toBeTruthy();
+    expect(text(".contract-list")).not.toContain("FIRST CONTACT");
+
+    click(
+      Array.from(container.querySelectorAll(".rail-button")).find((element) =>
+        (element.textContent ?? "").includes("PROFILE")
+      )
+    );
+    const log = container.querySelectorAll(".contract-log li");
+    expect(log.length).toBeGreaterThan(0);
+    expect(Array.from(log).map((row) => row.textContent).join(" | ")).toContain("SIGNED");
+  });
+
   it("features today's seed as a one-tap challenge", () => {
     const card = container.querySelector(".daily-card") as HTMLButtonElement;
     expect(card).toBeTruthy();
