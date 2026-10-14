@@ -592,8 +592,11 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .arena-card{display:flex;flex-direction:column;gap:7px;padding:13px;border:2px solid #2c3138;border-radius:18px;background:#ffffff;box-shadow:0 4px 0 #2c3138}
 .arena-card strong{font:400 14px/1.1 "Lilita One","Space Grotesk",sans-serif;letter-spacing:1.4px;color:#2c3138}
 .arena-card small{font:9px/1.6 "DM Mono",monospace;letter-spacing:.3px;color:#5b6472}
-.arena-figure{position:relative;width:100%;aspect-ratio:16/10;border:2px solid #2c3138;border-radius:12px;background:#eef3f8;overflow:hidden}
-.arena-figure i{position:absolute;display:block;background:#aab6c4;border:2px solid #2c3138;border-radius:4px}
+.arena-figure{position:relative;width:100%;aspect-ratio:15/11;border:2px solid #2c3138;border-radius:12px;background:#eef3f8;overflow:hidden}
+.arena-figure i{position:absolute;display:block;background:#aab6c4;border:1px solid #2c3138;border-radius:3px}
+.arena-figure i.crate{background:#d8c09a}
+.arena-figure i.bush{background:#a9c9a4;border:0;border-radius:50% 50% 46% 46%}
+.arena-figure i.water{background:#b6d3e2;border:0;border-radius:7px}
 .help-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:20px}
 .help-grid h3{margin:0 0 6px;font:400 11px "Lilita One","Space Grotesk",sans-serif;letter-spacing:1.8px;color:#7d5f28}
 .help-grid p{margin:0 0 14px;font-size:12.5px;line-height:1.7;color:#3f4854;max-width:440px}

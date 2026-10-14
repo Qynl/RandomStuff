@@ -1,12 +1,22 @@
-import { useState, type RefObject } from "react";
+import { useState, type CSSProperties, type RefObject } from "react";
 import { DIFFICULTIES } from "./constants";
 import { DEFAULT_LOADOUT, LOADOUTS, LOADOUT_ORDER, type LoadoutId } from "./loadouts";
-import { ARENA_LAYOUTS, ARENA_ORDER, layoutForSeed, type ArenaLayoutId } from "./arena";
+import { ARENA_LAYOUTS, ARENA_ORDER, layoutForSeed, WORLD, type ArenaLayoutId } from "./arena";
 import { dailySeed, dailySeedCountdown, dailySeedLabel } from "./rng";
 import type { ContractBoard } from "./contracts";
 import type { CareerSummary } from "./game";
 import { AimPicker, DifficultyPicker, SettingsToggles } from "./SettingsPanel";
 import type { AimMode, DifficultyId } from "./types";
+
+/** One arena tile, as a percentage of the world, for the sheet's map preview. */
+function arenaCell(rect: { x: number; y: number; w: number; h: number }): CSSProperties {
+  return {
+    left: `${(rect.x / WORLD.width) * 100}%`,
+    top: `${(rect.y / WORLD.height) * 100}%`,
+    width: `${(rect.w / WORLD.width) * 100}%`,
+    height: `${(rect.h / WORLD.height) * 100}%`
+  };
+}
 
 /**
  * Command screen.
@@ -448,16 +458,17 @@ export default function HomeScreen({
                   return (
                   <article key={id} className="arena-card">
                     <div className={`arena-figure ${id}`} aria-hidden="true">
-                      {layout.obstacles.slice(0, 10).map((rect, index) => (
-                        <i
-                          key={index}
-                          style={{
-                            left: `${(rect.x / 960) * 100}%`,
-                            top: `${(rect.y / 600) * 100}%`,
-                            width: `${(rect.w / 960) * 100}%`,
-                            height: `${(rect.h / 600) * 100}%`
-                          }}
-                        />
+                      {/* The whole layout, in the arena's own layers and in draw
+                          order: water under hedges under walls, with crates
+                          picked out as the cover you can shoot away. */}
+                      {layout.water.map((rect, index) => (
+                        <i key={`w${index}`} className="water" style={arenaCell(rect)} />
+                      ))}
+                      {layout.bushes.map((rect, index) => (
+                        <i key={`b${index}`} className="bush" style={arenaCell(rect)} />
+                      ))}
+                      {layout.obstacles.map((rect, index) => (
+                        <i key={`o${index}`} className={rect.kind === "crate" ? "crate" : undefined} style={arenaCell(rect)} />
                       ))}
                     </div>
                     <strong>{layout.name}</strong>

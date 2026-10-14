@@ -62,8 +62,11 @@ const LIGHT_STOCK: Record<string, string[]> = {
   "#e6c37a": ["#2c3138"],
   "#f4dd9e": ["#2c3138"],
   "#e0bd6c": ["#2c3138"],
-  // Arena-sheet obstacles: a shape, not a surface, so an empty list is right.
-  "#aab6c4": []
+  // Arena-sheet map preview: shapes, not surfaces, so empty lists are right.
+  "#aab6c4": [],
+  "#d8c09a": [],
+  "#a9c9a4": [],
+  "#b6d3e2": []
 };
 
 /** Every ink the lobby prints, whichever stock it lands on. */
