@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { createRandomSeed, createRng, formatSeed, hashSeed, looksLikeSeedLabel, normalizeSeed, SEED_SPACE } from "../src/rng";
+import {
+  createRandomSeed,
+  createRng,
+  dailySeed,
+  dailySeedLabel,
+  formatSeed,
+  hashSeed,
+  looksLikeSeedLabel,
+  normalizeSeed,
+  SEED_SPACE
+} from "../src/rng";
 
 describe("seeded rng", () => {
   it("replays the same sequence for the same seed", () => {
@@ -102,6 +112,23 @@ describe("seed identity", () => {
     expect(normalizeSeed("Mirror")).toBe(normalizeSeed("MIRROR"));
     expect(normalizeSeed("mirror")).not.toBe(normalizeSeed("flanker"));
     expect(normalizeSeed("mirror")).toBe(hashSeed("MIRROR") % SEED_SPACE || 1);
+  });
+
+  it("gives the whole day one shared seed, and a new one tomorrow", () => {
+    const morning = new Date(2026, 9, 14, 8, 30);
+    const evening = new Date(2026, 9, 14, 23, 5);
+    const tomorrow = new Date(2026, 9, 15, 8, 30);
+    // Same calendar day, same fight - whatever time the player opens the game.
+    expect(dailySeed(morning)).toBe(dailySeed(evening));
+    expect(dailySeedLabel(morning)).toBe(dailySeedLabel(evening));
+    // A new day is a new arena.
+    expect(dailySeed(tomorrow)).not.toBe(dailySeed(morning));
+    // The label is a real seed label: pasting it back restores the same run.
+    expect(looksLikeSeedLabel(dailySeedLabel(morning))).toBe(true);
+    expect(normalizeSeed(dailySeedLabel(morning))).toBe(normalizeSeed(dailySeed(morning)));
+    // And the day it names is inside the seed space the sim uses.
+    expect(dailySeed(morning)).toBeGreaterThan(0);
+    expect(dailySeed(morning)).toBeLessThan(SEED_SPACE);
   });
 
   it("produces the same fight whether a seed is given as text or as its label", () => {

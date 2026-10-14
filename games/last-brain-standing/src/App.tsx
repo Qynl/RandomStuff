@@ -847,6 +847,10 @@ export default function App({ onGameReady }: AppProps = {}) {
           onRandomSeed={rollSeed}
           seedArena={seedArena}
           onStart={() => startRun(seedInput)}
+          onStartSeed={(seed) => {
+            setSeedInput(seed);
+            startRun(seed);
+          }}
           onProfile={() => openProfile("home")}
           shareNotice={shareNotice}
           deployRef={deployButtonRef}

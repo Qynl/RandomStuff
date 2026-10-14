@@ -129,3 +129,21 @@ export function createRng(seed: number | string): Rng {
 export function createRandomSeed(): number {
   return (Math.floor(Math.random() * SEED_SPACE) >>> 0) || 1;
 }
+
+/**
+ * The seed of the day.
+ *
+ * Anyone opening the game on the same calendar day gets the same arena, the
+ * same wave plan and the same fight to compare scores on - locally, with no
+ * server involved, because the date is the whole input. The date is read from
+ * the player's own clock, so this is a local challenge rather than a global one.
+ */
+export function dailySeed(date: Date): number {
+  const stamp = `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()}`;
+  return normalizeSeed(`daily-${stamp}`);
+}
+
+/** Label for the seed of the day, ready for the seed field. */
+export function dailySeedLabel(date: Date): string {
+  return formatSeed(dailySeed(date));
+}

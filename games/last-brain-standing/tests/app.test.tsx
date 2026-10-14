@@ -7,6 +7,7 @@ import type { ArenaGame } from "../src/game";
 import { WORLD } from "../src/arena";
 import { installFakeCanvasPrototype, installFrameController, installResizeObserver, pointer, pressKey, type FakeCanvas, type FrameController } from "./helpers/fake-dom";
 import { BOT_KINDS } from "../src/ai";
+import { dailySeedLabel } from "../src/rng";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -229,6 +230,23 @@ describe("React app shell", () => {
     expect(container.textContent).toContain("READ THE RINGS");
     click(button("✕"));
     expect(container.querySelector(".home-sheet")).toBeNull();
+  });
+
+  it("features today's seed as a one-tap challenge", () => {
+    const card = container.querySelector(".daily-card") as HTMLButtonElement;
+    expect(card).toBeTruthy();
+    // The card names the same seed the day derives, so two people playing today
+    // are offered the same fight.
+    expect(dailySeedLabel(new Date())).toMatch(/^[0-9A-F]{6}$/);
+    expect(card.textContent).toContain(dailySeedLabel(new Date()));
+    expect(card.textContent).toContain("TODAY");
+    // One tap puts that seed in the field and starts the run on it.
+    click(card);
+    advance(6);
+    expect(container.querySelector(".home-screen")).toBeNull();
+    expect(engine?.getSeedLabel()).toBe(dailySeedLabel(new Date()));
+    // And the address bar carries it, so the challenge can be shared.
+    expect(window.location.hash).toContain(`seed=${dailySeedLabel(new Date())}`);
   });
 
   it("moves between the lobby, the roster sheet, the arena and the profile", () => {

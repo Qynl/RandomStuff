@@ -1,7 +1,8 @@
 import { useState, type RefObject } from "react";
 import { DIFFICULTIES } from "./constants";
 import { DEFAULT_LOADOUT, LOADOUTS, LOADOUT_ORDER, type LoadoutId } from "./loadouts";
-import { ARENA_LAYOUTS, ARENA_ORDER, type ArenaLayoutId } from "./arena";
+import { ARENA_LAYOUTS, ARENA_ORDER, layoutForSeed, type ArenaLayoutId } from "./arena";
+import { dailySeed, dailySeedLabel } from "./rng";
 import type { CareerSummary } from "./game";
 import SettingsPanel from "./SettingsPanel";
 import type { AimMode, DifficultyId } from "./types";
@@ -52,6 +53,8 @@ export interface HomeScreenProps {
   /** Arena layout the typed seed will play in, or null when the field is empty. */
   seedArena: ArenaLayoutId | null;
   onStart: () => void;
+  /** Starts a run on a specific seed, used by the daily challenge card. */
+  onStartSeed: (seed: string) => void;
   onProfile: () => void;
   shareNotice: string | null;
   /** Focused whenever the screen becomes the front door again. */
@@ -79,6 +82,7 @@ export default function HomeScreen({
   onRandomSeed,
   seedArena,
   onStart,
+  onStartSeed,
   onProfile,
   shareNotice,
   deployRef
@@ -88,6 +92,11 @@ export default function HomeScreen({
   const ink = CLASS_INK[loadout] ?? CLASS_INK[DEFAULT_LOADOUT];
   const level = DIFFICULTIES[difficulty];
   const recent = career?.recentRuns ?? [];
+  // The daily challenge is derived from the calendar day, so everyone playing
+  // today gets the same fight to compare against - no server involved.
+  const today = new Date();
+  const daily = dailySeedLabel(today);
+  const dailyArena = ARENA_LAYOUTS[layoutForSeed(dailySeed(today))].name;
   const badgesEarned = career?.badgesEarned ?? 0;
   const badgeTotal = career?.badges.length ?? 0;
 
@@ -196,6 +205,16 @@ export default function HomeScreen({
           </p>
 
           <div className="deploy-block">
+            <button type="button" className="daily-card" onClick={() => onStartSeed(daily)}>
+              <span className="daily-tag">TODAY&apos;S SEED</span>
+              <span className="daily-copy">
+                <strong>{daily}</strong>
+                <small>
+                  {dailyArena} · ONE ARENA, ONE FIGHT, EVERYONE
+                </small>
+              </span>
+              <span className="daily-play" aria-hidden="true">▶</span>
+            </button>
             <div className="seed-row">
               <label htmlFor="seed-input">SEED</label>
               <input
