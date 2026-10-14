@@ -371,7 +371,8 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .lobby-chip small{font:9px "DM Mono",monospace;color:#5b6472}
 
 /* -- three columns ------------------------------------------------------- */
-.home-body{display:grid;grid-template-columns:182px minmax(0,1fr) 336px;gap:14px;align-items:start}
+.home-body{display:grid;grid-template-columns:184px minmax(0,1fr) 184px;gap:14px;align-items:start}
+.home-rail-right{align-items:stretch}
 
 /* -- destinations -------------------------------------------------------- */
 .home-rail{display:flex;flex-direction:column;gap:10px}
@@ -477,6 +478,9 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .daily-copy .daily-clock{color:#2c3138;font-weight:500}
 .daily-play{display:grid;place-items:center;width:38px;height:38px;flex:none;border-radius:50%;border:2px solid #2c3138;background:#ffffff;color:#2c3138;font-size:13px;padding-left:3px;box-shadow:inset 0 -3px 0 #e2d6bd}
 
+.console-choices{display:flex;flex-direction:column;gap:2px;padding:2px 0}
+.console-choices .setting-row{margin-top:4px}
+.console-choices .setting-hint{display:none}
 .deploy-block{display:flex;flex-direction:column;gap:9px;padding:14px;border:2px solid #2c3138;border-radius:20px;background:#fbf7ee;box-shadow:0 5px 0 #2c3138}
 .deploy-block .seed-row{display:flex;align-items:center;gap:10px}
 .deploy-block .seed-row label{font:8px "DM Mono",monospace;letter-spacing:1.8px;color:#5b6472}
@@ -563,6 +567,9 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .sheet-head .eyebrow{margin:0;font:9px "DM Mono",monospace;letter-spacing:1.6px;color:#7d5f28}
 .sheet-card .icon-button{display:grid;place-items:center;width:36px;height:36px;border:2px solid #2c3138;border-radius:50%;background:#ffe9b8;color:#2c3138;font-size:14px;cursor:pointer}
 .sheet-card .icon-button:hover{background:#e6c37a}
+.sheet-columns{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;align-items:start}
+.sheet-column{display:flex;flex-direction:column;gap:12px}
+.sheet-card .side-card{padding:14px;border:3px solid #2c3138;border-radius:18px;background:#ffffff}
 .class-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(258px,1fr));gap:12px}
 .class-card{display:flex;flex-direction:column;gap:9px;padding:14px;border:2px solid #2c3138;border-radius:18px;background:#ffffff;box-shadow:0 4px 0 #2c3138}
 .class-card.selected{background:#fff6e0}
@@ -593,14 +600,14 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .help-note{margin:0;font:9px/1.7 "DM Mono",monospace;letter-spacing:.7px;color:#7d5f28}
 
 @media (max-width:1240px){
-  .home-body{grid-template-columns:160px minmax(0,1fr)}
-  .home-side{grid-column:1 / -1;display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr))}
+  .home-body{grid-template-columns:156px minmax(0,1fr) 156px}
   .home-bottom{grid-template-columns:minmax(0,1fr) minmax(0,1.2fr)}
   .home-strip{grid-column:1 / -1;display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
 }
 @media (max-width:880px){
   .home-body{grid-template-columns:minmax(0,1fr)}
   .home-rail{flex-direction:row;flex-wrap:wrap}
+  .home-rail-right{order:3}
   .rail-button{flex:1 1 150px}
   .operator-figure{transform:scale(.86);margin:-18px 0}
   .home-stage .loadout-row{grid-template-columns:repeat(3,minmax(0,1fr))}

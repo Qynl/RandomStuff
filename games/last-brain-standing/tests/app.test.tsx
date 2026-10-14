@@ -46,6 +46,19 @@ describe("React app shell", () => {
     Array.from(container.querySelectorAll(".settings-section .toggle")).find((element) =>
       (element.parentElement?.textContent ?? "").includes(name)
     );
+  /** Opens one of the lobby's sheets from its rail tile. */
+  const openSheet = (name: string) => {
+    const tile = Array.from(container.querySelectorAll(".rail-button")).find((element) =>
+      (element.textContent ?? "").includes(name)
+    );
+    if (!tile) throw new Error(`No rail tile called ${name}`);
+    click(tile);
+  };
+  /** A toggle inside the sheet that is open, not the one in the arena panel. */
+  const sheetToggle = (name: string) =>
+    Array.from(container.querySelectorAll(".home-sheet .settings-section .toggle")).find((element) =>
+      (element.parentElement?.textContent ?? "").includes(name)
+    );
   const seedFieldValue = () => (query("#seed-input") as HTMLInputElement | null)?.value ?? "";
   const setInputValue = (field: HTMLInputElement, value: string) => {
     act(() => {
@@ -206,7 +219,9 @@ describe("React app shell", () => {
     // destinations down the side, and the deploy button under the class ribbon.
     expect(container.querySelector(".home-screen")).toBeTruthy();
     expect(text(".medallion-copy")).toContain("OPERATOR PROFILE");
-    expect(container.querySelectorAll(".rail-button")).toHaveLength(4);
+    // Two destinations left, five down the right, all one tap from the hero.
+    expect(container.querySelectorAll(".rail-button")).toHaveLength(7);
+    expect(container.querySelectorAll(".home-rail-right .rail-button")).toHaveLength(5);
     expect(container.querySelectorAll(".operator-figure[data-class=\"vanguard\"]")).toHaveLength(1);
     expect(text(".stage-plate")).toContain("VANGUARD");
     expect(text(".strip-chip")).toContain("CAREER SCORE");
@@ -225,7 +240,7 @@ describe("React app shell", () => {
     expect(container.textContent).toContain("ENTER THE ARENA");
 
     // Controls and rules are one tap away in a sheet.
-    click(button("HOW TO PLAY"));
+    openSheet("HOW TO PLAY");
     expect(container.querySelector(".home-sheet")).toBeTruthy();
     expect(container.textContent).toContain("SHIFT");
     expect(container.textContent).toContain("READ THE RINGS");
@@ -234,6 +249,7 @@ describe("React app shell", () => {
   });
 
   it("shows three standing contract orders in the lobby, and signs them off in the profile", () => {
+    openSheet("CONTRACTS");
     const card = container.querySelector(".contract-list");
     expect(card).toBeTruthy();
     const orders = Array.from(container.querySelectorAll(".contract-list li"));
@@ -268,16 +284,31 @@ describe("React app shell", () => {
     click(button("RETURN TO COMMAND"));
     advance(6);
     expect(container.querySelector(".home-screen")).toBeTruthy();
+    openSheet("CONTRACTS");
     expect(text(".contract-list")).not.toContain("FIRST CONTACT");
+    // The tile counts what has been signed off, so the board reads at a glance.
+    expect(text(".home-rail-right")).toContain("1/");
 
-    click(
-      Array.from(container.querySelectorAll(".rail-button")).find((element) =>
-        (element.textContent ?? "").includes("PROFILE")
-      )
-    );
+    click(button("✕"));
+    openSheet("RECORD");
+    expect(text(".sheet-card")).toContain("SERVICE RECORD");
+    click(button("OPERATOR PROFILE"));
     const log = container.querySelectorAll(".contract-log li");
     expect(log.length).toBeGreaterThan(0);
     expect(Array.from(log).map((row) => row.textContent).join(" | ")).toContain("SIGNED");
+  });
+
+  it("keeps the switches a player sets once inside the settings sheet", () => {
+    openSheet("SETTINGS");
+    expect(container.querySelector(".home-sheet")).toBeTruthy();
+    expect(sheetToggle("SCREEN SHAKE")).toBeTruthy();
+    expect(sheetToggle("TOUCH CONTROLS")).toBeTruthy();
+    expect(sheetToggle("TELEMETRY")).toBeTruthy();
+    const before = sheetToggle("SCREEN SHAKE")?.getAttribute("aria-pressed");
+    click(sheetToggle("SCREEN SHAKE"));
+    expect(sheetToggle("SCREEN SHAKE")?.getAttribute("aria-pressed")).toBe(before === "true" ? "false" : "true");
+    click(button("✕"));
+    expect(container.querySelector(".home-sheet")).toBeNull();
   });
 
   it("features today's seed as a one-tap challenge", () => {

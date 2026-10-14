@@ -5,7 +5,7 @@ import { ARENA_LAYOUTS, ARENA_ORDER, layoutForSeed, type ArenaLayoutId } from ".
 import { dailySeed, dailySeedCountdown, dailySeedLabel } from "./rng";
 import type { ContractBoard } from "./contracts";
 import type { CareerSummary } from "./game";
-import SettingsPanel from "./SettingsPanel";
+import { AimPicker, DifficultyPicker, SettingsToggles } from "./SettingsPanel";
 import type { AimMode, DifficultyId } from "./types";
 
 /**
@@ -30,7 +30,28 @@ const CLASS_INK: Record<LoadoutId, string> = {
   sapper: "#8fb48c"
 };
 
-type Sheet = "classes" | "arenas" | "help" | null;
+type Sheet = "classes" | "arenas" | "help" | "contracts" | "record" | "settings" | null;
+type OpenSheet = Exclude<Sheet, null>;
+
+/** Dialog labels, so a new sheet cannot ship without an accessible name. */
+const SHEET_TITLES: Record<OpenSheet, string> = {
+  classes: "Operative classes",
+  arenas: "Arena layouts",
+  help: "How to play",
+  contracts: "Contract board",
+  record: "Service record",
+  settings: "Settings"
+};
+
+/** Headings. The class sheet counts the roster it is showing. */
+const SHEET_HEADINGS: Record<OpenSheet, (classCount: number) => string> = {
+  classes: (count) => `OPERATIVE CLASSES · ${count} ISSUED`,
+  arenas: () => "ARENA LAYOUTS",
+  help: () => "HOW TO PLAY",
+  contracts: () => "CONTRACT BOARD",
+  record: () => "SERVICE RECORD",
+  settings: () => "SETTINGS"
+};
 
 export interface HomeScreenProps {
   career: CareerSummary | null;
@@ -157,25 +178,11 @@ export default function HomeScreen({
               <small>ALL {LOADOUT_ORDER.length} ISSUED</small>
             </span>
           </button>
-          <button type="button" className="rail-button" onClick={onProfile}>
-            <span className="rail-glyph" aria-hidden="true">▤</span>
-            <span className="rail-copy">
-              <strong>PROFILE</strong>
-              <small>SERVICE RECORD</small>
-            </span>
-          </button>
           <button type="button" className="rail-button" onClick={() => setSheet("arenas")}>
             <span className="rail-glyph" aria-hidden="true">▦</span>
             <span className="rail-copy">
               <strong>ARENAS</strong>
               <small>{ARENA_ORDER.length} LAYOUTS</small>
-            </span>
-          </button>
-          <button type="button" className="rail-button" onClick={() => setSheet("help")}>
-            <span className="rail-glyph" aria-hidden="true">?</span>
-            <span className="rail-copy">
-              <strong>HOW TO PLAY</strong>
-              <small>KEYS &amp; RULES</small>
             </span>
           </button>
         </nav>
@@ -244,111 +251,47 @@ export default function HomeScreen({
 
         </section>
 
-        <aside className="home-side" aria-label="Briefing">
-          <div className="side-card">
-            <div className="side-kicker">
-              CONTRACT BOARD · {contracts.completed.length}/{contracts.total} SIGNED
-            </div>
-            <ul className="contract-list">
-              {contracts.active.map((order) => (
-                <li key={order.id}>
-                  <div className="contract-head">
-                    <strong>{order.name}</strong>
-                    <span>
-                      {order.value} / {order.target}
-                    </span>
-                  </div>
-                  <div className="contract-track" aria-hidden="true">
-                    <i style={{ width: `${Math.round(order.progress * 100)}%` }} />
-                  </div>
-                  <small>{order.requirement}</small>
-                </li>
-              ))}
-            </ul>
-            {contracts.completed.length > 0 ? (
-              <p className="side-empty">
-                SIGNED OFF: {contracts.completed.slice(-3).map((order) => order.name).join(" · ")}
-              </p>
-            ) : null}
-          </div>
-
-          <div className="side-card">
-            <div className="side-kicker">NEXT DEPLOYMENT</div>
-            <div className="brief-level">
-              <span className="brief-name">{level.label}</span>
-              <span className="brief-rule">{level.blurb}</span>
-            </div>
-            <ul className="brief-list">
-              <li>
-                <span>ARENA</span>
-                <strong>{seedArena ? ARENA_LAYOUTS[seedArena].name : "ROLLED AT DEPLOY"}</strong>
-              </li>
-              <li>
-                <span>HOSTILE PROFILES</span>
-                <strong>4 SEEN · MORE LATER</strong>
-              </li>
-              <li>
-                <span>BEST HERE</span>
-                <strong>{bestScore > 0 ? bestScore : "—"}</strong>
-              </li>
-            </ul>
-          </div>
-
-          <div className="side-card">
-            <div className="side-kicker">SERVICE RECORD · {badgesEarned}/{badgeTotal} BADGES</div>
-            <div className="rank-track" aria-hidden="true">
-              <i style={{ width: `${Math.round((career?.rankProgress ?? 0) * 100)}%` }} />
-            </div>
-            <p className="rank-line">
-              {career?.nextRank
-                ? `${career.nextRank.threshold.toLocaleString()} CAREER FOR ${career.nextRank.name}`
-                : "TOP RANK REACHED"}
-            </p>
-            <ul className="mini-badges">
-              {(career?.badges ?? []).slice(0, 6).map((badge) => (
-                <li key={badge.id} className={badge.earned ? "won" : ""} title={badge.earned ? badge.name : badge.requirement}>
-                  {badge.earned ? badge.name : "???"}
-                </li>
-              ))}
-            </ul>
-            <div className="side-kicker tight">RECENT RUNS</div>
-            {recent.length === 0 ? (
-              <p className="side-empty">Nothing finished yet. The record fills itself in as you play.</p>
-            ) : (
-              <ul className="mini-runs">
-                {recent.slice(0, 3).map((run, index) => (
-                  <li key={`${run.seed}-${index}`} className={run.victory ? "won" : ""}>
-                    <span className="mini-seed">{run.seed}</span>
-                    <span className="mini-where">
-                      {DIFFICULTIES[run.difficulty].label}
-                      {run.weapon ? ` · ${LOADOUTS[run.weapon].name}` : ""}
-                    </span>
-                    <strong>{run.score}</strong>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <button type="button" className="ghost-button wide" onClick={onProfile}>
-              OPERATOR PROFILE
-            </button>
-          </div>
-
-          <SettingsPanel
-            title="SETTINGS"
-            difficulty={difficulty}
-            onDifficulty={onDifficulty}
-            bestScore={bestScore}
-            bestKills={bestKills}
-            aimMode={aimMode}
-            onAimMode={onAimMode}
-            shakeEnabled={shakeEnabled}
-            onShakeToggle={onShakeToggle}
-            showTouchControls={showTouchControls}
-            onTouchToggle={onTouchToggle}
-            debug={debug}
-            onDebugToggle={onDebugToggle}
-          />
-        </aside>
+        <nav className="home-rail home-rail-right" aria-label="Service">
+          <button type="button" className="rail-button" onClick={() => setSheet("contracts")}>
+            <span className="rail-glyph" aria-hidden="true">✎</span>
+            <span className="rail-copy">
+              <strong>CONTRACTS</strong>
+              <small>
+                {contracts.completed.length}/{contracts.total} SIGNED
+              </small>
+            </span>
+          </button>
+          <button type="button" className="rail-button" onClick={() => setSheet("record")}>
+            <span className="rail-glyph" aria-hidden="true">▤</span>
+            <span className="rail-copy">
+              <strong>RECORD</strong>
+              <small>
+                {badgesEarned}/{badgeTotal} BADGES
+              </small>
+            </span>
+          </button>
+          <button type="button" className="rail-button" onClick={onProfile}>
+            <span className="rail-glyph" aria-hidden="true">★</span>
+            <span className="rail-copy">
+              <strong>PROFILE</strong>
+              <small>SERVICE RECORD</small>
+            </span>
+          </button>
+          <button type="button" className="rail-button" onClick={() => setSheet("settings")}>
+            <span className="rail-glyph" aria-hidden="true">⚙</span>
+            <span className="rail-copy">
+              <strong>SETTINGS</strong>
+              <small>SHAKE · TOUCH · DEBUG</small>
+            </span>
+          </button>
+          <button type="button" className="rail-button" onClick={() => setSheet("help")}>
+            <span className="rail-glyph" aria-hidden="true">?</span>
+            <span className="rail-copy">
+              <strong>HOW TO PLAY</strong>
+              <small>KEYS &amp; RULES</small>
+            </span>
+          </button>
+        </nav>
       </div>
 
       <div className="home-bottom">
@@ -405,6 +348,10 @@ export default function HomeScreen({
                 {shareNotice}
               </p>
             ) : null}
+            <div className="console-choices">
+              <DifficultyPicker difficulty={difficulty} onDifficulty={onDifficulty} bestScore={bestScore} bestKills={bestKills} />
+              <AimPicker aimMode={aimMode} onAimMode={onAimMode} />
+            </div>
             <div className="deploy-rank">
               <span className="deploy-rank-copy">
                 <b>{career?.rank.name ?? "RECRUIT"}</b>
@@ -450,13 +397,11 @@ export default function HomeScreen({
       </div>
 
       {sheet ? (
-        <div className="home-sheet" role="dialog" aria-label={sheet === "classes" ? "Classes" : sheet === "arenas" ? "Arenas" : "How to play"}>
+        <div className="home-sheet" role="dialog" aria-label={SHEET_TITLES[sheet]}>
           <button type="button" className="sheet-scrim" aria-label="Close" onClick={() => setSheet(null)} />
           <div className="sheet-card">
             <div className="sheet-head">
-              <h2>
-                {sheet === "classes" ? `OPERATIVE CLASSES · ${LOADOUT_ORDER.length} ISSUED` : sheet === "arenas" ? "ARENA LAYOUTS" : "HOW TO PLAY"}
-              </h2>
+              <h2>{SHEET_HEADINGS[sheet](LOADOUT_ORDER.length)}</h2>
               <button type="button" className="icon-button" onClick={() => setSheet(null)} aria-label="Close">
                 ✕
               </button>
@@ -520,6 +465,162 @@ export default function HomeScreen({
                   </article>
                   );
                 })}
+              </div>
+            ) : null}
+
+            {sheet === "contracts" ? (
+              <div className="sheet-columns">
+                <div className="sheet-column">
+                  <div className="side-card">
+              <div className="side-card">
+                <div className="side-kicker">
+                  CONTRACT BOARD · {contracts.completed.length}/{contracts.total} SIGNED
+                </div>
+                <ul className="contract-list">
+                  {contracts.active.map((order) => (
+                    <li key={order.id}>
+                      <div className="contract-head">
+                        <strong>{order.name}</strong>
+                        <span>
+                          {order.value} / {order.target}
+                        </span>
+                      </div>
+                      <div className="contract-track" aria-hidden="true">
+                        <i style={{ width: `${Math.round(order.progress * 100)}%` }} />
+                      </div>
+                      <small>{order.requirement}</small>
+                    </li>
+                  ))}
+                </ul>
+                {contracts.completed.length > 0 ? (
+                  <p className="side-empty">
+                    SIGNED OFF: {contracts.completed.slice(-3).map((order) => order.name).join(" · ")}
+                  </p>
+                ) : null}
+              </div>
+                  </div>
+                </div>
+                <div className="sheet-column">
+                  <div className="side-card">
+                    <div className="side-kicker">HOW ORDERS WORK</div>
+                    <p className="side-empty">
+                      Three orders are open at a time. A count order counts from the moment it opens; a milestone order
+                      is judged against the career high and signs itself off the first time it is reached. When an order
+                      closes, the next one on the board takes its slot, and the run that closed it says so on the result
+                      card.
+                    </p>
+                  </div>
+                  <div className="side-card">
+              <div className="side-card">
+                <div className="side-kicker">NEXT DEPLOYMENT</div>
+                <div className="brief-level">
+                  <span className="brief-name">{level.label}</span>
+                  <span className="brief-rule">{level.blurb}</span>
+                </div>
+                <ul className="brief-list">
+                  <li>
+                    <span>ARENA</span>
+                    <strong>{seedArena ? ARENA_LAYOUTS[seedArena].name : "ROLLED AT DEPLOY"}</strong>
+                  </li>
+                  <li>
+                    <span>HOSTILE PROFILES</span>
+                    <strong>4 SEEN · MORE LATER</strong>
+                  </li>
+                  <li>
+                    <span>BEST HERE</span>
+                    <strong>{bestScore > 0 ? bestScore : "—"}</strong>
+                  </li>
+                </ul>
+              </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {sheet === "record" ? (
+              <div className="sheet-columns">
+                <div className="sheet-column">
+                  <div className="side-card">
+              <div className="side-card">
+                <div className="side-kicker">SERVICE RECORD · {badgesEarned}/{badgeTotal} BADGES</div>
+                <div className="rank-track" aria-hidden="true">
+                  <i style={{ width: `${Math.round((career?.rankProgress ?? 0) * 100)}%` }} />
+                </div>
+                <p className="rank-line">
+                  {career?.nextRank
+                    ? `${career.nextRank.threshold.toLocaleString()} CAREER FOR ${career.nextRank.name}`
+                    : "TOP RANK REACHED"}
+                </p>
+                <ul className="mini-badges">
+                  {(career?.badges ?? []).slice(0, 6).map((badge) => (
+                    <li key={badge.id} className={badge.earned ? "won" : ""} title={badge.earned ? badge.name : badge.requirement}>
+                      {badge.earned ? badge.name : "???"}
+                    </li>
+                  ))}
+                </ul>
+                <div className="side-kicker tight">RECENT RUNS</div>
+                {recent.length === 0 ? (
+                  <p className="side-empty">Nothing finished yet. The record fills itself in as you play.</p>
+                ) : (
+                  <ul className="mini-runs">
+                    {recent.slice(0, 3).map((run, index) => (
+                      <li key={`${run.seed}-${index}`} className={run.victory ? "won" : ""}>
+                        <span className="mini-seed">{run.seed}</span>
+                        <span className="mini-where">
+                          {DIFFICULTIES[run.difficulty].label}
+                          {run.weapon ? ` · ${LOADOUTS[run.weapon].name}` : ""}
+                        </span>
+                        <strong>{run.score}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <button type="button" className="ghost-button wide" onClick={onProfile}>
+                  OPERATOR PROFILE
+                </button>
+              </div>
+                  </div>
+                </div>
+                <div className="sheet-column">
+                  <div className="side-card">
+                    <div className="side-kicker">SERVICE NOTES</div>
+                    <ul className="brief-list">
+                      <li>
+                        <span>CAREER SCORE</span>
+                        <strong>{(career?.score ?? 0).toLocaleString()}</strong>
+                      </li>
+                      <li>
+                        <span>RANK PROGRESS</span>
+                        <strong>{Math.round((career?.rankProgress ?? 0) * 100)}%</strong>
+                      </li>
+                      <li>
+                        <span>THREAT LEVELS CLEARED</span>
+                        <strong>{career?.levelsClearedCount ?? 0} / {Object.keys(DIFFICULTIES).length}</strong>
+                      </li>
+                      <li>
+                        <span>BEST ON THIS LEVEL</span>
+                        <strong>{bestScore > 0 ? bestScore : "—"}</strong>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {sheet === "settings" ? (
+              <div className="settings-section">
+                <p className="setting-hint">
+                  Threat level and aiming mode live on the deploy console, where they are picked before a run. These
+                  switches are the ones you set once.
+                </p>
+                <SettingsToggles
+                  shakeEnabled={shakeEnabled}
+                  onShakeToggle={onShakeToggle}
+                  showTouchControls={showTouchControls}
+                  onTouchToggle={onTouchToggle}
+                  debug={debug}
+                  onDebugToggle={onDebugToggle}
+                />
               </div>
             ) : null}
 

@@ -26,26 +26,17 @@ export interface SettingsPanelProps {
   title?: string;
 }
 
-export default function SettingsPanel({
-  difficulty,
-  onDifficulty,
-  bestScore,
-  bestKills,
-  aimMode,
-  onAimMode,
-  shakeEnabled,
-  onShakeToggle,
-  showTouchControls,
-  onTouchToggle,
-  debug,
-  onDebugToggle,
-  title = "SETTINGS"
-}: SettingsPanelProps) {
+/** Threat level: the choice that decides what the next run is worth. */
+export interface DifficultyPickerProps {
+  difficulty: DifficultyId;
+  onDifficulty: (id: DifficultyId) => void;
+  bestScore: number;
+  bestKills: number;
+}
+
+export function DifficultyPicker({ difficulty, onDifficulty, bestScore, bestKills }: DifficultyPickerProps) {
   return (
-    <div className="panel-section settings-section">
-      <div className="section-kicker">
-        {title} <span className="kicker-line" />
-      </div>
+    <>
       <div className="setting-row" role="group" aria-label="Difficulty">
         <span>DIFFICULTY</span>
         <div className="segmented">
@@ -68,6 +59,19 @@ export default function SettingsPanel({
         <strong>{bestScore > 0 ? bestScore : "—"}</strong>
         {bestKills > 0 ? ` · ${bestKills} KILLS` : ""}
       </p>
+    </>
+  );
+}
+
+/** How the player aims: mouse or assisted tracking. */
+export interface AimPickerProps {
+  aimMode: AimMode;
+  onAimMode: (mode: AimMode) => void;
+}
+
+export function AimPicker({ aimMode, onAimMode }: AimPickerProps) {
+  return (
+    <>
       <div className="setting-row" role="group" aria-label="Aiming mode">
         <span>AIMING</span>
         <div className="segmented">
@@ -92,6 +96,30 @@ export default function SettingsPanel({
       <p className="setting-hint">
         Assisted aiming slowly tracks the closest visible hostile in front of you — for keyboard-only and touch play.
       </p>
+    </>
+  );
+}
+
+/** The switches a player flips once and forgets. */
+export interface SettingsTogglesProps {
+  shakeEnabled: boolean;
+  onShakeToggle: () => void;
+  showTouchControls: boolean;
+  onTouchToggle: () => void;
+  debug: boolean;
+  onDebugToggle: () => void;
+}
+
+export function SettingsToggles({
+  shakeEnabled,
+  onShakeToggle,
+  showTouchControls,
+  onTouchToggle,
+  debug,
+  onDebugToggle
+}: SettingsTogglesProps) {
+  return (
+    <>
       <p className="setting-hint">Screen shake off is also calm mode: no full-screen damage flash and no hit-stop stutter.</p>
       <div className="setting-row">
         <span>SCREEN SHAKE</span>
@@ -111,6 +139,40 @@ export default function SettingsPanel({
           {debug ? "ON" : "OFF"}
         </button>
       </div>
+    </>
+  );
+}
+
+export default function SettingsPanel({
+  difficulty,
+  onDifficulty,
+  bestScore,
+  bestKills,
+  aimMode,
+  onAimMode,
+  shakeEnabled,
+  onShakeToggle,
+  showTouchControls,
+  onTouchToggle,
+  debug,
+  onDebugToggle,
+  title = "SETTINGS"
+}: SettingsPanelProps) {
+  return (
+    <div className="panel-section settings-section">
+      <div className="section-kicker">
+        {title} <span className="kicker-line" />
+      </div>
+      <DifficultyPicker difficulty={difficulty} onDifficulty={onDifficulty} bestScore={bestScore} bestKills={bestKills} />
+      <AimPicker aimMode={aimMode} onAimMode={onAimMode} />
+      <SettingsToggles
+        shakeEnabled={shakeEnabled}
+        onShakeToggle={onShakeToggle}
+        showTouchControls={showTouchControls}
+        onTouchToggle={onTouchToggle}
+        debug={debug}
+        onDebugToggle={onDebugToggle}
+      />
     </div>
   );
 }
