@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { circleHitsRect, distanceToSegment, moveWithCollisions, segmentBlocked, WORLD } from "../src/arena";
+import { circleHitsRect, distanceToSegment, moveWithCollisions, segmentBlocked, segmentHitsCircle, WORLD } from "../src/arena";
 
 describe("arena collision geometry", () => {
   it("measures distance to the closest point on a segment", () => {
@@ -8,6 +8,14 @@ describe("arena collision geometry", () => {
 
   it("clamps the closest point to the segment endpoints", () => {
     expect(distanceToSegment({ x: -3, y: 4 }, { x: 0, y: 0 }, { x: 10, y: 0 })).toBe(5);
+  });
+
+  it("registers a fast projectile path that crosses a target between frames", () => {
+    expect(segmentHitsCircle({ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 15, y: 0 }, 4)).toBe(true);
+  });
+
+  it("does not register a projectile path that narrowly misses a target", () => {
+    expect(segmentHitsCircle({ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 15, y: 5 }, 4)).toBe(false);
   });
 
   it("handles a zero-length segment without producing NaN", () => {
