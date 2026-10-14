@@ -78,6 +78,8 @@ export class ArenaGame {
     this.running = true;
     this.ui.overlay.classList.add("hidden");
     this.ui.pauseButton.textContent = "Ⅱ";
+    this.ui.pauseButton.setAttribute("aria-label", "Pause game");
+    this.ui.pauseButton.title = "Pause (Esc)";
     this.ui.arenaMessage.textContent = "ELIMINATE HOSTILES";
     this.lastFrame = performance.now();
     cancelAnimationFrame(this.frameId);
@@ -369,6 +371,8 @@ export class ArenaGame {
     this.running = false;
     cancelAnimationFrame(this.frameId);
     this.ui.pauseButton.textContent = "▶";
+    this.ui.pauseButton.setAttribute("aria-label", "Resume game");
+    this.ui.pauseButton.title = "Resume (Esc)";
     this.ui.overlayTitle.innerHTML = "TAKE A<br /><span>BREATHER.</span>";
     this.ui.overlayCopy.textContent = "The bots aren't going anywhere. Ready when you are.";
     this.ui.startButton.innerHTML = "<span>RESUME RUN</span><span aria-hidden=\"true\">↗</span>";
