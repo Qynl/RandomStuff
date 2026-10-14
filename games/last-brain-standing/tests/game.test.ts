@@ -38,7 +38,14 @@ describe("ArenaGame engine shell", () => {
       strafeLock: 0,
       alive: true,
       hitFlash: 0,
-      blindTime: 0
+      blindTime: 0,
+      pendingRounds: 0,
+      burstTimer: 0,
+      diveTime: 0,
+      diveCooldown: 0,
+      detourTime: 0,
+      detourSign: 1,
+      grindTime: 0
     });
     world.bullets.push({
       position: { ...world.player.position },
@@ -116,7 +123,8 @@ describe("ArenaGame engine shell", () => {
   });
 
   it("leaves scorch marks where rounds land and fades them out", () => {
-    const decalsOf = (target: ArenaGame) => (target as unknown as { decals: Array<{ strength: number }> }).decals;
+    const decalsOf = (target: ArenaGame) =>
+      (target as unknown as { decals: Array<{ strength: number; position: { x: number; y: number } }> }).decals;
     game = createGame();
     game.beginRun("decals");
     frames.advance(30);
@@ -134,12 +142,16 @@ describe("ArenaGame engine shell", () => {
     expect(decalsOf(game).length).toBeGreaterThan(0);
 
     // The mark fades out on its own rather than sitting there for the whole run.
+    const mark = { ...decalsOf(game)[0].position };
     const strength = decalsOf(game)[0].strength;
     frames.advance(60);
-    const faded = decalsOf(game)[0]?.strength ?? 0;
-    expect(faded).toBeLessThan(strength);
-    frames.advance(60 * 25);
-    expect(decalsOf(game)).toHaveLength(0);
+    const same = decalsOf(game).find((decal) => decal.position.x === mark.x && decal.position.y === mark.y);
+    expect(same?.strength ?? 0).toBeLessThan(strength);
+    // Marks made on a crate face outlive ones on the floor, but every mark is
+    // gone inside half a minute and the list never grows without bound.
+    frames.advance(60 * 20);
+    expect(decalsOf(game).some((decal) => decal.position.x === mark.x && decal.position.y === mark.y)).toBe(false);
+    expect(decalsOf(game).length).toBeLessThanOrEqual(90);
   });
 
   it("seeds ambient dust when a run starts and keeps it inside the arena", () => {
@@ -492,7 +504,14 @@ describe("ArenaGame engine shell", () => {
       strafeLock: 0,
       alive: true,
       hitFlash: 0,
-      blindTime: 0
+      blindTime: 0,
+      pendingRounds: 0,
+      burstTimer: 0,
+      diveTime: 0,
+      diveCooldown: 0,
+      detourTime: 0,
+      detourSign: 1,
+      grindTime: 0
     });
     const bot = world.bots[world.bots.length - 1];
     world.player.position = { x: 100, y: 400 };

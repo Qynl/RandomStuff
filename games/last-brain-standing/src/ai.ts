@@ -6,7 +6,8 @@ export const BOT_PROFILES: Record<AgentState["kind"], BotProfile> = {
     kind: "hunter",
     name: "THE HUNTER",
     tactic: "DIRECT PRESSURE",
-    counter: "BREAK ITS LINE OF SIGHT — IT CANCELS THE SHOT",
+    signature: "DOUBLE SALVO · PLATED FRONT · LOCKS ITS AIM MID-WIND-UP",
+    counter: "BREAK THE LINE EARLY OR SIDESTEP LATE — THE BARREL STOPS TRACKING HALFWAY",
     color: "#c9695a",
     speed: 148,
     fireRate: 1.05,
@@ -19,7 +20,8 @@ export const BOT_PROFILES: Record<AgentState["kind"], BotProfile> = {
     kind: "flanker",
     name: "THE FLANKER",
     tactic: "ANGLE CONTROL",
-    counter: "DO NOT LET TWO OF THEM PIN YOU IN A CORNER",
+    signature: "PINCER DISCIPLINE · DIVE TO CLOSE · SHOOTS ON THE MOVE",
+    counter: "SPLIT THE PAIR: A FLANKER HOLDS FIRE WHILE IT IS STACKED WITH AN ALLY",
     color: "#8fb0cf",
     speed: 162,
     fireRate: 1.2,
@@ -32,7 +34,8 @@ export const BOT_PROFILES: Record<AgentState["kind"], BotProfile> = {
     kind: "mirror",
     name: "THE MIRROR",
     tactic: "HABIT PUNISHER",
-    counter: "CHANGE DIRECTION AND FIRING LANE",
+    signature: "FIRES A COPY OF YOUR OWN WEAPON · SLIDES OUT OF YOUR AIM LANE",
+    counter: "CHANGE DIRECTION AND FIRING LANE — IT MIRRORS WHATEVER YOU BROUGHT",
     color: "#a08ec0",
     speed: 138,
     fireRate: 0.98,
@@ -97,7 +100,22 @@ export interface BotSteeringContext {
    * lots of cover does not ask for a ring it cannot hold. Defaults to 1.
    */
   rangeScale?: number;
+  /**
+   * Seconds this bot has gone without a clear line of sight. Past a short
+   * threshold it stops dancing around a corner and comes straight for you.
+   */
+  blindTime?: number;
+  /**
+   * A committed slide around whatever is in the way. Per-frame obstacle
+   * avoidance alone makes a bot pressed against a crate edge vibrate in place,
+   * because the best-looking direction keeps flipping as the edge moves under
+   * it; holding one side for a moment turns that into walking around the crate.
+   */
+  detour?: { sign: number; strength: number };
 }
+
+/** How long a hostile will hold an angle it cannot see through before pressing. */
+export const BLIND_PRESS_TIME = 0.35;
 
 export interface BotDirectionResult {
   /** Unit movement direction. */
@@ -151,7 +169,7 @@ export function chooseBotMovement(
       x: lead.x * approach + tangent.x * (tooClose ? 0.5 : 0.16),
       y: lead.y * approach + tangent.y * (tooClose ? 0.5 : 0.16)
     });
-    return { direction: applySeparation(base, bot.position, context), intent };
+    return pressedResult(base, intent, toward, bot, context);
   }
 
   if (bot.kind === "flanker") {
@@ -174,7 +192,7 @@ export function chooseBotMovement(
       y: pursue.y + tangent.y * (0.68 + pulse)
     });
     const intent: BotDirectionResult["intent"] = range < inner ? "retreat" : range > outer ? "advance" : "flank";
-    return { direction: applySeparation(base, bot.position, context), intent };
+    return pressedResult(base, intent, toward, bot, context);
   }
 
   // Mirror: reads sustained movement habits and repeated firing lanes, then
@@ -199,7 +217,40 @@ export function chooseBotMovement(
   });
   const intent: BotDirectionResult["intent"] =
     range < profile.preferredRange * rangeScale - 80 ? "retreat" : habitStrength > 0.35 ? "predict" : "flank";
-  return { direction: applySeparation(base, bot.position, context), intent };
+  return pressedResult(base, intent, toward, bot, context);
+
+  /**
+   * A hostile that has lost sight for a while stops holding its ring and comes
+   * straight for the player. Without this a bot can orbit a crate forever at a
+   * range it likes while never regaining the line it wants to shoot down, which
+   * stalls a wave instead of applying pressure.
+   */
+  function pressedResult(
+    base: Vec2,
+    intent: BotDirectionResult["intent"],
+    towardPlayer: Vec2,
+    self: Pick<AgentState, "position">,
+    ctx: BotSteeringContext
+  ): BotDirectionResult {
+    const blind = (ctx.blindTime ?? 0) > BLIND_PRESS_TIME;
+    let direction = blind
+      ? normalize({ x: base.x * 0.35 + towardPlayer.x * 0.75, y: base.y * 0.35 + towardPlayer.y * 0.75 })
+      : base;
+    const detourStrength = Math.max(0, Math.min(1, ctx.detour?.strength ?? 0));
+    if (detourStrength > 0.01) {
+      // Slide around the obstacle: mostly sideways, a little forward, on the
+      // side the bot committed to a moment ago.
+      const sign = (ctx.detour?.sign ?? 1) >= 0 ? 1 : -1;
+      const slide = { x: -towardPlayer.y * sign, y: towardPlayer.x * sign };
+      const forward = blind ? 0.3 : 0.55;
+      direction = normalize({
+        x: direction.x * (1 - detourStrength) + slide.x * detourStrength * (1 + forward) + towardPlayer.x * detourStrength * forward,
+        y: direction.y * (1 - detourStrength) + slide.y * detourStrength * (1 + forward) + towardPlayer.y * detourStrength * forward
+      });
+      intent = blind ? "advance" : intent;
+    }
+    return { direction: applySeparation(direction, self.position, ctx), intent };
+  }
 }
 
 const scale = (v: Vec2, factor: number): Vec2 => ({ x: v.x * factor, y: v.y * factor });
@@ -290,12 +341,24 @@ export function detectFiringHabit(recentShots: Vec2[], window = 8): FiringHabitR
 }
 
 /**
+ * How much of its speed each profile keeps while a telegraph is running. All of
+ * them slow down so the wind-up is readable and fair, but they do it in their
+ * own way: the Hunter plants its feet and becomes a target, the Flanker never
+ * quite stops skirmishing, and the Mirror keeps drifting.
+ */
+export const WINDUP_MOVE_SCALE: Record<AgentState["kind"], number> = {
+  hunter: 0.24,
+  flanker: 0.72,
+  mirror: 0.44
+};
+
+/**
  * Profile speed intent. The Flanker commits with a short burst when it is far
  * out of position, and everything slows down while winding up a shot so the
  * telegraph is readable and fair.
  */
 export function chooseBotSpeedScale(kind: AgentState["kind"], range: number, progress: { advancing: boolean; windingUp: boolean }): number {
-  if (progress.windingUp) return 0.34;
+  if (progress.windingUp) return WINDUP_MOVE_SCALE[kind];
   if (kind === "flanker" && range > BOT_PROFILES.flanker.preferredRange + 90) return 1.24;
   if (kind === "hunter" && range > 260 && progress.advancing) return 1.12;
   if (kind === "mirror" && range < 150) return 0.92;

@@ -17,6 +17,8 @@ export interface BotProfile {
   tactic: string;
   /** One-line counterplay hint, surfaced as a tooltip and after a defeat. */
   counter: string;
+  /** The behaviour that makes this profile unlike the other two. */
+  signature: string;
   color: string;
   /** Base movement speed in world units per second. */
   speed: number;
@@ -64,6 +66,20 @@ export interface AgentState {
   hitFlash: number;
   /** Seconds since this bot last had a clear line of sight to the player. */
   blindTime: number;
+  /** Rounds still queued from the current volley. */
+  pendingRounds: number;
+  /** Seconds until the next queued round leaves the barrel. */
+  burstTimer: number;
+  /** Seconds left of a committed closing dive, if this profile dives. */
+  diveTime: number;
+  /** Seconds before this bot may dive again. */
+  diveCooldown: number;
+  /** Seconds left of a committed wall-slide, so a blocked bot does not vibrate. */
+  detourTime: number;
+  /** Which way it slides around the obstacle. */
+  detourSign: number;
+  /** Seconds this bot has spent failing to move where it wants to go. */
+  grindTime: number;
 }
 
 export interface Bullet {
@@ -126,7 +142,9 @@ export type SimEvent =
   | { type: "bot-windup"; botId: number; kind: BotKind; position: Vec2; duration: number }
   | { type: "bot-windup-cancel"; botId: number; kind: BotKind; position: Vec2 }
   | { type: "bot-fired"; botId: number; kind: BotKind; position: Vec2; direction: Vec2 }
-  | { type: "bot-hit"; botId: number; kind: BotKind; position: Vec2; amount: number; health: number }
+  | { type: "bot-hit"; botId: number; kind: BotKind; position: Vec2; amount: number; health: number; plated?: boolean }
+  | { type: "bot-dive"; botId: number; kind: BotKind; position: Vec2; direction: Vec2 }
+  | { type: "arena-pressure"; level: number }
   | { type: "bot-eliminated"; botId: number; kind: BotKind; position: Vec2; heals: number; kills: number; interrupted: boolean }
   | { type: "spawn-warning"; kind: BotKind; position: Vec2; delay: number }
   | { type: "bot-spawned"; botId: number; kind: BotKind; position: Vec2 }

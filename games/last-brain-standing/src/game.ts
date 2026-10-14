@@ -1,4 +1,5 @@
 import { BOT_PROFILES } from "./ai";
+import { volleyFor } from "./signatures";
 import { ARENA_LAYOUTS, firstBlockingFraction, layoutForSeed, rangeScaleForOpenness, WORLD } from "./arena";
 import { BLOCK, BOT_ART, BULLET, FLOOR, PLAYER_ART, STATUS, TELEGRAPH } from "./art";
 import { SoundEngine, type SoundName } from "./audio";
@@ -89,6 +90,10 @@ export interface GameSnapshot {
   difficultyBestKills: number;
   /** Live habit readings the Mirror can exploit, or null when no Mirror is up. */
   mirrorRead: { movement: number; firing: number } | null;
+  /** What the Mirror is currently echoing back at you, or null when none is up. */
+  mirrorEcho: string | null;
+  /** 0..1 arena pressure: rises while a wave stalls with nothing dying. */
+  pressure: number;
   /** Best finished runs on this device, highest score first. */
   topRuns: RunRecord[];
 }
@@ -938,6 +943,23 @@ export class ArenaGame {
         case "bot-windup-cancel": {
           break;
         }
+        case "bot-dive": {
+          // A committed dive leaves a streak and a puff, so a Flanker crossing
+          // the room reads as a decision rather than a teleport.
+          this.dashTrail.push({ position: { ...event.position }, life: 0.3 });
+          this.dashTrail.push({
+            position: { x: event.position.x + event.direction.x * 26, y: event.position.y + event.direction.y * 26 },
+            life: 0.36
+          });
+          this.burst(event.position, BOT_PROFILES[event.kind].color, 10, 0.3, 150);
+          this.playSound("dash", 0.45);
+          break;
+        }
+        case "arena-pressure": {
+          this.pushFeed("THE ARENA IS TIGHTENING — HOSTILES CLOSING FASTER.", "warn");
+          this.shake = Math.max(this.shake, 3);
+          break;
+        }
         case "bot-fired": {
           this.burst(event.position, BOT_PROFILES[event.kind].color, 3, 0.2, 100);
           this.playSound("bot-shot");
@@ -946,7 +968,18 @@ export class ArenaGame {
         case "bot-hit": {
           this.hitMarker = 0.16;
           this.spawnDecal(event.position, 4.5, "bot");
-          this.burst(event.position, "#ffffff", 5, 0.22, 140);
+          // A plated hit answers with sparks off steel instead of a clean bite.
+          this.burst(event.position, event.plated ? "#b9c2cc" : "#ffffff", event.plated ? 8 : 5, 0.22, 140);
+          if (event.plated) {
+            this.texts.push({
+              position: { ...event.position },
+              text: "PLATED",
+              life: 0.4,
+              maxLife: 0.4,
+              color: "#cfd6de",
+              size: 9
+            });
+          }
           this.texts.push({
             position: { ...event.position },
             text: String(event.amount),
@@ -1257,6 +1290,8 @@ export class ArenaGame {
       difficultyBestScore: this.bestByDifficulty[world.difficulty]?.score ?? 0,
       difficultyBestKills: this.bestByDifficulty[world.difficulty]?.kills ?? 0,
       mirrorRead: world.mirrorRead ? { ...world.mirrorRead } : null,
+      mirrorEcho: liveKinds.mirror > 0 ? volleyFor("mirror", this.world.loadout.id).label : null,
+      pressure: world.pressure,
       topRuns: this.topRuns()
     };
   }
@@ -1510,6 +1545,9 @@ export class ArenaGame {
     ctx.fillText(`ACC ${world.stats.shotsHit}/${world.stats.shotsFired}  DMG ${Math.round(world.stats.damageDealt)}/${Math.round(world.stats.damageTaken)}`, 12, 38);
     if (world.mirrorRead) {
       ctx.fillText(`MIRROR MOVE ${world.mirrorRead.movement.toFixed(2)} FIRE ${world.mirrorRead.firing.toFixed(2)}`, 12, 50);
+    }
+    if (world.pressure > 0.02) {
+      ctx.fillText(`ARENA PRESSURE ${Math.round(world.pressure * 100)}%`, 12, world.mirrorRead ? 64 : 50);
     }
     ctx.restore();
   }

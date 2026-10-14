@@ -15,6 +15,8 @@ export interface AutoplayOptions {
   /** Simulated frame length. Defaults to 1/60 to match a normal monitor. */
   step?: number;
   maxSeconds?: number;
+  /** Optional per-step probe, used by debugging tests. */
+  probe?: (world: World) => void;
 }
 
 export interface FairnessReport {
@@ -137,6 +139,7 @@ export function autoplay(options: AutoplayOptions): AutoplayResult {
       }
     }
     if (pointInObstacle(world.player.position, world.obstacles)) fairness.playerInsideGeometry += 1;
+    options.probe?.(world);
   }
 
   return { phase: world.phase, victory: (world.phase as World["phase"]) === "victory", stats: { ...world.stats }, elapsed: world.elapsed, frames, fairness, events, world };

@@ -808,6 +808,7 @@ export default function App({ onGameReady }: AppProps = {}) {
               <strong>{mirrorSummary.focus ? "ADAPTING" : "LEARNING"}</strong>
             </div>
             <p className={`mirror-advice${mirrorSummary.focus ? " hot" : ""}`}>
+              {snapshot?.mirrorEcho ? <em className="mirror-echo">ECHOING {snapshot.mirrorEcho}</em> : null}
               {mirrorSummary.label}
               {mirrorSummary.focus ? <em>{mirrorSummary.counter}</em> : null}
             </p>
@@ -854,8 +855,9 @@ export default function App({ onGameReady }: AppProps = {}) {
                 <div className="opponent" key={kind} data-bot={kind} title={BOT_PROFILES[kind].counter}>
                   <span className={`opponent-symbol ${kind}-symbol`}>{kind === "hunter" ? "+" : kind === "flanker" ? "◇" : "⌁"}</span>
                   <div className="opponent-copy">
-                    <strong>{kind === "hunter" ? "THE HUNTER" : kind === "flanker" ? "THE FLANKER" : "THE MIRROR"}</strong>
-                    <small>{kind === "hunter" ? "DIRECT PRESSURE" : kind === "flanker" ? "ANGLE CONTROL" : "HABIT PUNISHER"}</small>
+                    <strong>{BOT_PROFILES[kind].name}</strong>
+                    <small>{BOT_PROFILES[kind].tactic}</small>
+                    <em className="opponent-signature">{BOT_PROFILES[kind].signature}</em>
                   </div>
                   <span className={`opponent-state${alive > 0 ? "" : " down"}`}>{alive > 0 ? `×${alive}` : "DOWN"}</span>
                 </div>

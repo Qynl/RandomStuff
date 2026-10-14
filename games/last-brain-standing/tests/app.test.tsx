@@ -205,10 +205,10 @@ describe("React app shell", () => {
     endRunNow();
     const hint = container.querySelector(".counter-hint");
     expect(hint?.textContent).toContain("THE HUNTER");
-    expect(hint?.textContent).toContain("break its line of sight");
+    expect(hint?.textContent).toContain("break the line early or sidestep late");
     // The profile list exposes the same counter advice as a tooltip.
     const hunter = container.querySelector('[data-bot="hunter"]');
-    expect(hunter?.getAttribute("title")).toContain("LINE OF SIGHT");
+    expect(hunter?.getAttribute("title")).toContain("BARREL STOPS TRACKING");
   });
 
   it("shows the inbound countdown while a later wave is telegraphing", () => {
@@ -610,8 +610,18 @@ describe("React app shell", () => {
         strafeLock: 0,
         alive: true,
         hitFlash: 0,
-        blindTime: 0
-      });
+        blindTime: 0,
+
+      pendingRounds: 0,
+
+      burstTimer: 0,
+
+      diveTime: 0,
+
+      diveCooldown: 0,
+      detourTime: 0,
+      detourSign: 1,
+      grindTime: 0});
     });
     act(() => {
       pressKey("d");

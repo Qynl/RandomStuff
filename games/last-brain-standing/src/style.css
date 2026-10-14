@@ -281,3 +281,6 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .weapon-name{color:var(--brass)}
 .weapon-stats{color:#a4abb4}
 .weapon-list strong{color:#e9e3d6}
+
+.opponent-signature{display:block;margin-top:2px;font:8px/1.5 "DM Mono",monospace;letter-spacing:.6px;color:#9aa3ad;font-style:normal}
+.mirror-echo{display:block;margin-bottom:3px;font:8px/1.5 "DM Mono",monospace;letter-spacing:.8px;color:var(--brass);font-style:normal}

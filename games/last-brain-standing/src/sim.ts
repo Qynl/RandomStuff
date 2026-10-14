@@ -1,4 +1,14 @@
 import {
+  botKeepsTracking,
+  diveSpeedScale,
+  FLANKER_DIVE,
+  flankerHoldsFire,
+  flankerShouldDive,
+  platingScale,
+  volleyFor,
+  type VolleyRound
+} from "./signatures";
+import {
   BOT_PROFILES,
   chooseBotMovement,
   chooseBotSpeedScale,
@@ -112,6 +122,12 @@ export interface World {
   bots: AgentState[];
   bullets: Bullet[];
   pendingSpawns: PendingSpawn[];
+  /** Seconds since the last elimination while a wave was active. */
+  stallTimer: number;
+  /** 0..1 arena pressure: 0 fresh fight, 1 hostiles closing on a passive player. */
+  pressure: number;
+  /** Set once the pressure warning has been announced for this wave. */
+  pressureAnnounced: boolean;
   telemetry: PlayerTelemetry;
   stats: RunStats;
   wave: number;
@@ -166,6 +182,9 @@ export function createWorld(options: CreateWorldOptions = {}): World {
     bots: [],
     bullets: [],
     pendingSpawns: [],
+    stallTimer: 0,
+    pressure: 0,
+    pressureAnnounced: false,
     telemetry: { recentDirections: [], recentShots: [], stationaryTime: 0, lastMoveDirection: { x: 0, y: 0 } },
     stats: emptyStats(),
     wave: 0,
@@ -258,6 +277,9 @@ export function resetWorld(world: World, options: { seed?: number | string; diff
   world.bots.length = 0;
   world.bullets.length = 0;
   world.pendingSpawns.length = 0;
+  world.stallTimer = 0;
+  world.pressure = 0;
+  world.pressureAnnounced = false;
   world.events.length = 0;
   world.stats = emptyStats();
   world.wave = 0;
@@ -290,6 +312,7 @@ export function stepWorld(world: World, input: SimInput, dt: number): SimEvent[]
 
   updatePlayer(world, input, step);
   updateMirrorRead(world);
+  updatePressure(world, step);
   updateBots(world, step);
   updateBullets(world, step);
   updateSpawns(world, step);
@@ -487,24 +510,47 @@ function updateBots(world: World, dt: number): void {
     bot.hitFlash = Math.max(0, bot.hitFlash - dt);
     bot.spawnGuard = Math.max(0, bot.spawnGuard - dt);
     bot.strafeLock = Math.max(0, bot.strafeLock - dt);
+    bot.diveCooldown = Math.max(0, bot.diveCooldown - dt);
+    bot.diveTime = Math.max(0, bot.diveTime - dt);
+    bot.detourTime = Math.max(0, bot.detourTime - dt);
     const profile = BOT_PROFILES[bot.kind];
     const range = distance(bot.position, player.position);
     const seesPlayer = !segmentBlocked(bot.position, player.position, world.obstacles);
     bot.blindTime = seesPlayer ? 0 : bot.blindTime + dt;
 
+    const allies = collectAllies(world, bot);
     if (bot.windup > 0) {
       updateWindup(world, bot, dt, seesPlayer);
     } else if (bot.spawnGuard <= 0) {
-      const intent = evaluateBotFire(bot.kind, range, bot.fireCooldown, world.telemetry, {
-        hasLineOfSight: seesPlayer,
-        blindTime: bot.blindTime,
-        difficultyFireScale: difficulty.fireScale
-      });
+      // The Flanker's discipline: no second gun from the same angle.
+      // A Flanker only yields its shot to another Flanker: the discipline is a
+      // pack tactic, not politeness toward a Hunter's salvo.
+      const holdsFire =
+        bot.kind === "flanker" &&
+        flankerHoldsFire(bot.position, player.position, collectAllies(world, bot, "flanker"), range);
+      const intent = holdsFire
+        ? { shouldFire: false, confidence: 0 }
+        : evaluateBotFire(bot.kind, range, bot.fireCooldown, world.telemetry, {
+            hasLineOfSight: seesPlayer,
+            blindTime: bot.blindTime,
+            difficultyFireScale: difficulty.fireScale
+          });
       if (intent.shouldFire) startWindup(world, bot);
     }
 
     const windingUp = bot.windup > 0;
-    const allies = collectAllies(world, bot);
+    // The Flanker dives to close a gap instead of jogging across the arena.
+    if (bot.kind === "flanker" && flankerShouldDive(range, bot.diveCooldown, windingUp, profile.preferredRange * rangeScaleForOpenness(openness))) {
+      bot.diveTime = FLANKER_DIVE.duration;
+      bot.diveCooldown = FLANKER_DIVE.cooldown;
+      world.events.push({
+        type: "bot-dive",
+        botId: bot.id,
+        kind: bot.kind,
+        position: { ...bot.position },
+        direction: normalize({ x: player.position.x - bot.position.x, y: player.position.y - bot.position.y })
+      });
+    }
     // Bots that orbit pick the side away from their nearest ally, so a wave
     // converges on the player from two directions instead of one long queue.
     if (bot.kind !== "hunter" && bot.strafeLock <= 0) {
@@ -528,9 +574,14 @@ function updateBots(world: World, dt: number): void {
       allies,
       awareness: plan.awareness * difficulty.aimScale,
       // Cover-heavy arenas shrink the ring hostiles try to hold.
-      rangeScale: rangeScaleForOpenness(openness)
+      rangeScale: rangeScaleForOpenness(openness),
+      blindTime: bot.blindTime,
+      detour: { sign: bot.detourSign, strength: Math.min(1, bot.detourTime / DETOUR_RAMP) }
     });
-    const speedScale = chooseBotSpeedScale(bot.kind, range, { advancing: decision.intent === "advance", windingUp });
+    const speedScale =
+      chooseBotSpeedScale(bot.kind, range, { advancing: decision.intent === "advance", windingUp }) *
+      diveSpeedScale(bot.kind, bot.diveTime) *
+      pressureSpeedScale(world.pressure);
     const speed = profile.speed * plan.speedMultiplier * speedScale;
     const steered = steerSafely(world, bot, decision.direction, Math.max(30, speed * 0.34));
     const previous = { ...bot.position };
@@ -542,7 +593,20 @@ function updateBots(world: World, dt: number): void {
     };
 
     const travelled = Math.hypot(bot.position.x - previous.x, bot.position.y - previous.y);
-    if (travelled < speed * dt * 0.25 && !windingUp && bot.strafeLock <= 0) {
+    // Grinding against geometry: commit to sliding around it for a moment
+    // rather than flipping the orbit side every half second in place.
+    const grinding = travelled < speed * dt * 0.4;
+    if (!grinding) {
+      bot.grindTime = 0;
+    } else if (!windingUp) {
+      bot.grindTime += dt;
+      if (bot.grindTime > DETOUR_TRIGGER && bot.detourTime <= 0) {
+        bot.detourSign = bot.strafeSign;
+        bot.detourTime = DETOUR_TIME;
+        bot.grindTime = 0;
+      }
+    }
+    if (travelled < speed * dt * 0.25 && !windingUp && bot.strafeLock <= 0 && bot.detourTime <= 0) {
       bot.strafeSign *= -1;
       bot.strafeLock = STRAFE_HOLD;
     }
@@ -573,7 +637,8 @@ function contactNormal(botPosition: Vec2, playerPosition: Vec2, world: World): V
 function startWindup(world: World, bot: AgentState): void {
   const difficulty = preset(world);
   const profile = BOT_PROFILES[bot.kind];
-  const duration = windupDuration(bot.kind, difficulty.windupScale, world.rng.range(-0.05, 0.06));
+  const volley = volleyFor(bot.kind, world.loadout.id);
+  const duration = windupDuration(bot.kind, difficulty.windupScale, world.rng.range(-0.05, 0.06)) * volley.telegraphScale;
   bot.windup = duration;
   bot.windupDuration = duration;
   bot.windupTurnRate = windupTurnRate(bot.kind, difficulty.windupScale);
@@ -589,10 +654,11 @@ function startWindup(world: World, bot: AgentState): void {
   world.events.push({ type: "bot-windup", botId: bot.id, kind: bot.kind, position: { ...bot.position }, duration });
 }
 
-function collectAllies(world: World, self: AgentState): Vec2[] {
+function collectAllies(world: World, self: AgentState, kind?: AgentState["kind"]): Vec2[] {
   const allies: Vec2[] = [];
   for (const other of world.bots) {
     if (other === self || !other.alive) continue;
+    if (kind && other.kind !== kind) continue;
     allies.push(other.position);
   }
   return allies;
@@ -638,34 +704,52 @@ function updateWindup(world: World, bot: AgentState, dt: number, seesPlayer: boo
     profile.bulletSpeed * difficulty.bulletSpeedScale,
     world.telemetry
   );
-  const desired = Math.atan2(aimPoint.y - bot.position.y, aimPoint.x - bot.position.x);
-  bot.facing = shortestAngleLerp(bot.facing, desired, bot.windupTurnRate * dt);
+  // The Hunter's barrel commits halfway through its wind-up: from there the
+  // shot goes where it was last pointed, so late lateral movement escapes it
+  // while an early dash does not.
+  const progress = bot.windupDuration > 0 ? 1 - bot.windup / bot.windupDuration : 1;
+  if (botKeepsTracking(bot.kind, progress)) {
+    const desired = Math.atan2(aimPoint.y - bot.position.y, aimPoint.x - bot.position.x);
+    bot.facing = shortestAngleLerp(bot.facing, desired, bot.windupTurnRate * dt);
+  }
   bot.windup -= dt;
   if (bot.windup > 0) return;
 
   bot.windup = 0;
   bot.windupDuration = 0;
-  fireBotBullet(world, bot);
+  startVolley(world, bot);
 }
 
-function fireBotBullet(world: World, bot: AgentState): void {
+/**
+ * A wind-up ends here. Profiles differ in what comes out: the Hunter fires a
+ * two-round salvo on a short delay, the Flanker a single moving shot, and the
+ * Mirror a copy of the player's own weapon geometry.
+ */
+function startVolley(world: World, bot: AgentState): void {
+  const volley = volleyFor(bot.kind, world.loadout.id);
+  for (const round of volley.rounds) fireVolleyRound(world, bot, round);
+  bot.fireCooldown =
+    BOT_PROFILES[bot.kind].fireRate /
+      Math.max(0.5, preset(world).fireScale * pressureFireScale(world.pressure)) +
+    world.rng.range(-0.08, 0.14);
+}
+
+function fireVolleyRound(world: World, bot: AgentState, round: VolleyRound): void {
   const profile = BOT_PROFILES[bot.kind];
   const difficulty = preset(world);
-  const speed = profile.bulletSpeed * difficulty.bulletSpeedScale;
-  const jitter = bot.kind === "flanker" ? 0.1 : bot.kind === "mirror" ? 0.05 : 0.03;
-  const direction = world.rng.spreadDirection(bot.facing, jitter);
+  const speed = profile.bulletSpeed * difficulty.bulletSpeedScale * round.speedScale;
+  const direction = world.rng.spreadDirection(bot.facing, round.spread);
   const origin = { x: bot.position.x + direction.x * 17, y: bot.position.y + direction.y * 17 };
   world.bullets.push({
     position: origin,
     velocity: { x: direction.x * speed, y: direction.y * speed },
     owner: "bot",
-    damage: profile.damage * difficulty.damageScale,
-    life: 1.9,
+    damage: profile.damage * difficulty.damageScale * round.damageShare,
+    life: 1.9 * round.lifeScale,
     color: profile.color,
     source: bot.kind,
     travelled: 0
   });
-  bot.fireCooldown = profile.fireRate / Math.max(0.5, difficulty.fireScale) + world.rng.range(-0.08, 0.14);
   world.events.push({ type: "bot-fired", botId: bot.id, kind: bot.kind, position: origin, direction });
 }
 
@@ -700,9 +784,12 @@ function updateBullets(world: World, dt: number): void {
       if (target) {
         world.bullets.splice(i, 1);
         const impact = { ...bullet.position };
-        target.health -= bullet.damage;
+        // Plated profiles shrug off part of a frontal hit; the feedback says so.
+        const plating = platingScale(target.kind, target.position, target.facing, impact);
+        const applied = bullet.damage * plating;
+        target.health -= applied;
         target.hitFlash = 0.16;
-        world.stats.damageDealt += bullet.damage;
+        world.stats.damageDealt += applied;
         world.stats.shotsHit += 1;
         world.hitMarker = 0.16;
         world.events.push({
@@ -710,8 +797,9 @@ function updateBullets(world: World, dt: number): void {
           botId: target.id,
           kind: target.kind,
           position: impact,
-          amount: bullet.damage,
-          health: Math.max(0, target.health)
+          amount: applied,
+          health: Math.max(0, target.health),
+          plated: plating < 1
         });
         if (target.health <= 0) eliminateBot(world, target);
       }
@@ -792,6 +880,9 @@ export function eliminateBot(world: World, bot: AgentState): void {
   bot.alive = false;
   bot.windup = 0;
   world.stats.kills += 1;
+  // A kill proves the fight is moving: the arena stops tightening.
+  world.stallTimer = 0;
+  world.pressure = 0;
   if (interrupted) world.stats.interrupts += 1;
   const healed = Math.min(ELIMINATION_HEAL, world.player.maxHealth - world.player.health);
   if (healed > 0) world.player.health += healed;
@@ -876,7 +967,14 @@ function materialiseBot(world: World, pending: PendingSpawn): void {
     strafeLock: 0,
     alive: true,
     hitFlash: 0,
-    blindTime: 0
+    blindTime: 0,
+    pendingRounds: 0,
+    burstTimer: 0,
+    diveTime: 0,
+    diveCooldown: FLANKER_DIVE.cooldown * 0.5,
+    detourTime: 0,
+    detourSign: 1,
+    grindTime: 0
   };
   world.nextBotId += 1;
   world.bots.push(bot);
@@ -920,6 +1018,49 @@ function updateWaveState(world: World, dt: number): void {
     world.stats.wave = Math.max(world.stats.wave, plan.wave);
     world.waveState = "active";
     queueWaveSpawns(world, plan);
+  }
+}
+
+/**
+ * The arena does not wait for you.
+ *
+ * Bots are slower than the player by design, so without this a patient player
+ * could kite a corner behind cover forever and a wave would never resolve. After
+ * `STALL_PRESSURE_TIME` without a kill the remaining hostiles start closing
+ * faster and firing sooner, ramping to a cap. It only ever engages on a stalled
+ * wave, so ordinary fights are untouched.
+ */
+export const STALL_PRESSURE_TIME = 12;
+const STALL_SPEED_BOOST = 0.62;
+/** How long a bot grinds against geometry before committing to slide around it. */
+export const DETOUR_TRIGGER = 0.26;
+/** How long that slide lasts. */
+export const DETOUR_TIME = 1.1;
+/** Ramp from a light nudge to a full detour. */
+export const DETOUR_RAMP = 0.35;
+const STALL_FIRE_BOOST = 0.32;
+
+/** How much faster the remaining hostiles move, given the current pressure. */
+export function pressureSpeedScale(pressure: number): number {
+  return 1 + STALL_SPEED_BOOST * clamp01(pressure);
+}
+
+/** How much faster they cycle their guns, given the current pressure. */
+export function pressureFireScale(pressure: number): number {
+  return 1 + STALL_FIRE_BOOST * clamp01(pressure);
+}
+
+const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
+
+/** Advances the stall clock; a wave that is not active cannot be stalled. */
+function updatePressure(world: World, dt: number): void {
+  const stalling = world.waveState === "active" && world.pendingSpawns.length === 0;
+  world.stallTimer = stalling ? world.stallTimer + dt : 0;
+  const pressure = clamp01((world.stallTimer - STALL_PRESSURE_TIME * 0.45) / STALL_PRESSURE_TIME);
+  world.pressure = pressure;
+  if (pressure > 0.5 && !world.pressureAnnounced) {
+    world.pressureAnnounced = true;
+    world.events.push({ type: "arena-pressure", level: 1 });
   }
 }
 
