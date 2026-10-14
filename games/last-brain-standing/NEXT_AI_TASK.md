@@ -41,6 +41,15 @@ Do **not** add new game modes or lots of content. First make the current combat 
 6. Review the diff for accidental scope creep, unused code, unfair AI, accessibility issues, and performance regressions.
 7. Commit a focused change with a clear message. Keep work on this branch.
 
+## Next improvement after verification
+The interface has a narrow-screen layout, but the game is not yet playable on touch-only devices because the core controls require a keyboard and mouse. Once the existing tests/build are green, prioritize a simple, polished mobile control scheme:
+- Left virtual stick for movement; right-side aim/fire control that does not block the arena view.
+- A dedicated dash button with a clear cooldown state.
+- Pointer/touch cancellation must always release held input, and controls must not trigger accidental page scrolling or text selection.
+- Hide or simplify touch controls on desktop; keep keyboard/mouse behavior unchanged.
+- Test small phone-sized viewports and avoid tiny controls or covering the HUD.
+- Add testable input helpers where practical; do not add a gamepad library or external service.
+
 ## Quality bar
 - No fake polish: don't claim tests, builds, screenshots, or playtests passed unless you actually ran them.
 - No giant rewrites just to make the code look different.
