@@ -18,7 +18,7 @@ export default function App() {
           <span className="brand-mark">LB<span>/</span>S</span>
           <span className="brand-copy"><strong>LAST BRAIN</strong><small>STANDING</small></span>
         </a>
-        <div className="top-status"><span className="live-dot" /><span>SIMULATION ACTIVE</span><span className="status-divider" /><span>BUILD 0.2</span></div>
+        <div className="top-status"><span className="live-dot" /><span id="simulation-status">SIMULATION STANDBY</span><span className="status-divider" /><span>BUILD 0.2</span></div>
         <button id="pause-button" className="icon-button" aria-label="Pause game" title="Pause (Esc)">Ⅱ</button>
       </header>
 
