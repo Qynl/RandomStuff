@@ -1,10 +1,12 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { ArenaGame } from "./game";
 
 export default function App() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
   useEffect(() => {
-    const canvas = document.querySelector<HTMLCanvasElement>("#game");
-    if (!canvas) throw new Error("Game canvas was not found.");
+    const canvas = canvasRef.current;
+    if (!canvas) return;
     const game = new ArenaGame(canvas);
     return () => game.destroy();
   }, []);
@@ -22,7 +24,7 @@ export default function App() {
 
       <section className="game-layout" aria-label="Game arena">
         <div className="arena-wrap">
-          <canvas id="game" width="960" height="600" aria-label="Top-down arena. Move with WASD, aim with mouse, fire with click or Space, dash with Shift." />
+          <canvas ref={canvasRef} id="game" width="960" height="600" aria-label="Top-down arena. Move with WASD, aim with mouse, fire with click or Space, dash with Shift." />
           <div className="arena-vignette" />
           <div className="arena-label"><span className="tiny-square" /> SECTOR 01 <span className="label-separator">/</span> TEST CHAMBER</div>
           <div className="arena-bottom"><span id="arena-message">ELIMINATE HOSTILES</span><span>WASD MOVE&nbsp; · &nbsp;MOUSE AIM&nbsp; · &nbsp;CLICK FIRE&nbsp; · &nbsp;SHIFT DASH</span></div>
