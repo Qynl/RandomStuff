@@ -1,0 +1,57 @@
+# LAST BRAIN STANDING
+
+A small, fast top-down arena combat game built around one idea: opponents should feel different because they make different decisions, not just because they have different colors.
+
+## Current foundation
+
+- Responsive canvas arena with a restrained neon/industrial visual identity.
+- Keyboard movement, mouse aiming, click/Space firing, Shift dash, Esc pause, and R restart.
+- Three readable bot profiles:
+  - **The Hunter** pressures directly and leads moving targets.
+  - **The Flanker** controls angles and circles around the player.
+  - **The Mirror** watches recent movement and counters repeated directional habits.
+- Health, dash cooldown, eliminations, threat waves, local best score, combat feed, hit flashes, particles, and screen shake.
+- Deterministic, separately testable AI decision helpers.
+- No backend, account, external asset, or runtime service required. Google Fonts are optional; the game falls back to system fonts.
+
+## Run locally
+
+Requires Node.js 20 or newer.
+
+```bash
+npm install
+npm run dev
+```
+
+Open the local URL printed by Vite. To verify the code:
+
+```bash
+npm test
+npm run build
+```
+
+## Controls
+
+| Input | Action |
+|---|---|
+| WASD / Arrow keys | Move |
+| Mouse | Aim |
+| Left click / Space | Fire |
+| Shift | Dash with brief invulnerability |
+| Esc | Pause / resume |
+| R | Restart |
+
+## Architecture
+
+- `src/arena.ts`: world bounds, obstacles, collision helpers.
+- `src/ai.ts`: bot profiles and movement / firing decisions.
+- `src/game.ts`: simulation, input, combat, rendering, effects, and HUD updates.
+- `src/types.ts`: shared game data contracts.
+- `src/main.ts`: browser entry point.
+- `tests/ai.test.ts`: small regression suite for AI decision primitives.
+
+## Quality rule
+
+Do not add a new bot, weapon, or mode until the current combat loop feels good. For every gameplay change: define expected behavior, implement the smallest change, run tests and build, play it in the browser, then keep or revert the change based on actual feel.
+
+This is the first playable foundation, not the finished game. The next milestone should focus on combat balance and making the Mirror's adaptation obvious and fair to the player.

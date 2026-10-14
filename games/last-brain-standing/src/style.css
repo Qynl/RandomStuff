@@ -1,0 +1,80 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+:root{font-family:"Space Grotesk",sans-serif;color:#e8f0fa;background:#080b12;font-synthesis:none;text-rendering:optimizeLegibility;-webkit-font-smoothing:antialiased;--bg:#080b12;--panel:#0e1420;--line:#202b3a;--muted:#738399;--cyan:#55e7ff;--red:#ff5c76;--amber:#ffb454}
+*{box-sizing:border-box}
+body{margin:0;min-width:320px;min-height:100vh;background:radial-gradient(ellipse at 50% -20%,#162337 0%,#080b12 54%);color:#e8f0fa}
+button{font:inherit}
+.shell{width:min(1480px,100%);margin:0 auto;padding:22px 28px 14px}
+.topbar{height:58px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #202b3a;padding-bottom:16px}
+.brand{display:flex;align-items:center;gap:11px;color:inherit;text-decoration:none}
+.brand-mark{font-size:21px;font-weight:700;letter-spacing:-1.5px;color:var(--cyan)}
+.brand-mark span{color:#60768c;padding:0 2px}
+.brand-copy{display:flex;flex-direction:column;line-height:1.05;letter-spacing:1.7px;font-size:11px}
+.brand-copy small{font-family:"DM Mono",monospace;color:#72839a;font-size:9px;letter-spacing:2.8px;margin-top:4px}
+.top-status,.page-footer,.panel-footer,.overlay-foot{display:flex;align-items:center;gap:12px;font:10px "DM Mono",monospace;letter-spacing:1px;color:#718299}
+.live-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:#5ee6b2;box-shadow:0 0 10px #5ee6b277}
+.status-divider{height:12px;width:1px;background:#2a3544}
+.icon-button{width:34px;height:34px;border:1px solid #273448;background:#111a28;color:#a9bad0;border-radius:8px;cursor:pointer;font-size:15px}
+.icon-button:hover{border-color:#5b718a;color:white}
+.game-layout{display:grid;grid-template-columns:minmax(0,1fr) 270px;gap:14px;margin-top:18px;align-items:stretch}
+.arena-wrap{position:relative;min-width:0;aspect-ratio:960/600;overflow:hidden;border:1px solid #26374a;border-radius:10px;background:#090f19;box-shadow:0 20px 70px #0005}
+#game{display:block;width:100%;height:100%;object-fit:contain;cursor:crosshair}
+.arena-vignette{position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 0 90px #05081088}
+.arena-label{position:absolute;top:17px;left:18px;font:10px "DM Mono",monospace;letter-spacing:1.2px;color:#a4b6ca;display:flex;align-items:center;gap:9px;text-shadow:0 1px 5px #000}
+.tiny-square{width:6px;height:6px;background:var(--cyan);box-shadow:0 0 10px #55e7ff77}
+.label-separator{color:#4d647b}
+.arena-bottom{position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;gap:10px;padding:13px 17px;background:linear-gradient(0deg,#080d16e8,#080d1600);font:9px "DM Mono",monospace;letter-spacing:.8px;color:#7c91a8;pointer-events:none}
+#arena-message{color:var(--cyan)}
+.overlay{position:absolute;inset:0;display:grid;place-items:center;background:#070b13b8;backdrop-filter:blur(5px);transition:opacity .2s,visibility .2s}
+.overlay.hidden{opacity:0;visibility:hidden;pointer-events:none}
+.overlay-card{width:min(440px,84%);padding:31px 34px;background:linear-gradient(135deg,#121c2aef,#0b111cee);border:1px solid #2b3b4f;border-radius:10px;box-shadow:0 24px 80px #0007;position:relative}
+.overlay-card:before{content:"";position:absolute;left:0;top:0;width:62px;height:2px;background:var(--cyan);box-shadow:0 0 16px #55e7ff88}
+.eyebrow,.section-kicker{font:9px "DM Mono",monospace;letter-spacing:1.4px;color:#8295ac;display:flex;align-items:center;gap:9px}
+.overlay h1{font-size:clamp(31px,4vw,48px);line-height:.98;letter-spacing:-2.7px;margin:24px 0 15px;font-weight:700}
+.overlay h1 span{color:var(--cyan)}
+.overlay p{font-size:13px;line-height:1.7;color:#9aacc1;max-width:340px;margin:0 0 24px}
+.primary-button{width:100%;display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border:0;border-radius:5px;background:var(--cyan);color:#07121a;font-weight:700;font-size:11px;letter-spacing:1.2px;cursor:pointer;transition:transform .15s,box-shadow .15s}
+.primary-button:hover{transform:translateY(-2px);box-shadow:0 8px 28px #55e7ff30}
+.primary-button span:last-child{font-size:17px}
+.overlay-foot{justify-content:space-between;font-size:8px;margin-top:18px;color:#5e7188}
+.side-panel{display:flex;flex-direction:column;min-width:0;background:linear-gradient(180deg,#0e1420,#0b1019);border:1px solid #202b3a;border-radius:10px;overflow:hidden}
+.panel-section{padding:17px 16px;border-bottom:1px solid #202b3a}
+.section-kicker{font-size:8px;white-space:nowrap;letter-spacing:1.2px}
+.kicker-line{height:1px;background:#263446;flex:1}
+.score-row{display:flex;align-items:end;justify-content:space-between;margin:17px 0 13px}
+.stat-label{display:block;font:8px "DM Mono",monospace;letter-spacing:1px;color:#75879d;margin-bottom:5px}
+.score-row strong{font-size:35px;line-height:1;letter-spacing:-1.5px;font-weight:600}
+.best-stat{text-align:right}
+.best-stat strong{font-size:22px;color:#8da2b9}
+.wave-row,.health-heading{display:flex;align-items:center;justify-content:space-between;font:9px "DM Mono",monospace;color:#8093a9;letter-spacing:.5px}
+.wave-row strong{font-size:11px;color:#e9f3ff}
+.wave-row i{font-style:normal;color:#65788f}
+.wave-track,.health-track{height:4px;border-radius:10px;background:#202b3a;overflow:hidden;margin-top:9px}
+.wave-track span{display:block;height:100%;width:20%;background:var(--cyan);transition:width .2s}
+.health-heading strong{color:var(--cyan);font-size:11px}
+.health-track{margin-top:9px;margin-bottom:15px}
+.health-track span{display:block;width:100%;height:100%;background:var(--cyan);transition:width .2s,background .2s}
+.health-track span.low{background:var(--red)}
+.dash-status{display:flex;align-items:center;gap:8px;font:8px "DM Mono",monospace;letter-spacing:.7px;color:#8193a9}
+.dash-icon{color:var(--amber);font-size:13px}
+.dash-status strong{margin-left:auto;color:var(--amber);font-size:9px}
+.opponents-section{padding-bottom:9px}
+.opponent{display:flex;align-items:center;gap:9px;padding:12px 0 4px}
+.opponent-symbol{width:26px;height:26px;display:grid;place-items:center;border:1px solid #364255;border-radius:6px;font-size:16px;background:#131c29}
+.hunter-symbol{color:var(--red)}.flanker-symbol{color:var(--amber)}.mirror-symbol{color:#b58cff}
+.opponent-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
+.opponent-copy strong{font-size:9px;letter-spacing:.6px}
+.opponent-copy small{font:7px "DM Mono",monospace;color:#687d94;letter-spacing:.6px}
+.opponent-state{margin-left:auto;font:7px "DM Mono",monospace;letter-spacing:.5px;color:#5ee6b2}
+.opponent-state.down{color:#536275}
+.log-section{flex:1;min-height:120px}
+.combat-feed{margin-top:12px;display:flex;flex-direction:column;gap:8px}
+.combat-feed p{margin:0;font:9px/1.5 "DM Mono",monospace;color:#8799af}
+.combat-feed p span{color:#4e637a;margin-right:4px}
+.panel-footer{padding:12px 16px;justify-content:space-between;font-size:7px;color:#52667d}
+.footer-signal{color:#55e7ff;letter-spacing:3px}
+.page-footer{justify-content:space-between;padding-top:14px;font-size:8px;color:#7b8da2}
+.muted{color:#45566c}
+@media(max-width:900px){.shell{padding:15px}.game-layout{grid-template-columns:minmax(0,1fr) 235px;gap:10px}.panel-section{padding:13px 12px}.overlay-card{padding:23px}.top-status{font-size:8px}}
+@media(max-width:700px){.game-layout{grid-template-columns:1fr}.arena-wrap{min-height:280px}.side-panel{display:grid;grid-template-columns:1fr 1fr}.panel-section{border-right:1px solid #202b3a}.opponents-section{grid-row:span 2}.log-section{min-height:130px}.panel-footer{grid-column:1/-1}.top-status{display:none}.shell{padding:12px}.page-footer{font-size:7px}.arena-bottom{font-size:7px}.arena-bottom span:last-child{max-width:55%;text-align:right}}
+@media(max-width:430px){.side-panel{grid-template-columns:1fr}.opponents-section{grid-row:auto}.arena-bottom{letter-spacing:0}.overlay-card{padding:20px}.overlay h1{margin-top:16px}.page-footer span:last-child{display:none}}
