@@ -592,6 +592,41 @@ export default function App({ onGameReady }: AppProps = {}) {
                     ) : null}
                   </div>
                   <div className="profile-block">
+                    <h2>SERVICE RECORD · {career?.badgesEarned ?? 0}/{career?.badges.length ?? 0} BADGES</h2>
+                    <ul className="badge-grid">
+                      {(career?.badges ?? []).map((badge) => (
+                        <li
+                          key={badge.id}
+                          className={badge.earned ? "badge earned" : "badge locked"}
+                          title={badge.requirement}
+                        >
+                          <span className="badge-name">{badge.earned ? badge.name : "???"}</span>
+                          <span className="badge-req">{badge.earned ? "EARNED" : badge.requirement}</span>
+                          {badge.earned ? null : (
+                            <span className="badge-bar" aria-hidden="true">
+                              <i style={{ width: `${Math.round(badge.progress * 100)}%` }} />
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="profile-block">
+                    <h2>WEAPON RECORDS</h2>
+                    <ul className="weapon-list">
+                      {(career?.weapons ?? []).map((weapon) => (
+                        <li key={weapon.id}>
+                          <span className="weapon-name">{weapon.kind}</span>
+                          <span className="weapon-stats">
+                            {weapon.record.runs} runs · {weapon.record.kills} kills
+                            {weapon.record.victories > 0 ? ` · ${weapon.record.victories} cleared` : ""}
+                          </span>
+                          <strong>{weapon.record.bestScore}</strong>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="profile-block">
                     <h2>BEST RUN PER THREAT LEVEL</h2>
                     <ul className="best-list">
                       {(career?.bestByDifficulty ?? []).map((entry) => (
@@ -681,6 +716,9 @@ export default function App({ onGameReady }: AppProps = {}) {
                     </button>
                     <button className="ghost-button wide" type="button" onClick={() => startRun(seedLabel)}>REPLAY SEED {seedLabel}</button>
                     <button className="ghost-button wide" type="button" onClick={copyShareLink}>COPY SEED LINK</button>
+                    <button className="ghost-button wide" type="button" onClick={() => setScreen("profile")}>
+                      OPERATOR PROFILE
+                    </button>
                     <div className="seed-preview">
                     <button
                       type="button"

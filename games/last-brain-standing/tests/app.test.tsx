@@ -404,10 +404,46 @@ describe("React app shell", () => {
     const best = Array.from(container.querySelectorAll(".best-list li")).map((item) => item.textContent ?? "");
     expect(best.some((row) => row.includes("5000"))).toBe(true);
 
+    // The service record: a badge shelf with counted progress, plus per-weapon
+    // records, so the profile reads like an account rather than a scoreboard.
+    expect(text(".profile-block h2")).toBeDefined();
+    const badges = Array.from(container.querySelectorAll(".badge"));
+    expect(badges.length).toBeGreaterThanOrEqual(6);
+    expect(badges.filter((badge) => badge.classList.contains("earned")).length).toBeGreaterThan(0);
+    // Locked badges hide their name and show what it takes instead.
+    const locked = badges.filter((badge) => badge.classList.contains("locked"));
+    expect(locked.every((badge) => (badge.textContent ?? "").includes("???"))).toBe(true);
+    expect(container.querySelectorAll(".badge-bar").length).toBe(locked.length);
+
+    const weapons = Array.from(container.querySelectorAll(".weapon-list li")).map((item) => item.textContent ?? "");
+    expect(weapons).toHaveLength(3);
+    expect(weapons.some((row) => row.includes("RIFLE"))).toBe(true);
+
     // Back out to the arena.
     click(button("BACK TO THE ARENA"));
     expect(query(".profile-rank")).toBeNull();
     expect(button("ENTER THE ARENA")).toBeTruthy();
+  });
+
+  it("records the finished run against the weapon that was used", () => {
+    remount();
+    click(button("ENTER THE ARENA"));
+    advance(20);
+    const world = engine?.activeWorld;
+    if (!world) throw new Error("expected a world");
+    expect(world.loadout.id).toBe("rifle");
+    world.stats.kills = 6;
+    endRunNow();
+
+    // The run is written to the rifle's service record, and the badge shelf
+    // picks up the single finished run.
+    click(button("OPERATOR PROFILE"));
+    const weapons = Array.from(container.querySelectorAll(".weapon-list li")).map((item) => item.textContent ?? "");
+    const rifle = weapons.find((row) => row.includes("RIFLE")) ?? "";
+    expect(rifle).toContain("1 runs");
+    expect(rifle).toContain("6 kills");
+    const earned = Array.from(container.querySelectorAll(".badge.earned")).map((item) => item.textContent ?? "");
+    expect(earned.some((badge) => badge.includes("FIRST CONTACT"))).toBe(true);
   });
 
   it("unlocks a weapon as soon as the career score reaches it", () => {

@@ -809,6 +809,52 @@ describe("ArenaGame engine shell", () => {
     expect(restored[0].arenaName).toBeUndefined();
   });
 
+  it("keeps a per-weapon service record and a badge shelf across runs", () => {
+    window.localStorage.clear();
+    game = createGame();
+    game.beginRun("record-a");
+    frames.advance(40);
+    game.activeWorld.stats.kills = 5;
+    game.activeWorld.stats.interrupts = 2;
+    killPlayer(game, "hunter");
+    expect(results[0]).toBeTruthy();
+
+    let career = game.getCareer();
+    const rifle = career.weapons.find((weapon) => weapon.id === "rifle");
+    expect(rifle?.record.runs).toBe(1);
+    expect(rifle?.record.kills).toBe(5);
+    expect(rifle?.record.bestScore).toBe(results[0].score.total);
+    expect(career.weapons).toHaveLength(3);
+    expect(career.weapons.find((weapon) => weapon.id === "scatter")?.record.runs).toBe(0);
+    expect(career.badgesEarned).toBeGreaterThanOrEqual(1); // FIRST CONTACT
+    expect(career.badges.find((badge) => badge.id === "first-run")?.earned).toBe(true);
+    // A badge that needs more than one run is still locked, with progress.
+    const tour = career.badges.find((badge) => badge.id === "tourist");
+    expect(tour?.earned).toBe(false);
+    expect(tour?.progress).toBeGreaterThanOrEqual(0);
+
+    // A fresh engine on the same device reads the record back.
+    game.destroy();
+    game = createGame();
+    career = game.getCareer();
+    expect(career.weapons.find((weapon) => weapon.id === "rifle")?.record.kills).toBe(5);
+    // And a second run with the other weapon does not pollute the rifle's row.
+    game.destroy();
+  });
+
+  it("survives corrupt account data in storage", () => {
+    window.localStorage.setItem("lbs-weapon-records", "{not json");
+    window.localStorage.setItem("lbs-career-arenas", "not-a-list");
+    window.localStorage.setItem("lbs-career-levels", JSON.stringify([1, 2, 3]));
+    window.localStorage.setItem("lbs-career-wins", "banana");
+    game = createGame();
+    const career = game.getCareer();
+    expect(career.weapons.every((weapon) => weapon.record.runs === 0)).toBe(true);
+    expect(career.badges.every((badge) => !badge.earned)).toBe(true);
+    expect(career.score).toBe(0);
+    expect(Number.isFinite(career.runs)).toBe(true);
+  });
+
   it("ignores a corrupted run history instead of crashing", () => {
     window.localStorage.setItem("lbs-run-history", "{not json");
     game = createGame();

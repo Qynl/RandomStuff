@@ -108,7 +108,16 @@ Career score is the sum of your best score on each threat level, so improving an
 
 ## Operator profile
 
-Pressing **OPERATOR PROFILE** on the start screen opens the account view: rank insignia and name (RECRUIT → OPERATOR → SPECIALIST → VETERAN → INSTRUCTOR by career score), career totals (score, runs, kills, best chain), the unlock ladder with progress toward the next weapon, and your best run on every threat level. It reads the same `localStorage` records the game writes and nothing leaves the device.
+**OPERATOR PROFILE** (on the start screen and on the result card) opens the account view:
+
+- **Rank** — insignia and name, RECRUIT → OPERATOR → SPECIALIST → VETERAN → INSTRUCTOR by career score.
+- **Career totals** — score, runs, kills, wins and best chain.
+- **Unlock ladder** — each weapon, what it costs, and a progress bar toward the next one.
+- **Service record** — nine badges with an explicit requirement each. Locked ones hide their name and show what it takes plus how far along you are: FIRST CONTACT, MARKSMAN (80 % accuracy), CHAIN REACTION (5 eliminations in a row), WIND-UP CUTTER, ARENA TOUR (win in three arenas), FULL SWEEP (win every threat level), UNTOUCHABLE (win without damage), GUNSMITH, CENTURION.
+- **Weapon records** — runs, kills, clears and best score for each of the three weapons separately, so the railgun's row is its own history.
+- **Best run per threat level**, so recruit and veteran progress do not overwrite each other.
+
+Everything lives in `localStorage` and nothing leaves the device. The badge rules live in `src/account.ts` as data (requirement text plus a progress function), so the same code decides whether a badge is earned and explains what is missing.
 
 ## Scoring
 

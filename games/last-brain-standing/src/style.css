@@ -266,3 +266,18 @@ a:focus-visible,button:focus-visible,input:focus-visible,canvas:focus-visible{ou
 .best-list li small{color:#8f979f}
 .unlock-progress{margin:10px 0 0;font:8px "DM Mono",monospace;letter-spacing:.9px;color:var(--brass)}
 .hud-weapon{font:8px "DM Mono",monospace;letter-spacing:1.2px;color:#cfa25f}
+
+.badge-grid{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.badge{display:flex;flex-direction:column;gap:3px;padding:8px 9px;border:1px solid #2f3339;border-radius:6px;background:#1c1f24}
+.badge.earned{border-color:var(--brass);background:linear-gradient(160deg,#242019,#1b1d21)}
+.badge-name{font:600 9px "DM Mono",monospace;letter-spacing:1px;color:#e9e3d6}
+.badge.locked .badge-name{color:#8f979f}
+.badge-req{font:8px/1.5 "DM Mono",monospace;letter-spacing:.4px;color:#9aa3ad}
+.badge.earned .badge-req{color:var(--moss)}
+.badge-bar{display:block;height:3px;border-radius:2px;background:#2b2f35;overflow:hidden}
+.badge-bar i{display:block;height:100%;background:var(--brass)}
+.weapon-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:7px}
+.weapon-list li{display:grid;grid-template-columns:58px 1fr auto;gap:8px;align-items:baseline;font:9px "DM Mono",monospace;letter-spacing:.6px}
+.weapon-name{color:var(--brass)}
+.weapon-stats{color:#a4abb4}
+.weapon-list strong{color:#e9e3d6}

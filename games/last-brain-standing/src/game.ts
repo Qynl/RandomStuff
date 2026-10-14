@@ -4,12 +4,22 @@ import { BLOCK, BOT_ART, BULLET, FLOOR, PLAYER_ART, STATUS, TELEGRAPH } from "./
 import { SoundEngine, type SoundName } from "./audio";
 import { BOT_RADIUS, DIFFICULTIES, MAX_PARTICLES, PLAYER_MAX_HEALTH, PLAYER_RADIUS } from "./constants";
 import {
+  badgeStatuses,
+  emptyWeaponRecords,
+  recordRun,
+  type BadgeContext,
+  type BadgeStatus,
+  type WeaponRecord,
+  type WeaponRecords
+} from "./account";
+import {
   careerScore,
   isLoadoutId,
   isUnlocked,
   LOADOUTS,
   LOADOUT_ORDER,
   nextLockedLoadout,
+  unlockedLoadouts,
   nextRank,
   rankFor,
   resolveLoadout,
@@ -103,6 +113,12 @@ export interface CareerSummary {
   /** The next loadout to earn, with how far along the player is. */
   next: { id: LoadoutId; name: string; unlockLabel: string; progress: number } | null;
   bestByDifficulty: Array<{ id: DifficultyId; label: string; score: number; kills: number }>;
+  /** Per-weapon service records, in picker order. */
+  weapons: Array<{ id: LoadoutId; name: string; kind: string; record: WeaponRecord }>;
+  /** Every badge, earned or not, with progress for the locked ones. */
+  badges: BadgeStatus[];
+  /** How many badges are earned, for a quick "3/9" line. */
+  badgesEarned: number;
 }
 
 export interface RunResult {
@@ -217,7 +233,14 @@ const STORAGE = {
   loadout: "lbs-loadout",
   careerRuns: "lbs-career-runs",
   careerKills: "lbs-career-kills",
-  careerBestCombo: "lbs-career-combo"
+  careerBestCombo: "lbs-career-combo",
+  careerWins: "lbs-career-wins",
+  careerInterrupts: "lbs-career-interrupts",
+  careerPerfect: "lbs-career-perfect",
+  careerAccuracy: "lbs-career-accuracy",
+  careerArenas: "lbs-career-arenas",
+  careerLevels: "lbs-career-levels",
+  weaponRecords: "lbs-weapon-records"
 } as const;
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
@@ -308,6 +331,13 @@ export class ArenaGame {
   private careerRuns = 0;
   private careerKills = 0;
   private careerBestCombo = 0;
+  private careerWins = 0;
+  private careerInterrupts = 0;
+  private careerPerfect = 0;
+  private careerAccuracy = 0;
+  private careerArenas: string[] = [];
+  private careerLevels: string[] = [];
+  private weaponRecords: WeaponRecords = emptyWeaponRecords();
   private history: RunRecord[] = [];
   private killsByKind: Record<BotKind, number> = { hunter: 0, flanker: 0, mirror: 0 };
   private lastHitBy: BotKind | "unknown" | null = null;
@@ -341,6 +371,13 @@ export class ArenaGame {
     this.careerRuns = this.readNumber(STORAGE.careerRuns, 0);
     this.careerKills = this.readNumber(STORAGE.careerKills, 0);
     this.careerBestCombo = this.readNumber(STORAGE.careerBestCombo, 0);
+    this.careerWins = this.readNumber(STORAGE.careerWins, 0);
+    this.careerInterrupts = this.readNumber(STORAGE.careerInterrupts, 0);
+    this.careerPerfect = this.readNumber(STORAGE.careerPerfect, 0);
+    this.careerAccuracy = this.readNumber(STORAGE.careerAccuracy, 0);
+    this.careerArenas = this.readStringList(STORAGE.careerArenas);
+    this.careerLevels = this.readStringList(STORAGE.careerLevels);
+    this.weaponRecords = this.readWeaponRecords();
     this.history = this.readHistory();
     this.world = createWorld({ seed: createRandomSeed(), difficulty });
     this.applyLoadout();
@@ -500,12 +537,30 @@ export class ArenaGame {
     setWorldLoadout(this.world, resolved, Number.POSITIVE_INFINITY);
   }
 
+  /** The state every badge is judged against. */
+  private badgeContext(): BadgeContext {
+    return {
+      runs: this.careerRuns,
+      kills: this.careerKills,
+      careerScore: this.getCareerScore(),
+      bestCombo: this.careerBestCombo,
+      interrupts: this.careerInterrupts,
+      perfectVictories: this.careerPerfect,
+      victories: this.careerWins,
+      unlocks: unlockedLoadouts(this.getCareerScore()).length,
+      arenasCleared: [...this.careerArenas],
+      levelsCleared: [...this.careerLevels],
+      bestAccuracy: this.careerAccuracy
+    };
+  }
+
   /** Everything the profile screen needs, in one object. */
   getCareer(): CareerSummary {
     const score = this.getCareerScore();
     const next = nextLockedLoadout(score);
     const rank = rankFor(score);
     const upcoming = nextRank(score);
+    const badges = badgeStatuses(this.badgeContext());
     return {
       score,
       runs: this.careerRuns,
@@ -527,7 +582,15 @@ export class ArenaGame {
         label: DIFFICULTIES[id].label,
         score: this.bestByDifficulty[id]?.score ?? 0,
         kills: this.bestByDifficulty[id]?.kills ?? 0
-      }))
+      })),
+      weapons: LOADOUT_ORDER.map((id) => ({
+        id,
+        name: LOADOUTS[id].name,
+        kind: LOADOUTS[id].kind,
+        record: { ...this.weaponRecords[id] }
+      })),
+      badges,
+      badgesEarned: badges.filter((badge) => badge.earned).length
     };
   }
 
@@ -1006,9 +1069,27 @@ export class ArenaGame {
     this.careerRuns += 1;
     this.careerKills += stats.kills;
     this.careerBestCombo = Math.max(this.careerBestCombo, this.combo);
+    const won = result === "victory";
+    if (won) this.careerWins += 1;
+    this.careerInterrupts += stats.interrupts;
+    if (won && stats.damageTaken === 0) this.careerPerfect += 1;
+    const accuracy = stats.shotsFired > 0 ? (stats.shotsHit / stats.shotsFired) * 100 : 0;
+    this.careerAccuracy = Math.max(this.careerAccuracy, accuracy);
+    if (won && !this.careerArenas.includes(this.world.arenaName)) this.careerArenas.push(this.world.arenaName);
+    if (won && !this.careerLevels.includes(this.world.difficulty)) this.careerLevels.push(this.world.difficulty);
+    // Per-weapon service record, so the profile can say what each gun has done.
+    const weaponId = this.world.loadout.id;
+    recordRun(this.weaponRecords[weaponId], { kills: stats.kills, score: score.total, victory: won });
     this.write(STORAGE.careerRuns, String(this.careerRuns));
     this.write(STORAGE.careerKills, String(this.careerKills));
     this.write(STORAGE.careerBestCombo, String(this.careerBestCombo));
+    this.write(STORAGE.careerWins, String(this.careerWins));
+    this.write(STORAGE.careerInterrupts, String(this.careerInterrupts));
+    this.write(STORAGE.careerPerfect, String(this.careerPerfect));
+    this.write(STORAGE.careerAccuracy, String(Math.round(this.careerAccuracy * 10) / 10));
+    this.write(STORAGE.careerArenas, JSON.stringify(this.careerArenas));
+    this.write(STORAGE.careerLevels, JSON.stringify(this.careerLevels));
+    this.write(STORAGE.weaponRecords, JSON.stringify(this.weaponRecords));
     this.playSound(result === "victory" ? "victory" : "defeat");
     this.shake = Math.max(this.shake, result === "victory" ? 6 : 13);
     const endedBy = result === "defeat" ? this.lastHitBy : null;
@@ -1234,6 +1315,48 @@ export class ArenaGame {
       return records.slice(-HISTORY_LIMIT);
     } catch {
       return [];
+    }
+  }
+
+  /** Reads a stored list of short labels, ignoring anything malformed. */
+  private readStringList(key: string): string[] {
+    const raw = this.readString(key);
+    if (!raw) return [];
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((entry): entry is string => typeof entry === "string" && entry.length > 0).slice(0, 24);
+    } catch {
+      return [];
+    }
+  }
+
+  /** Reads per-weapon service records, dropping anything that is not a record. */
+  private readWeaponRecords(): WeaponRecords {
+    const records = emptyWeaponRecords();
+    const raw = this.readString(STORAGE.weaponRecords);
+    if (!raw) return records;
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return records;
+      for (const id of LOADOUT_ORDER) {
+        const entry = (parsed as Record<string, unknown>)[id];
+        if (!entry || typeof entry !== "object") continue;
+        const record = entry as Partial<WeaponRecord>;
+        const runs = Number(record.runs);
+        const kills = Number(record.kills);
+        const bestScore = Number(record.bestScore);
+        const victories = Number(record.victories);
+        records[id] = {
+          runs: Number.isFinite(runs) && runs > 0 ? Math.round(runs) : 0,
+          kills: Number.isFinite(kills) && kills > 0 ? Math.round(kills) : 0,
+          bestScore: Number.isFinite(bestScore) && bestScore > 0 ? Math.round(bestScore) : 0,
+          victories: Number.isFinite(victories) && victories > 0 ? Math.round(victories) : 0
+        };
+      }
+      return records;
+    } catch {
+      return records;
     }
   }
 
