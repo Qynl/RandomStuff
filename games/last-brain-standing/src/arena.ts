@@ -18,6 +18,8 @@ export type ArenaLayoutId = "quadrant" | "lanes" | "pillars" | "diamond";
 
 export interface ArenaLayout {
   name: string;
+  /** One line for the arena sheet: what fighting here feels like. */
+  blurb: string;
   obstacles: Rect[];
   /**
    * How much clear room the layout offers: 1 is an open field, 0 is a maze.
@@ -33,6 +35,7 @@ export interface ArenaLayout {
 export const ARENA_LAYOUTS: Record<ArenaLayoutId, ArenaLayout> = {
   quadrant: {
     name: "QUADRANT",
+    blurb: "Four corner blocks. Open lanes cross the middle, so long shots have room and cover is always a step away.",
     openness: 0.85,
     accent: "rgba(93, 131, 161, 0.5)",
     accentSoft: "rgba(255, 180, 84, 0.13)",
@@ -46,6 +49,7 @@ export const ARENA_LAYOUTS: Record<ArenaLayoutId, ArenaLayout> = {
   },
   lanes: {
     name: "LANES",
+    blurb: "Two long walls make three corridors. Fighting happens head-on down a lane and around its ends.",
     openness: 0.6,
     accent: "rgba(110, 140, 190, 0.55)",
     accentSoft: "rgba(120, 190, 255, 0.14)",
@@ -61,6 +65,7 @@ export const ARENA_LAYOUTS: Record<ArenaLayoutId, ArenaLayout> = {
   },
   pillars: {
     name: "PILLARS",
+    blurb: "A grid of columns: tight sight lines and constant peeking. Ring timings matter more than range here.",
     openness: 0.45,
     accent: "rgba(150, 130, 190, 0.5)",
     accentSoft: "rgba(197, 160, 255, 0.13)",
@@ -77,6 +82,7 @@ export const ARENA_LAYOUTS: Record<ArenaLayoutId, ArenaLayout> = {
   },
   diamond: {
     name: "DIAMOND",
+    blurb: "A rotated centre block with four open corners. Fast rotations and easy flanking, little true cover.",
     openness: 0.7,
     accent: "rgba(120, 165, 150, 0.5)",
     accentSoft: "rgba(128, 232, 196, 0.12)",
@@ -113,11 +119,14 @@ export function layoutRecordForSeed(seed: number): ArenaLayout {
 
 /** The layout a seed plays in. Deterministic, and stable across versions. */
 export function layoutForSeed(seed: number): ArenaLayoutId {
-  const order: ArenaLayoutId[] = ["quadrant", "lanes", "pillars", "diamond"];
+  const order = ARENA_ORDER;
   // A cheap avalanche so neighbouring seeds do not land on the same layout.
   const mixed = (Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b) >>> 0) ^ 0x27d4eb2f;
   return order[(mixed >>> 3) % order.length];
 }
+
+/** Picker order for the arena sheet, so the UI never leans on object key order. */
+export const ARENA_ORDER: ArenaLayoutId[] = ["quadrant", "lanes", "pillars", "diamond"];
 
 export const OBSTACLES: Rect[] = ARENA_LAYOUTS.quadrant.obstacles;
 

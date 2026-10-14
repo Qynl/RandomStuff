@@ -120,6 +120,10 @@ export interface CareerSummary {
   bestCombo: number;
   rank: { name: string; insignia: string; threshold: number };
   nextRank: { name: string; insignia: string; threshold: number } | null;
+  /** 0..1 from the current rank's threshold to the next one; 1 at top rank. */
+  rankProgress: number;
+  /** Threat levels the account has ever cleared, for the command screen strip. */
+  levelsClearedCount: number;
   /** Loadouts the current career score has opened, in picker order. Every class
    *  is issued from the first run, so this is always the full roster. */
   unlocked: LoadoutId[];
@@ -599,6 +603,10 @@ export class ArenaGame {
       bestCombo: this.careerBestCombo,
       rank: { name: rank.name, insignia: rank.insignia, threshold: rank.threshold },
       nextRank: upcoming ? { name: upcoming.name, insignia: upcoming.insignia, threshold: upcoming.threshold } : null,
+      rankProgress: upcoming
+        ? clamp((score - rank.threshold) / Math.max(1, upcoming.threshold - rank.threshold), 0, 1)
+        : 1,
+      levelsClearedCount: this.careerLevels.length,
       unlocked: LOADOUT_ORDER.filter((id) => isUnlocked(id, score)),
       bestByDifficulty: (Object.keys(DIFFICULTIES) as DifficultyId[]).map((id) => ({
         id,

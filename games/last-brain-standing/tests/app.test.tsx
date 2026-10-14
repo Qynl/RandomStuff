@@ -199,13 +199,70 @@ describe("React app shell", () => {
     vi.restoreAllMocks();
   });
 
-  it("shows the start screen with the rules and controls", () => {
+  it("opens on the command screen with the roster, the record and a way in", () => {
+    // The front door is a lobby, not a document: an operative on a lit floor,
+    // destinations down the side, and the deploy button under the class ribbon.
+    expect(container.querySelector(".home-screen")).toBeTruthy();
+    expect(text(".medallion-copy")).toContain("OPERATOR PROFILE");
+    expect(container.querySelectorAll(".rail-button")).toHaveLength(4);
+    expect(container.querySelectorAll(".operator-figure[data-class=\"vanguard\"]")).toHaveLength(1);
+    expect(text(".stage-plate")).toContain("VANGUARD");
+    expect(text(".strip-chip")).toContain("CAREER SCORE");
+
+    // Six classes, every one issued and selectable, each with its signature rule.
+    const cards = Array.from(container.querySelectorAll(".loadout-card")) as HTMLButtonElement[];
+    expect(cards).toHaveLength(6);
+    expect(cards.filter((card) => card.disabled)).toHaveLength(0);
+    expect(cards.map((card) => card.textContent ?? "").join(" | ")).toContain("SIEGE DASH");
+
+    // The arena is already loaded and standing by behind the lobby, with the
+    // result overlay out of the way until there is a result.
     expect(text("#game") === "").toBe(true);
-    expect(container.textContent).toContain("OUTTHINK.");
-    expect(container.textContent).toContain("ENTER THE ARENA");
-    expect(container.textContent).toContain("SHIFT");
     expect(text("#arena-message")).toBe("ELIMINATE HOSTILES");
-    expect(container.querySelector("#overlay")?.classList.contains("hidden")).toBe(false);
+    expect(container.querySelector("#overlay")?.classList.contains("hidden")).toBe(true);
+    expect(container.textContent).toContain("ENTER THE ARENA");
+
+    // Controls and rules are one tap away in a sheet.
+    click(button("HOW TO PLAY"));
+    expect(container.querySelector(".home-sheet")).toBeTruthy();
+    expect(container.textContent).toContain("SHIFT");
+    expect(container.textContent).toContain("READ THE RINGS");
+    click(button("✕"));
+    expect(container.querySelector(".home-sheet")).toBeNull();
+  });
+
+  it("moves between the lobby, the roster sheet, the arena and the profile", () => {
+    // Roster sheet: every class with its own numbers, and equipping from it.
+    click(button("CLASSES"));
+    const classCards = Array.from(container.querySelectorAll(".class-card"));
+    expect(classCards).toHaveLength(6);
+    expect(classCards[0].textContent).toContain("WEAPON");
+    expect(classCards[0].textContent).toContain("SERVICE RIFLE");
+    const sapperCard = classCards.find((card) => card.textContent?.includes("SAPPER")) ?? classCards[0];
+    click(Array.from(sapperCard.querySelectorAll("button")).at(-1));
+    expect(engine?.getLoadoutId()).toBe("sapper");
+    click(button("✕"));
+
+    // Arena sheet: the four layouts, drawn from their own obstacle lists.
+    click(button("ARENAS"));
+    expect(container.querySelectorAll(".arena-card")).toHaveLength(4);
+    expect(text(".arena-grid")).toContain("PILLARS");
+    click(button("✕"));
+
+    // Into the arena, then back out to the lobby with the house button.
+    click(button("ENTER THE ARENA"));
+    advance(4);
+    expect(container.querySelector(".home-screen")).toBeNull();
+    expect(container.querySelector("#overlay")?.classList.contains("hidden")).toBe(true);
+    const home = Array.from(container.querySelectorAll(".icon-button")).find((element) =>
+      (element.getAttribute("aria-label") ?? "").includes("command screen")
+    ) as HTMLButtonElement;
+    expect(home.disabled).toBe(true); // cannot leave a live run
+    endRunNow();
+    expect(home.disabled).toBe(false);
+    click(home);
+    expect(container.querySelector(".home-screen")).toBeTruthy();
+    expect(engine?.getLoadoutId()).toBe("sapper"); // the choice follows you back
   });
 
   it("starts a run from the overlay and pushes live telemetry into the panel", () => {
@@ -485,8 +542,8 @@ describe("React app shell", () => {
     expect(text(".dossier-list li[data-bot=\"mirror\"]")).toContain("COPY OF YOUR OWN WEAPON");
     expect(text(".dossier-list li[data-bot=\"hunter\"]")).toContain("NEVER ENDED A RUN");
 
-    // Back out to the arena.
-    click(button("BACK TO THE ARENA"));
+    // Back out to the command screen, which is where the profile was opened from.
+    click(button("BACK TO COMMAND"));
     expect(query(".profile-rank")).toBeNull();
     expect(button("ENTER THE ARENA")).toBeTruthy();
   });

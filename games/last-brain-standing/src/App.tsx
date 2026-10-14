@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArenaGame, type FeedLine, type GameSnapshot, type RunResult } from "./game";
-import { DIFFICULTIES, DIFFICULTY_ORDER } from "./constants";
+import { DIFFICULTIES } from "./constants";
 import { buildRunSummary } from "./scoring";
 import { BOT_KINDS, BOT_PROFILES, summarizeMirrorRead } from "./ai";
 import { BOT_SYMBOLS } from "./art";
 import { isMobileUserAgent, shouldShowTouchControls, stickVectorFromPointer } from "./input";
-import { layoutRecordForSeed } from "./arena";
+import { layoutForSeed, layoutRecordForSeed } from "./arena";
 import { DEFAULT_LOADOUT, LOADOUTS, LOADOUT_ORDER, type LoadoutId } from "./loadouts";
 import { createRandomSeed, formatSeed, normalizeSeed } from "./rng";
 import {
@@ -18,20 +18,14 @@ import {
   type RunCode
 } from "./share";
 import type { AimMode, DifficultyId, Vec2 } from "./types";
+import HomeScreen from "./HomeScreen";
+import SettingsPanel from "./SettingsPanel";
 
 const TONE_GLYPH: Record<FeedLine["tone"], string> = { info: "·", good: "▲", bad: "▼", warn: "!" };
 
 type UiState = "start" | "playing" | "paused" | "victory" | "defeat" | "profile";
-
-const CONTROL_ROWS: Array<[string, string]> = [
-  ["W A S D / ARROWS", "MOVE"],
-  ["MOUSE / DRAG", "AIM"],
-  ["CLICK / SPACE", "FIRE"],
-  ["SHIFT", "DASH (BRIEF I-FRAMES)"],
-  ["ESC", "PAUSE"],
-  ["R / SHIFT+R", "RESTART / REPLAY SEED"],
-  ["M / F3", "MUTE / TELEMETRY"]
-];
+/** Which of the three full-screen places the player is looking at. */
+type Screen = "home" | "game" | "profile";
 
 export interface AppProps {
   /**
@@ -60,7 +54,10 @@ export default function App({ onGameReady }: AppProps = {}) {
   const [firing, setFiring] = useState(false);
   const [shareNotice, setShareNotice] = useState<string | null>(null);
   const [pendingCode, setPendingCode] = useState<RunCode | null>(null);
-  const [screen, setScreen] = useState<"game" | "profile">("game");
+  const [screen, setScreen] = useState<Screen>("home");
+  // Where "PROFILE" should hand the player back to: the lobby, or the run they
+  // paused to look at their own record.
+  const [profileReturn, setProfileReturn] = useState<Exclude<Screen, "profile">>("home");
 
   // ------------------------------------------------------------- engine setup
   useEffect(() => {
@@ -193,6 +190,7 @@ export default function App({ onGameReady }: AppProps = {}) {
 
   // ------------------------------------------------------------------ actions
   const startRun = useCallback((seed?: string) => {
+    setScreen("game");
     setResult(null);
     setFeed([]);
     setShareNotice(null);
@@ -281,6 +279,20 @@ export default function App({ onGameReady }: AppProps = {}) {
   }, [shakeEnabled]);
 
   const healthPercent = snapshot ? Math.round((snapshot.health / Math.max(1, snapshot.maxHealth)) * 100) : 100;
+  /** Arena the typed seed will play in, shown on the command screen. */
+  const seedArena = useMemo(
+    () => (seedInput.trim().length > 0 ? layoutForSeed(normalizeSeed(seedInput)) : null),
+    [seedInput]
+  );
+  const openProfile = useCallback((from: Exclude<Screen, "profile">) => {
+    setProfileReturn(from);
+    setScreen("profile");
+  }, []);
+  const closeProfile = useCallback(() => setScreen(profileReturn), [profileReturn]);
+  const rollSeed = useCallback(() => {
+    setSeedInput(formatSeed(createRandomSeed()));
+    setShareNotice(null);
+  }, []);
   const summaryRows = useMemo(
     () =>
       result
@@ -307,11 +319,23 @@ export default function App({ onGameReady }: AppProps = {}) {
   const seedLabel = result?.seedLabel ?? snapshot?.seedLabel ?? "—";
 
   const primaryButtonRef = useRef<HTMLButtonElement>(null);
+  /** The lobby's deploy button, focused whenever the command screen is shown. */
+  const deployButtonRef = useRef<HTMLButtonElement>(null);
+  /** The way out of the profile, focused while it is open. */
+  const profileButtonRef = useRef<HTMLButtonElement>(null);
   // Keyboard players should never have to hunt for the button: focus the
   // primary action whenever an overlay appears, and the arena when a run starts.
   useEffect(() => {
     if (uiState === "playing") {
       canvasRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    if (uiState === "start") {
+      deployButtonRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    if (uiState === "profile") {
+      profileButtonRef.current?.focus({ preventScroll: true });
       return;
     }
     primaryButtonRef.current?.focus({ preventScroll: true });
@@ -337,19 +361,40 @@ export default function App({ onGameReady }: AppProps = {}) {
   }, []);
 
   return (
-    <main className={`shell${showTouchControls ? " touch-mode" : ""}${uiState === "start" ? " has-overlay" : ""}`}>
+    <main className={`shell screen-${screen}${showTouchControls ? " touch-mode" : ""}${uiState === "start" ? " has-overlay" : ""}`}>
       <header className="topbar">
-        <div className="brand" aria-label="Last Brain Standing">
-          <span className="brand-mark">LB<span>/</span>S</span>
-          <span className="brand-copy"><strong>LAST BRAIN</strong><small>STANDING</small></span>
-        </div>
+        {screen === "home" ? (
+          <button type="button" className="medallion" onClick={() => openProfile("home")}>
+            <span className="medallion-rank" aria-hidden="true">{career?.rank.insignia ?? "I"}</span>
+            <span className="medallion-copy">
+              <strong>OPERATOR PROFILE</strong>
+              <small>CAREER {(career?.score ?? 0).toLocaleString()} · {career?.runs ?? 0} RUNS</small>
+            </span>
+          </button>
+        ) : (
+          <div className="brand" aria-label="Last Brain Standing">
+            <span className="brand-mark">LB<span>/</span>S</span>
+            <span className="brand-copy"><strong>LAST BRAIN</strong><small>STANDING</small></span>
+          </div>
+        )}
         <div className="top-status">
-          <span className={`live-dot${uiState === "playing" ? " active" : uiState === "defeat" ? " danger" : ""}`} />
-          <span aria-hidden="true">{statusLabel(uiState, snapshot)}</span>
-          <span className="status-divider" aria-hidden="true" />
-          <span aria-hidden="true">{debug && snapshot ? `${snapshot.fps} FPS · ${snapshot.frameMs} MS` : "BUILD 0.3"}</span>
-          <span className="status-divider" aria-hidden="true" />
-          <span aria-hidden="true">SEED {seedLabel}</span>
+          {screen === "home" ? (
+            <>
+              <span className="chip"><em>CAREER</em> <strong>{(career?.score ?? 0).toLocaleString()}</strong></span>
+              <span className="chip"><em>RUNS</em> <strong>{career?.runs ?? 0}</strong></span>
+              <span className="chip"><em>KILLS</em> <strong>{career?.kills ?? 0}</strong></span>
+              <span className="chip"><em>BADGES</em> <strong>{career?.badgesEarned ?? 0}/{career?.badges.length ?? 0}</strong></span>
+            </>
+          ) : (
+            <>
+              <span className={`live-dot${uiState === "playing" ? " active" : uiState === "defeat" ? " danger" : ""}`} />
+              <span aria-hidden="true">{statusLabel(uiState, snapshot)}</span>
+              <span className="status-divider" aria-hidden="true" />
+              <span aria-hidden="true">{debug && snapshot ? `${snapshot.fps} FPS · ${snapshot.frameMs} MS` : "BUILD 0.3"}</span>
+              <span className="status-divider" aria-hidden="true" />
+              <span aria-hidden="true">SEED {seedLabel}</span>
+            </>
+          )}
         </div>
         <div className="topbar-actions">
           <button
@@ -385,10 +430,22 @@ export default function App({ onGameReady }: AppProps = {}) {
           >
             {uiState === "playing" ? "Ⅱ" : "▶"}
           </button>
+          {screen !== "home" ? (
+            <button
+              className="icon-button"
+              type="button"
+              onClick={() => setScreen("home")}
+              disabled={uiState === "playing"}
+              aria-label="Back to the command screen"
+              title={uiState === "playing" ? "Finish the run first" : "Back to command"}
+            >
+              ⌂
+            </button>
+          ) : null}
         </div>
       </header>
 
-      <section className="game-layout" aria-label="Game arena">
+      <section className={`game-layout${screen === "home" ? " offstage" : ""}`} aria-label="Game arena">
         <div className="arena-wrap">
           <canvas
             ref={canvasRef}
@@ -469,237 +526,8 @@ export default function App({ onGameReady }: AppProps = {}) {
             </div>
           ) : null}
 
-          <div id="overlay" className={`overlay${uiState === "playing" ? " hidden" : ""}`}>
+          <div id="overlay" className={`overlay${uiState === "playing" || uiState === "start" ? " hidden" : ""}`}>
             <div className={`overlay-card${uiState === "victory" || uiState === "defeat" ? " result" : ""}`}>
-              {uiState === "start" ? (
-                <>
-                  <div className="eyebrow"><span className="live-dot" /> COMBAT SIMULATION // 001</div>
-                  <h1>OUTTHINK.<br /><span>OUTLAST.</span></h1>
-                  <p>
-                    Three opponents, three different minds. The Hunter leads your movement, the Flanker takes your angles,
-                    and the Mirror reads the habits you repeat. Every hostile shot is telegraphed before it happens —
-                    read the ring, dash the line, punish the wind-up.
-                  </p>
-                  <div className="controls-grid">
-                    {CONTROL_ROWS.map(([keys, action]) => (
-                      <div className="control-row" key={keys}>
-                        <kbd>{keys}</kbd>
-                        <span>{action}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <section className="loadout-picker" aria-label="Primary weapon">
-                    <div className="picker-head">
-                      <span>PRIMARY WEAPON</span>
-                      <button type="button" className="ghost-button compact" onClick={() => setScreen("profile")}>
-                        OPERATOR PROFILE
-                      </button>
-                    </div>
-                    <div className="loadout-row">
-                      {LOADOUT_ORDER.map((id) => {
-                        const weapon = LOADOUTS[id];
-                        const selected = activeLoadout === id;
-                        return (
-                          <button
-                            key={id}
-                            type="button"
-                            className={`loadout-card${selected ? " selected" : ""}`}
-                            aria-pressed={selected}
-                            title={`${weapon.counter} ${weapon.traitName}: ${weapon.traitRule}`}
-                            onClick={() => chooseLoadout(id)}
-                          >
-                            <span className="loadout-kind">{weapon.kind}</span>
-                            <strong>{weapon.name}</strong>
-                            <small>{weapon.tagline}</small>
-                            <em className="loadout-trait">
-                              <b>{weapon.traitName}</b> {weapon.traitRule}
-                            </em>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <p className="loadout-hint">
-                      {LOADOUTS[activeLoadout].counter} <b>{LOADOUTS[activeLoadout].traitName}:</b> {LOADOUTS[activeLoadout].traitRule}
-                    </p>
-                  </section>
-                  <button ref={primaryButtonRef} className="primary-button" type="button" onClick={() => startRun(seedInput)}>
-                    <span>ENTER THE ARENA</span><span aria-hidden="true">↗</span>
-                  </button>
-                  <div className="seed-row">
-                    <label htmlFor="seed-input">SEED</label>
-                    <input
-                      id="seed-input"
-                      value={seedInput}
-                      placeholder="RANDOM OR PASTE A LINK"
-                      maxLength={256}
-                      autoComplete="off"
-                      spellCheck={false}
-                      onChange={(event) => applySeedText(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
-                          startRun(event.currentTarget.value);
-                        }
-                      }}
-                    />
-                  </div>
-                  <div className="seed-preview">
-                    <button
-                      type="button"
-                      className="ghost-button compact"
-                      title="Pick a fresh random seed"
-                      onClick={() => {
-                        const fresh = formatSeed(createRandomSeed());
-                        setSeedInput(fresh);
-                        setShareNotice(null);
-                      }}
-                    >
-                      RANDOM
-                    </button>
-                    <span className="seed-arena">
-                      {seedInput.length > 0
-                        ? `ARENA ${layoutRecordForSeed(normalizeSeed(seedInput)).name}`
-                        : "TYPE OR PASTE A SEED TO SEE ITS ARENA"}
-                    </span>
-                  </div>
-                  {shareNotice ? <p className="share-notice" role="status">{shareNotice}</p> : null}
-                  <div className="overlay-foot"><span>PICK YOUR WEAPON. NO EXCUSES.</span><span>BEST RUN WINS.</span></div>
-                </>
-              ) : null}
-
-              {uiState === "profile" ? (
-                <>
-                  <div className="eyebrow"><span className="live-dot" /> OPERATOR PROFILE</div>
-                  <div className="profile-head">
-                    <div className="insignia" aria-hidden="true">{career?.rank.insignia ?? "I"}</div>
-                    <div>
-                      <h1 className="profile-rank">{career?.rank.name ?? "RECRUIT"}</h1>
-                      <p className="profile-sub">
-                        CAREER {career?.score ?? 0} · {career?.runs ?? 0} RUNS · {career?.kills ?? 0} KILLS
-                        {career?.bestCombo ? ` · BEST CHAIN ×${career.bestCombo}` : ""}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="profile-block">
-                    <h2>UNLOCKS</h2>
-                    <ul className="unlock-list">
-                      {LOADOUT_ORDER.map((id) => {
-                        const weapon = LOADOUTS[id];
-                        return (
-                          <li key={id} className="unlocked">
-                            <span className="unlock-name">{weapon.name}</span>
-                            <span className="unlock-note">ISSUED · {weapon.traitName}</span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                    <p className="unlock-progress">
-                      ALL {LOADOUT_ORDER.length} CLASSES ISSUED · NOTHING TO UNLOCK, PICK ANY AT DEPLOY
-                    </p>
-                    {career?.nextRank ? (
-                      <p className="unlock-progress">
-                        RANK {career.nextRank.name} AT {career.nextRank.threshold.toLocaleString()} CAREER
-                      </p>
-                    ) : null}
-                  </div>
-                  <div className="profile-block">
-                    <h2>SERVICE RECORD · {career?.badgesEarned ?? 0}/{career?.badges.length ?? 0} BADGES</h2>
-                    <ul className="badge-grid">
-                      {(career?.badges ?? []).map((badge) => (
-                        <li
-                          key={badge.id}
-                          className={badge.earned ? "badge earned" : "badge locked"}
-                          title={badge.requirement}
-                        >
-                          <span className="badge-name">{badge.earned ? badge.name : "???"}</span>
-                          <span className="badge-req">{badge.earned ? "EARNED" : badge.requirement}</span>
-                          {badge.earned ? null : (
-                            <span className="badge-bar" aria-hidden="true">
-                              <i style={{ width: `${Math.round(badge.progress * 100)}%` }} />
-                            </span>
-                          )}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="profile-block">
-                    <h2>THREAT DOSSIER</h2>
-                    <ul className="dossier-list">
-                      {BOT_KINDS.map((kind) => {
-                        const profile = BOT_PROFILES[kind];
-                        const ended = career?.deathsByKind[kind] ?? 0;
-                        return (
-                          <li key={kind} data-bot={kind}>
-                            <div className="dossier-head">
-                              <strong>{profile.name}</strong>
-                              <span className="dossier-tally">
-                                {career?.killsByKind[kind] ?? 0} KILLED
-                                {ended > 0 ? ` · ENDED ${ended} RUN${ended === 1 ? "" : "S"}` : " · NEVER ENDED A RUN"}
-                              </span>
-                            </div>
-                            <em className="dossier-signature">{profile.signature}</em>
-                            <small>{profile.counter.toLowerCase()}.</small>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
-                  <div className="profile-block">
-                    <h2>RECENT RUNS</h2>
-                    {(career?.recentRuns.length ?? 0) === 0 ? (
-                      <p className="profile-empty">Nothing finished yet. The dossier fills itself in as you play.</p>
-                    ) : (
-                      <ul className="recent-list">
-                        {(career?.recentRuns ?? []).map((run, index) => (
-                          <li key={`${run.seed}-${index}`} className={run.victory ? "won" : ""}>
-                            <span className="recent-seed">{run.seed}</span>
-                            <span className="recent-where">
-                              {DIFFICULTIES[run.difficulty].label.toUpperCase()}
-                              {run.weapon ? ` · ${LOADOUTS[run.weapon].kind}` : ""}
-                              {run.arenaName ? ` · ${run.arenaName}` : ""}
-                            </span>
-                            <strong>{run.score}</strong>
-                            <span className="recent-outcome">{run.victory ? "CLEARED" : "TERMINATED"}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                  <div className="profile-block">
-                    <h2>WEAPON RECORDS</h2>
-                    <ul className="weapon-list">
-                      {(career?.weapons ?? []).map((weapon) => (
-                        <li key={weapon.id}>
-                          <span className="weapon-name">
-                            {weapon.name} <em className="weapon-kit">{weapon.kind}</em>
-                          </span>
-                          <span className="weapon-stats">
-                            {weapon.record.runs} runs · {weapon.record.kills} kills
-                            {weapon.record.victories > 0 ? ` · ${weapon.record.victories} cleared` : ""}
-                          </span>
-                          <strong>{weapon.record.bestScore}</strong>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="profile-block">
-                    <h2>BEST RUN PER THREAT LEVEL</h2>
-                    <ul className="best-list">
-                      {(career?.bestByDifficulty ?? []).map((entry) => (
-                        <li key={entry.id}>
-                          <span>{entry.label}</span>
-                          <strong>{entry.score}</strong>
-                          <small>{entry.kills} kills</small>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <button ref={primaryButtonRef} className="primary-button" type="button" onClick={() => setScreen("game")}>
-                    <span>BACK TO THE ARENA</span><span aria-hidden="true">↩</span>
-                  </button>
-                </>
-              ) : null}
-
               {uiState === "paused" ? (
                 <>
                   <div className="eyebrow"><span className="live-dot" /> SIMULATION PAUSED</div>
@@ -709,6 +537,7 @@ export default function App({ onGameReady }: AppProps = {}) {
                     <span>RESUME RUN</span><span aria-hidden="true">↗</span>
                   </button>
                   <button className="ghost-button wide" type="button" onClick={() => startRun(seedInput)}>RESTART FROM SCRATCH</button>
+                  <button className="ghost-button wide" type="button" onClick={() => setScreen("home")}>RETURN TO COMMAND</button>
                   <div className="overlay-foot"><span>DIFFICULTY {DIFFICULTIES[difficulty].label}</span><span>SEED {seedLabel}</span></div>
                 </>
               ) : null}
@@ -770,8 +599,11 @@ export default function App({ onGameReady }: AppProps = {}) {
                     </button>
                     <button className="ghost-button wide" type="button" onClick={() => startRun(seedLabel)}>REPLAY SEED {seedLabel}</button>
                     <button className="ghost-button wide" type="button" onClick={copyShareLink}>COPY SEED LINK</button>
-                    <button className="ghost-button wide" type="button" onClick={() => setScreen("profile")}>
+                    <button className="ghost-button wide" type="button" onClick={() => openProfile("game")}>
                       OPERATOR PROFILE
+                    </button>
+                    <button className="ghost-button wide" type="button" onClick={() => setScreen("home")}>
+                      RETURN TO COMMAND
                     </button>
                     <div className="seed-preview">
                     <button
@@ -950,60 +782,20 @@ export default function App({ onGameReady }: AppProps = {}) {
             </div>
           ) : null}
 
-          <div className="panel-section settings-section">
-            <div className="section-kicker">SETTINGS <span className="kicker-line" /></div>
-            <div className="setting-row" role="group" aria-label="Difficulty">
-              <span>DIFFICULTY</span>
-              <div className="segmented">
-                {DIFFICULTY_ORDER.map((id) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className={difficulty === id ? "segment active" : "segment"}
-                    aria-pressed={difficulty === id}
-                    onClick={() => changeDifficulty(id)}
-                  >
-                    {DIFFICULTIES[id].label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <p className="setting-hint">{DIFFICULTIES[difficulty].blurb}</p>
-            <p className="setting-hint best-line">
-              BEST ON {DIFFICULTIES[difficulty].label}:{" "}
-              <strong>{(snapshot?.difficultyBestScore ?? 0) > 0 ? snapshot?.difficultyBestScore : "—"}</strong>
-              {(snapshot?.difficultyBestKills ?? 0) > 0 ? ` · ${snapshot?.difficultyBestKills} KILLS` : ""}
-            </p>
-            <div className="setting-row" role="group" aria-label="Aiming mode">
-              <span>AIMING</span>
-              <div className="segmented">
-                <button type="button" className={aimMode === "mouse" ? "segment active" : "segment"} aria-pressed={aimMode === "mouse"} onClick={() => changeAimMode("mouse")}>MOUSE</button>
-                <button type="button" className={aimMode === "assisted" ? "segment active" : "segment"} aria-pressed={aimMode === "assisted"} onClick={() => changeAimMode("assisted")}>ASSISTED</button>
-              </div>
-            </div>
-            <p className="setting-hint">Assisted aiming slowly tracks the closest visible hostile in front of you — for keyboard-only and touch play.</p>
-            <p className="setting-hint">Screen shake off is also calm mode: no full-screen damage flash and no hit-stop stutter.</p>
-            <div className="setting-row">
-              <span>SCREEN SHAKE</span>
-              <button type="button" className="toggle" aria-pressed={shakeEnabled} onClick={toggleShake}>{shakeEnabled ? "ON" : "OFF"}</button>
-            </div>
-            <div className="setting-row">
-              <span>TOUCH CONTROLS</span>
-              <button
-                type="button"
-                className="toggle"
-                aria-pressed={showTouchControls}
-                onClick={() => setTouchOverride((current) => !(current ?? touchCapable))}
-              >
-                {showTouchControls ? "ON" : "OFF"}
-              </button>
-            </div>
-            <div className="setting-row">
-              <span>TELEMETRY</span>
-              <button type="button" className="toggle" aria-pressed={debug} onClick={() => setDebug((current) => !current)}>{debug ? "ON" : "OFF"}</button>
-            </div>
-          </div>
-
+          <SettingsPanel
+            difficulty={difficulty}
+            onDifficulty={changeDifficulty}
+            bestScore={snapshot?.difficultyBestScore ?? 0}
+            bestKills={snapshot?.difficultyBestKills ?? 0}
+            aimMode={aimMode}
+            onAimMode={changeAimMode}
+            shakeEnabled={shakeEnabled}
+            onShakeToggle={toggleShake}
+            showTouchControls={showTouchControls}
+            onTouchToggle={() => setTouchOverride((current) => !(current ?? touchCapable))}
+            debug={debug}
+            onDebugToggle={() => setDebug((current) => !current)}
+          />
           <div className="panel-section log-section">
             <div className="section-kicker">COMBAT FEED <span className="kicker-line" /></div>
             <p className="sr-status" role="status" aria-live="polite">{announcement}</p>
@@ -1019,6 +811,173 @@ export default function App({ onGameReady }: AppProps = {}) {
           <div className="panel-footer"><span>AI DOESN'T MEAN OMNISCIENT.</span><span className="footer-signal">● ● ●</span></div>
         </aside>
       </section>
+
+      {screen === "home" ? (
+        <HomeScreen
+          career={career}
+          loadout={activeLoadout}
+          onChooseLoadout={chooseLoadout}
+          difficulty={difficulty}
+          onDifficulty={changeDifficulty}
+          bestScore={snapshot?.difficultyBestScore ?? 0}
+          bestKills={snapshot?.difficultyBestKills ?? 0}
+          aimMode={aimMode}
+          onAimMode={changeAimMode}
+          shakeEnabled={shakeEnabled}
+          onShakeToggle={toggleShake}
+          showTouchControls={showTouchControls}
+          onTouchToggle={() => setTouchOverride((current) => !(current ?? touchCapable))}
+          debug={debug}
+          onDebugToggle={() => setDebug((current) => !current)}
+          seedInput={seedInput}
+          onSeedChange={applySeedText}
+          onRandomSeed={rollSeed}
+          seedArena={seedArena}
+          onStart={() => startRun(seedInput)}
+          onProfile={() => openProfile("home")}
+          shareNotice={shareNotice}
+          deployRef={deployButtonRef}
+        />
+      ) : null}
+
+      {screen === "profile" ? (
+        <div className="screen-layer profile-layer" role="dialog" aria-label="Operator profile">
+          <div className="sheet-card profile-card">
+            <div className="sheet-head">
+              <div className="eyebrow"><span className="live-dot" /> OPERATOR PROFILE</div>
+              <button type="button" className="icon-button" onClick={closeProfile} aria-label="Close profile">✕</button>
+            </div>
+            <div className="profile-head">
+              <div className="insignia" aria-hidden="true">{career?.rank.insignia ?? "I"}</div>
+              <div>
+                <h1 className="profile-rank">{career?.rank.name ?? "RECRUIT"}</h1>
+                <p className="profile-sub">
+                  CAREER {career?.score ?? 0} · {career?.runs ?? 0} RUNS · {career?.kills ?? 0} KILLS
+                  {career?.bestCombo ? ` · BEST CHAIN ×${career.bestCombo}` : ""}
+                </p>
+              </div>
+            </div>
+            <div className="profile-block">
+              <h2>CLASS ROSTER · ALL ISSUED</h2>
+              <ul className="unlock-list">
+                {LOADOUT_ORDER.map((id) => {
+                  const weapon = LOADOUTS[id];
+                  return (
+                    <li key={id} className="unlocked">
+                      <span className="unlock-name">{weapon.name}</span>
+                      <span className="unlock-note">ISSUED · {weapon.traitName}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+              <p className="unlock-progress">
+                ALL {LOADOUT_ORDER.length} CLASSES ISSUED · NOTHING TO UNLOCK, PICK ANY AT DEPLOY
+              </p>
+              {career?.nextRank ? (
+                <p className="unlock-progress">
+                  RANK {career.nextRank.name} AT {career.nextRank.threshold.toLocaleString()} CAREER
+                </p>
+              ) : null}
+            </div>
+            <div className="profile-block">
+              <h2>SERVICE RECORD · {career?.badgesEarned ?? 0}/{career?.badges.length ?? 0} BADGES</h2>
+              <ul className="badge-grid">
+                {(career?.badges ?? []).map((badge) => (
+                  <li
+                    key={badge.id}
+                    className={badge.earned ? "badge earned" : "badge locked"}
+                    title={badge.requirement}
+                  >
+                    <span className="badge-name">{badge.earned ? badge.name : "???"}</span>
+                    <span className="badge-req">{badge.earned ? "EARNED" : badge.requirement}</span>
+                    {badge.earned ? null : (
+                      <span className="badge-bar" aria-hidden="true">
+                        <i style={{ width: `${Math.round(badge.progress * 100)}%` }} />
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="profile-block">
+              <h2>THREAT DOSSIER</h2>
+              <ul className="dossier-list">
+                {BOT_KINDS.map((kind) => {
+                  const profile = BOT_PROFILES[kind];
+                  const ended = career?.deathsByKind[kind] ?? 0;
+                  return (
+                    <li key={kind} data-bot={kind}>
+                      <div className="dossier-head">
+                        <strong>{profile.name}</strong>
+                        <span className="dossier-tally">
+                          {career?.killsByKind[kind] ?? 0} KILLED
+                          {ended > 0 ? ` · ENDED ${ended} RUN${ended === 1 ? "" : "S"}` : " · NEVER ENDED A RUN"}
+                        </span>
+                      </div>
+                      <em className="dossier-signature">{profile.signature}</em>
+                      <small>{profile.counter.toLowerCase()}.</small>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+            <div className="profile-block">
+              <h2>RECENT RUNS</h2>
+              {(career?.recentRuns.length ?? 0) === 0 ? (
+                <p className="profile-empty">Nothing finished yet. The dossier fills itself in as you play.</p>
+              ) : (
+                <ul className="recent-list">
+                  {(career?.recentRuns ?? []).map((run, index) => (
+                    <li key={`${run.seed}-${index}`} className={run.victory ? "won" : ""}>
+                      <span className="recent-seed">{run.seed}</span>
+                      <span className="recent-where">
+                        {DIFFICULTIES[run.difficulty].label.toUpperCase()}
+                        {run.weapon ? ` · ${LOADOUTS[run.weapon].kind}` : ""}
+                        {run.arenaName ? ` · ${run.arenaName}` : ""}
+                      </span>
+                      <strong>{run.score}</strong>
+                      <span className="recent-outcome">{run.victory ? "CLEARED" : "TERMINATED"}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            <div className="profile-block">
+              <h2>CLASS RECORDS</h2>
+              <ul className="weapon-list">
+                {(career?.weapons ?? []).map((weapon) => (
+                  <li key={weapon.id}>
+                    <span className="weapon-name">
+                      {weapon.name} <em className="weapon-kit">{weapon.kind}</em>
+                    </span>
+                    <span className="weapon-stats">
+                      {weapon.record.runs} runs · {weapon.record.kills} kills
+                      {weapon.record.victories > 0 ? ` · ${weapon.record.victories} cleared` : ""}
+                    </span>
+                    <strong>{weapon.record.bestScore}</strong>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="profile-block">
+              <h2>BEST RUN PER THREAT LEVEL</h2>
+              <ul className="best-list">
+                {(career?.bestByDifficulty ?? []).map((entry) => (
+                  <li key={entry.id}>
+                    <span>{entry.label}</span>
+                    <strong>{entry.score}</strong>
+                    <small>{entry.kills} kills</small>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <button ref={profileButtonRef} className="primary-button" type="button" onClick={closeProfile}>
+              <span>{profileReturn === "home" ? "BACK TO COMMAND" : "BACK TO THE RUN"}</span>
+              <span aria-hidden="true">↩</span>
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <footer className="page-footer">
         <span>LAST BRAIN STANDING <span className="muted">/ A SMALL COMBAT EXPERIMENT</span></span>
