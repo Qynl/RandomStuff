@@ -4,8 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRoot, type Root } from "react-dom/client";
 import App from "../src/App";
 import type { ArenaGame } from "../src/game";
-import { WORLD } from "../src/arena";
+import { ARENA_LAYOUTS, ARENA_ORDER, VIEW, WORLD } from "../src/arena";
 import { installFakeCanvasPrototype, installFrameController, installResizeObserver, pointer, pressKey, type FakeCanvas, type FrameController } from "./helpers/fake-dom";
+
+/** The playable arenas, straight from the layouts: the lobby lists all of them. */
+const ARENA_NAMES = ARENA_ORDER.map((id) => ARENA_LAYOUTS[id].name);
+const ARENA_NAME_PATTERN = new RegExp(`^ARENA (${ARENA_NAMES.join("|")})$`);
 import { BOT_KINDS } from "../src/ai";
 import { dailySeedCountdown, dailySeedLabel } from "../src/rng";
 import { LOADOUT_ORDER } from "../src/loadouts";
@@ -202,7 +206,11 @@ describe("React app shell", () => {
     expect(canvas).toBeTruthy();
     fake = canvasProto.fakeFor(canvas);
     expect(fake).toBeTruthy();
-    expect(canvas.width).toBe(WORLD.width);
+    // The canvas is the window, not the whole arena: the camera slides it over a
+    // world that is bigger than any single screen.
+    expect(canvas.width).toBe(VIEW.width);
+    expect(WORLD.width).toBeGreaterThan(VIEW.width);
+    expect(WORLD.height).toBeGreaterThan(VIEW.height);
   });
 
   afterEach(() => {
@@ -420,10 +428,11 @@ describe("React app shell", () => {
     expect(container.querySelectorAll('.operator-figure[data-class="sapper"]')).toHaveLength(1);
     expect(text(".stage-plate")).toContain("SAPPER");
 
-    // Arena sheet: the four layouts, drawn from their own obstacle lists.
+    // Arena sheet: every layout, drawn from its own obstacle lists.
     click(button("ARENAS"));
-    expect(container.querySelectorAll(".arena-card")).toHaveLength(4);
-    expect(text(".arena-grid")).toContain("PILLARS");
+    expect(container.querySelectorAll(".arena-card")).toHaveLength(ARENA_NAMES.length);
+    expect(ARENA_NAMES.length).toBeGreaterThanOrEqual(5);
+    expect(text(".arena-grid")).toContain(ARENA_NAMES[0]);
     click(button("✕"));
 
     // Into the arena, then back out to the lobby with the house button.
@@ -461,7 +470,7 @@ describe("React app shell", () => {
     advance(40);
     const arena = Array.from(container.querySelectorAll(".meta-row")).find((row) => row.textContent?.startsWith("ARENA"));
     expect(arena).toBeTruthy();
-    expect(["QUADRANT", "LANES", "PILLARS", "DIAMOND"]).toContain(arena?.textContent?.replace("ARENA", "") ?? "");
+    expect(ARENA_NAMES).toContain(arena?.textContent?.replace("ARENA", "") ?? "");
   });
 
   it("keeps the wave tip visible in the panel after the banner fades", () => {
@@ -880,14 +889,14 @@ describe("React app shell", () => {
 
     // A typed seed names its arena before the run even starts.
     setInputValue(field, "LANES");
-    expect(text(".seed-arena")).toMatch(/^ARENA (QUADRANT|LANES|PILLARS|DIAMOND)$/);
+    expect(text(".seed-arena")).toMatch(ARENA_NAME_PATTERN);
     const named = text(".seed-arena").replace("ARENA", "").trim();
 
     // RANDOM fills the field with a fresh six-character label and, with it, an arena.
     click(button("RANDOM"));
     const rolled = seedFieldValue();
     expect(rolled).toMatch(/^[0-9A-F]{6}$/);
-    expect(text(".seed-arena")).toMatch(/^ARENA (QUADRANT|LANES|PILLARS|DIAMOND)$/);
+    expect(text(".seed-arena")).toMatch(ARENA_NAME_PATTERN);
 
     // And the preview agrees with the arena the run actually gets.
     const expectedArena = text(".seed-arena").replace("ARENA", "").trim();

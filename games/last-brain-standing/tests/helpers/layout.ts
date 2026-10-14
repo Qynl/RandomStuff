@@ -7,11 +7,16 @@ import type { World } from "../../src/sim";
  * Layouts are chosen from the seed, so a test that hand-places entities at
  * fixed coordinates (a bullet 40 units from a hostile, a block between two
  * points) has to say which geometry it is written against. Mechanics tests pin
- * the `quadrant` layout, which is the one those coordinates were authored for;
- * layout variation itself is covered in `tests/layout.test.ts`.
+ * the `proving` range, which is the sparse layout those coordinates were
+ * authored for and the one the seed picker never picks;
+ * layout variety itself is covered in `tests/layout.test.ts`.
  */
-export function pinLayout(world: World, id: ArenaLayoutId = "quadrant"): World {
-  world.obstacles = ARENA_LAYOUTS[id].obstacles;
-  world.arenaName = ARENA_LAYOUTS[id].name;
+export function pinLayout(world: World, id: ArenaLayoutId = "proving"): World {
+  const layout = ARENA_LAYOUTS[id];
+  world.arena = id;
+  world.obstacles = layout.obstacles;
+  world.bushes = layout.bushes;
+  world.water = layout.water;
+  world.arenaName = layout.name;
   return world;
 }

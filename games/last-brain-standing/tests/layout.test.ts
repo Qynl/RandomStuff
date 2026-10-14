@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { ARENA_LAYOUTS, layoutForSeed, layoutRecordForSeed, rangeScaleForOpenness, WORLD, type ArenaLayoutId } from "../src/arena";
+import {
+  ARENA_LAYOUTS,
+  ARENA_ORDER,
+  layoutForSeed,
+  layoutRecordForSeed,
+  rangeScaleForOpenness,
+  WORLD,
+  type ArenaLayoutId
+} from "../src/arena";
 import { BOT_RADIUS, PLAYER_RADIUS } from "../src/constants";
 import { createRng } from "../src/rng";
 import { createWorld, resetWorld } from "../src/sim";
@@ -15,7 +23,8 @@ import { formatSeed } from "../src/rng";
  * same fight" means now that geometry is part of the fight.
  */
 
-const ids = Object.keys(ARENA_LAYOUTS) as ArenaLayoutId[];
+/** The arenas the seed picker can choose. The training range is not one of them. */
+const ids: ArenaLayoutId[] = ARENA_ORDER;
 const START = { x: WORLD.width / 2, y: WORLD.height - 88 };
 
 const overlaps = (a: { x: number; y: number; w: number; h: number }, b: typeof a): boolean =>

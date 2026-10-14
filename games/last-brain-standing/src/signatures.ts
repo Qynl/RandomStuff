@@ -274,6 +274,24 @@ export const SIGHT_TRACK_RATE = 900;
 export const SIGHT_START_RANGE = 420;
 
 /**
+ * How far off the target the sight opens, in radians of swing.
+ *
+ * A reticle that is drawn straight onto the player is a sentence rather than a
+ * warning: it tells the player they have already been shot at. The Marksman
+ * opens its sight *beside* the player instead and sweeps across onto them, so
+ * the aim-in is a visible process with an obvious end - and the last-second
+ * sidestep after that end is the counterplay.
+ */
+export const SIGHT_START_SWEEP = 0.34;
+
+/** How much a given unit's opening swing varies, so two of them do not sweep in step. */
+export function sightSweepFor(botId: number): number {
+  const jitter = ((botId * 37) % 11) / 11;
+  const side = botId % 2 === 0 ? 1 : -1;
+  return SIGHT_START_SWEEP * (0.75 + 0.5 * jitter) * side;
+}
+
+/**
  * Pitch multiplier per profile, so the same cue sounds like whoever fired it:
  * the Hunter is heavy and low, the Flanker light and high, the Mirror in
  * between with a flat electronic edge. A player can hear which profile is

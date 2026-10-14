@@ -25,7 +25,11 @@ describe("ArenaGame engine shell", () => {
    */
   const spawnAndKill = (target: ArenaGame, kind: "hunter" | "flanker" | "mirror", count: number) => {
     for (let index = 0; index < count; index += 1) {
-      const at = { x: 200 + index * 6, y: 200 };
+      // Beside the operative's own insertion pad: the one patch of floor every
+      // layout guarantees is clear, since a round fired from inside a wall
+      // would be eaten before it ever reached the target.
+      const pad = target.activeWorld.player.position;
+      const at = { x: pad.x - 44 - index * 6, y: pad.y };
       let killed = false;
       for (let attempt = 0; attempt < 6 && !killed; attempt += 1) {
         // Waves keep spawning into the same arena, so clear the field, fire one

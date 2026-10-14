@@ -1,7 +1,7 @@
-import { BOT_KINDS, BOT_PROFILES, emptyKindTotals } from "./ai";
+import { AIM_SETTLED_ERROR, BOT_KINDS, BOT_PROFILES, emptyKindTotals } from "./ai";
 import { aimFor, attackFor, PROFILE_PITCH, volleyFor } from "./signatures";
-import { ARENA_LAYOUTS, firstBlockingFraction, layoutForSeed, rangeScaleForOpenness, WORLD } from "./arena";
-import { BLOCK, BOT_ART, BULLET, CLASS_ART, FLOOR, PLAYER_ART, STATUS, TELEGRAPH, TELEGRAPH_STYLE } from "./art";
+import { ARENA_LAYOUTS, firstBlockingFraction, layoutForSeed, rangeScaleForOpenness, TILE, VIEW, WORLD } from "./arena";
+import { BIOMES, BOT_ART, BULLET, CLASS_ART, frameOf, PLAYER_ART, STATUS, TELEGRAPH, TELEGRAPH_STYLE, type BiomeSkin } from "./art";
 import { SoundEngine, type SoundName } from "./audio";
 import { BOT_RADIUS, DIFFICULTIES, MAX_PARTICLES, PLAYER_MAX_HEALTH, PLAYER_RADIUS } from "./constants";
 import {
@@ -40,10 +40,13 @@ import { getWaveBriefing, getWaveHint, MAX_WAVES } from "./progression";
 import { computeScore, formatDuration, gradeRun, type RunGrade, type ScoreBreakdown } from "./scoring";
 import {
   createWorld,
+  isPlayerHidden,
   playerPredictability,
+  pointInRects,
   predictedPlayerPoint,
   resetWorld,
   setWorldLoadout,
+  shortestAngleDelta,
   stepWorld,
   type SimPhase,
   type World,
@@ -51,8 +54,13 @@ import {
 } from "./sim";
 import { dashChargeFraction, isEditableTarget, keyboardMoveVector, mergeMoveInputs, screenToWorld } from "./input";
 import { createRandomSeed, createRng, formatSeed } from "./rng";
-import type { AgentState, AimMode, BotKind, DifficultyId, RunStats, Vec2 } from "./types";
+import type { AgentState, AimMode, BotKind, DifficultyId, Rect, RunStats, Vec2 } from "./types";
 import type { PlayerState } from "./sim";
+
+/** A layout rect may be tagged as a crate; walls are the untagged default. */
+function isCrateBlock(block: Rect): boolean {
+  return (block as { kind?: string }).kind === "crate";
+}
 
 /** Seconds of standing still a Marksman needs: mirrored from the simulation. */
 const FOCUS_WINDOW = 0.7;
@@ -398,8 +406,17 @@ export class ArenaGame {
   private killsByKind: Record<BotKind, number> = emptyKindTotals();
   private lastHitBy: BotKind | "unknown" | null = null;
   private background: HTMLCanvasElement | null = null;
-  private backgroundScale = 0;
+  /** Which arena + DPR the cached terrain layer was painted for. */
+  private backgroundKey = "";
   private dpr = 1;
+  /**
+   * Top-left corner of the visible window into the arena, in world units.
+   *
+   * The arenas are much larger than the screen, so the camera follows the
+   * operative and leans toward where they are aiming - the place you are about
+   * to shoot is the place you want to see - and stays inside the arena walls.
+   */
+  private camera = { x: 0, y: 0 };
   private ro: ResizeObserver | null = null;
   private readonly onVisibility = () => {
     if (document.visibilityState === "hidden" && this.isRunning()) this.pause();
@@ -842,14 +859,17 @@ export class ArenaGame {
 
   private pointerToWorld(clientX: number, clientY: number): Vec2 {
     const rect = this.canvas.getBoundingClientRect();
-    return screenToWorld(clientX, clientY, { x: rect.left, y: rect.top, w: rect.width, h: rect.height }, WORLD);
+    // The element shows the viewport, not the whole arena: the camera turns a
+    // screen point into a world point by shifting it by how far it has scrolled.
+    const view = screenToWorld(clientX, clientY, { x: rect.left, y: rect.top, w: rect.width, h: rect.height }, VIEW);
+    return { x: view.x + this.camera.x, y: view.y + this.camera.y };
   }
 
   /** Keeps the backing store crisp on high-DPI displays without changing world scale. */
   private resizeCanvas(): void {
     const ratio = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
-    const targetWidth = Math.round(WORLD.width * ratio);
-    const targetHeight = Math.round(WORLD.height * ratio);
+    const targetWidth = Math.round(VIEW.width * ratio);
+    const targetHeight = Math.round(VIEW.height * ratio);
     if (this.canvas.width !== targetWidth || this.canvas.height !== targetHeight) {
       this.canvas.width = targetWidth;
       this.canvas.height = targetHeight;
@@ -912,6 +932,9 @@ export class ArenaGame {
     if (this.comboTimer <= 0) this.combo = 0;
 
     this.updateEffects(frameTime);
+    // The camera follows the *simulated* clock, so it stays smooth at any frame
+    // rate and stops dead when the fight is paused.
+    this.updateCamera(frameTime);
     this.render();
     this.snapshotTimer += frameTime;
     if (this.snapshotTimer >= 0.1) {
@@ -1657,19 +1680,50 @@ export class ArenaGame {
 
   // -------------------------------------------------------------------- render
 
+  /**
+   * Slides the camera toward the operative, leaning the way they are aiming.
+   *
+   * The lean is what makes a camera feel like a camera rather than a leash: you
+   * see more of the ground you are about to shoot across than of the ground
+   * behind you. It is smoothed, clamped to the arena, and snapped on a new run.
+   */
+  private updateCamera(dt: number, snap = false): void {
+    const player = this.world.player;
+    const lead = 96;
+    const maxX = Math.max(0, WORLD.width - VIEW.width);
+    const maxY = Math.max(0, WORLD.height - VIEW.height);
+    const target = {
+      x: clamp(player.position.x + player.aimDirection.x * lead - VIEW.width / 2, 0, maxX),
+      y: clamp(player.position.y + player.aimDirection.y * lead - VIEW.height / 2, 0, maxY)
+    };
+    if (snap) {
+      this.camera.x = target.x;
+      this.camera.y = target.y;
+      return;
+    }
+    const follow = Math.min(1, dt * 6);
+    this.camera.x += (target.x - this.camera.x) * follow;
+    this.camera.y += (target.y - this.camera.y) * follow;
+  }
+
   private render(): void {
     const ctx = this.ctx;
     const dpr = this.dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, WORLD.width, WORLD.height);
+    ctx.clearRect(0, 0, VIEW.width, VIEW.height);
 
     const shakeAmount = this.shakeEnabled ? this.shake : 0;
+    const shakeX = shakeAmount > 0 ? randomBetween(-shakeAmount, shakeAmount) * 0.5 : 0;
+    const shakeY = shakeAmount > 0 ? randomBetween(-shakeAmount, shakeAmount) * 0.5 : 0;
     ctx.save();
-    if (shakeAmount > 0) ctx.translate(randomBetween(-shakeAmount, shakeAmount) * 0.5, randomBetween(-shakeAmount, shakeAmount) * 0.5);
+    // Everything up to the HUD is drawn in world space: one translate puts the
+    // camera over the arena and every existing world-space pass keeps working.
+    ctx.translate(-Math.round(this.camera.x) + shakeX, -Math.round(this.camera.y) + shakeY);
 
     try {
       this.drawBackground();
       this.drawFloorDecals();
+      this.drawBushBeds();
       this.drawObstacles();
       this.drawSpawnWarnings();
       this.drawDashTrail();
@@ -1678,11 +1732,14 @@ export class ArenaGame {
       this.drawShells();
       this.drawBullets();
       this.drawAgents();
+      // Bushes sit over the actors on purpose: a hostile standing in cover is
+      // partly hidden by the foliage, which is exactly what the cover means.
+      this.drawBushFoliage();
       this.drawPulses();
       this.drawParticles();
       this.drawMotes();
       this.drawTexts();
-      this.drawOverlays();
+      this.drawDamageIndicator();
       // F3 draws the tuning overlay in the arena itself: what each hostile can
       // see, where it is aiming, and how long its current telegraph has left.
       if (this.debug) this.drawDebugOverlay();
@@ -1698,6 +1755,200 @@ export class ArenaGame {
       }
       return;
     }
+    ctx.restore();
+    // Screen-space pass: everything that belongs to the window rather than to
+    // the arena - the vignette, the banners, the readouts, the minimap and the
+    // markers for hostiles the camera cannot see yet.
+    ctx.save();
+    try {
+      this.drawScreenOverlays();
+      this.drawOffscreenMarkers();
+      this.drawMinimap();
+    } catch (error) {
+      console.error("Arena overlay fault", error);
+    }
+    ctx.restore();
+  }
+
+  /** Screen-space HUD elements that live on the canvas rather than in the DOM. */
+  private drawScreenOverlays(): void {
+    const ctx = this.ctx;
+    const player = this.world.player;
+    const healthFraction = clamp(player.health / Math.max(1, player.maxHealth), 0, 1);
+
+    // Damage vignette: flares on a hit and pulses while critically wounded.
+    const lowHealthPulse = healthFraction < 0.35 ? (0.35 - healthFraction) * (0.55 + 0.45 * Math.sin(this.world.elapsed * 6)) : 0;
+    const vignette = clamp(this.flash + lowHealthPulse, 0, 1);
+    if (vignette > 0.01) {
+      const gradient = ctx.createRadialGradient(VIEW.width / 2, VIEW.height / 2, VIEW.height * 0.32, VIEW.width / 2, VIEW.height / 2, VIEW.height * 0.78);
+      gradient.addColorStop(0, "rgba(190, 78, 62, 0)");
+      gradient.addColorStop(1, `rgba(190, 78, 62, ${0.42 * vignette})`);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, VIEW.width, VIEW.height);
+    }
+
+    // Wave banner during the telegraph window.
+    if (this.bannerTimer > 0 && this.waveBanner.title) {
+      const alpha = clamp(this.bannerTimer / 0.6, 0, 1) * clamp((2.4 - this.bannerTimer) / 0.28 + 0.2, 0, 1);
+      ctx.save();
+      ctx.globalAlpha = clamp(alpha, 0, 1);
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#e9f6ff";
+      ctx.font = "700 26px 'Space Grotesk', sans-serif";
+      ctx.fillText(this.waveBanner.title, VIEW.width / 2, 74);
+      ctx.fillStyle = "rgba(207, 162, 95, 0.9)";
+      ctx.font = "600 11px 'DM Mono', monospace";
+      ctx.fillText(this.waveBanner.subtitle, VIEW.width / 2, 94);
+      if (this.waveBanner.hint) {
+        ctx.fillStyle = "rgba(157, 243, 255, 0.75)";
+        ctx.fillText(this.waveBanner.hint, VIEW.width / 2, 112);
+      }
+      ctx.strokeStyle = "rgba(207, 162, 95, 0.5)";
+      ctx.lineWidth = 2;
+      const width = 240;
+      const ready = clamp(1 - this.bannerTimer / 2.4, 0, 1);
+      ctx.beginPath();
+      ctx.moveTo(VIEW.width / 2 - width / 2, this.waveBanner.hint ? 122 : 104);
+      ctx.lineTo(VIEW.width / 2 - width / 2 + width * ready, 104);
+      ctx.stroke();
+      ctx.restore();
+      ctx.textAlign = "left";
+    }
+
+    // Corner telemetry so the canvas is readable without the side panel.
+    ctx.save();
+    ctx.font = "600 9px 'DM Mono', monospace";
+    const currentWave = Math.max(1, this.world.wave);
+    ctx.fillStyle = "rgba(180, 205, 225, 0.55)";
+    ctx.fillText(`THREAT ${String(currentWave).padStart(2, "0")}/${String(MAX_WAVES).padStart(2, "0")}`, 26, 34);
+    const hostiles = this.world.bots.filter((bot) => bot.alive).length;
+    ctx.fillStyle = hostiles > 0 ? "rgba(201, 105, 90, 0.8)" : "rgba(143, 180, 140, 0.8)";
+    ctx.fillText(`HOSTILES ${String(hostiles).padStart(2, "0")}`, 26, 48);
+    if (this.world.pendingSpawns.length > 0) {
+      ctx.fillStyle = "rgba(207, 162, 95, 0.85)";
+      ctx.fillText(`INBOUND ${String(this.world.pendingSpawns.length).padStart(2, "0")}`, 26, 62);
+    }
+    // Concealment readout: standing in a hedge puts the operative off the
+    // hostiles' books until one is close enough to part the leaves. Without it
+    // the bushes are a mechanic the player has to guess at.
+    const tracked = this.world.bots.some((bot) => bot.alive && !isPlayerHidden(this.world, bot.position));
+    ctx.fillStyle = tracked ? "rgba(201, 105, 90, 0.75)" : "rgba(143, 180, 140, 0.9)";
+    ctx.fillText(tracked ? "EXPOSED" : "CONCEALED", 26, 76);
+    const predictability = playerPredictability(this.world);
+    ctx.fillStyle = "rgba(150, 175, 200, 0.4)";
+    ctx.fillText("MIRROR READ", VIEW.width - 118, VIEW.height - 18);
+    ctx.fillStyle = predictability > 0.5 ? "rgba(181, 140, 255, 0.95)" : "rgba(110, 130, 155, 0.6)";
+    ctx.fillRect(VIEW.width - 118, VIEW.height - 12, 92 * predictability, 3);
+    ctx.strokeStyle = "rgba(110, 130, 155, 0.35)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(VIEW.width - 118.5, VIEW.height - 12.5, 92, 4);
+    ctx.restore();
+  }
+
+  /**
+   * Small arrows on the screen edge for every hostile outside the window.
+   *
+   * With a camera this matters: an arena is bigger than a screen, and a wave
+   * that closes in from behind must be readable before it is on top of you.
+   */
+  private drawOffscreenMarkers(): void {
+    const ctx = this.ctx;
+    const margin = 26;
+    for (const bot of this.world.bots) {
+      if (!bot.alive) continue;
+      const screenX = bot.position.x - this.camera.x;
+      const screenY = bot.position.y - this.camera.y;
+      if (screenX > -20 && screenX < VIEW.width + 20 && screenY > -20 && screenY < VIEW.height + 20) continue;
+      const art = BOT_ART[bot.kind];
+      ctx.save();
+      ctx.translate(
+        clamp(screenX, margin, VIEW.width - margin),
+        clamp(screenY, margin, VIEW.height - margin)
+      );
+      ctx.rotate(Math.atan2(screenY - VIEW.height / 2, screenX - VIEW.width / 2));
+      ctx.globalAlpha = 0.62;
+      ctx.fillStyle = art.accent;
+      ctx.beginPath();
+      ctx.moveTo(7, 0);
+      ctx.lineTo(-4, -5);
+      ctx.lineTo(-4, 5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = 0.5;
+      ctx.strokeStyle = "rgba(10, 12, 14, 0.8)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  /**
+   * The minimap: the whole arena, in the corner, always.
+   *
+   * Walls, bushes and water are drawn from the layout itself, the operative is a
+   * bright pip, and hostiles are pips too - except while they are hidden in
+   * cover, which is the same information the arena gives.
+   */
+  private drawMinimap(): void {
+    const ctx = this.ctx;
+    const scale = 0.115;
+    const w = WORLD.width * scale;
+    const h = WORLD.height * scale;
+    const x = VIEW.width - w - 16;
+    const y = 16;
+    const dot = (px: number, py: number, color: string, size: number) => {
+      ctx.fillStyle = color;
+      ctx.fillRect(x + px * scale - size / 2, y + py * scale - size / 2, size, size);
+    };
+    ctx.save();
+    // Panel.
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = "#0d1013";
+    ctx.fillRect(x - 3, y - 3, w + 6, h + 6);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = "rgba(206, 196, 176, 0.22)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(x - 3.5, y - 3.5, w + 7, h + 7);
+    ctx.globalAlpha = 0.5;
+    ctx.fillStyle = "#1b1f24";
+    ctx.fillRect(x, y, w, h);
+    // Terrain, in the arena's own tints.
+    const layout = ARENA_LAYOUTS[this.world.arena];
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = this.skin.wall.top;
+    for (const block of layout.obstacles) ctx.fillRect(x + block.x * scale, y + block.y * scale, Math.max(1.5, block.w * scale), Math.max(1.5, block.h * scale));
+    ctx.fillStyle = this.skin.bush.leaf;
+    for (const bush of layout.bushes) ctx.fillRect(x + bush.x * scale, y + bush.y * scale, bush.w * scale, bush.h * scale);
+    ctx.fillStyle = this.skin.water.fill;
+    for (const pool of layout.water) ctx.fillRect(x + pool.x * scale, y + pool.y * scale, pool.w * scale, pool.h * scale);
+    // The camera window, so the player can see where the edges are.
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = "rgba(233, 227, 214, 0.5)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(
+      x + this.camera.x * scale + 0.5,
+      y + this.camera.y * scale + 0.5,
+      VIEW.width * scale,
+      VIEW.height * scale
+    );
+    // Crates, so the map reads as stock rather than as wall.
+    ctx.fillStyle = this.skin.crate.top;
+    for (const block of layout.obstacles) {
+      if (!isCrateBlock(block)) continue;
+      ctx.fillRect(x + block.x * scale, y + block.y * scale, Math.max(1.5, block.w * scale), Math.max(1.5, block.h * scale));
+    }
+    // Actors.
+    ctx.globalAlpha = 1;
+    for (const bot of this.world.bots) {
+      if (!bot.alive) continue;
+      if (pointInRects(bot.position, this.world.bushes)) continue;
+      dot(bot.position.x, bot.position.y, BOT_ART[bot.kind].accent, 4);
+    }
+    dot(this.world.player.position.x, this.world.player.position.y, "#f4efe2", 5);
+    ctx.globalAlpha = 0.9;
+    ctx.font = "600 8px 'DM Mono', monospace";
+    ctx.fillStyle = "rgba(206, 196, 176, 0.6)";
+    ctx.fillText(this.world.arenaName, x, y + h + 12);
     ctx.restore();
   }
 
@@ -1773,10 +2024,18 @@ export class ArenaGame {
     ctx.restore();
   }
 
-  /** Static arena art is drawn once into an offscreen canvas per DPR. */
-  /** Static arena art is drawn once into an offscreen canvas per DPR. */
+  /**
+   * The static half of an arena, painted once into an offscreen canvas.
+   *
+   * Floor, tile seams, markings, the perimeter, water and the walls all live
+   * here: none of it moves, and the camera slides a window over the top of it.
+   * The layer is cached per arena and per device pixel ratio, and rebuilt when a
+   * run moves to a different biome.
+   */
   private ensureBackground(): HTMLCanvasElement {
-    if (this.background && this.backgroundScale === this.dpr) return this.background;
+    const key = `${this.world.arena}:${this.dpr}`;
+    if (this.background && this.backgroundKey === key) return this.background;
+    const skin = this.skin;
     const canvas = document.createElement("canvas");
     canvas.width = WORLD.width * this.dpr;
     canvas.height = WORLD.height * this.dpr;
@@ -1784,43 +2043,58 @@ export class ArenaGame {
     if (!ctx) return canvas;
     ctx.scale(this.dpr, this.dpr);
 
-    // Poured-concrete floor: a warm gradient, coarse speckle, then painted
-    // markings that have been walked over for a long time.
+    // The floor, its grain, and the tile seams of whatever this arena is made of.
     const gradient = ctx.createLinearGradient(0, 0, WORLD.width * 0.4, WORLD.height);
-    gradient.addColorStop(0, FLOOR.top);
-    gradient.addColorStop(1, FLOOR.bottom);
+    gradient.addColorStop(0, skin.floor.top);
+    gradient.addColorStop(1, skin.floor.bottom);
     ctx.fillStyle = gradient;
     ctx.fillRect(0, 0, WORLD.width, WORLD.height);
 
-    const rng = createRng("floor-texture");
-    for (let i = 0; i < 2600; i += 1) {
+    const rng = createRng(`floor-texture-${this.world.arena}`);
+    for (let i = 0; i < 7000; i += 1) {
       const x = rng.range(0, WORLD.width);
       const y = rng.range(0, WORLD.height);
-      const size = rng.range(0.6, 2.1);
+      const size = rng.range(0.6, 2.3);
       ctx.fillStyle = rng.chance(0.5) ? "rgba(255, 244, 226, 0.035)" : "rgba(0, 0, 0, 0.09)";
       ctx.fillRect(x, y, size, size);
     }
-    // Faint slab seams, so the floor has scale without a bright grid.
-    ctx.strokeStyle = FLOOR.grid;
+    // Tile seams: every authored tile, faint, plus a stronger seam every four.
+    ctx.strokeStyle = skin.floor.grid;
     ctx.lineWidth = 1;
-    for (let x = 0; x <= WORLD.width; x += 64) {
+    for (let x = 0; x <= WORLD.width; x += TILE) {
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, WORLD.height);
       ctx.stroke();
     }
-    for (let y = 0; y <= WORLD.height; y += 64) {
+    for (let y = 0; y <= WORLD.height; y += TILE) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(WORLD.width, y);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = skin.floor.paint;
+    for (let x = 0; x <= WORLD.width; x += TILE * 4) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, WORLD.height);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= WORLD.height; y += TILE * 4) {
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(WORLD.width, y);
       ctx.stroke();
     }
 
-    // Painted markings: a worn perimeter band, corner brackets and ramp marks.
-    ctx.strokeStyle = FLOOR.paint;
+    // Water first: it is floor-level scenery, and everything sits on top of it.
+    for (const pool of this.world.water) this.paintWater(ctx, pool);
+
+    // Painted markings: a worn perimeter band, corner brackets, ramp marks.
+    ctx.strokeStyle = skin.floor.paint;
     ctx.lineWidth = 3;
     ctx.strokeRect(18, 18, WORLD.width - 36, WORLD.height - 36);
-    ctx.strokeStyle = FLOOR.paintStrong;
+    ctx.strokeStyle = skin.floor.stencil;
     ctx.lineWidth = 2;
     const bracket = 46;
     for (const [cx, cy, sx, sy] of [
@@ -1842,6 +2116,29 @@ export class ArenaGame {
     ctx.lineTo(WORLD.width / 2 + 150, WORLD.height / 2 + 74);
     ctx.stroke();
     ctx.setLineDash([]);
+
+    // The insertion pad: the one piece of floor that belongs to the operator.
+    const padX = WORLD.width / 2;
+    const padY = WORLD.height - 88;
+    ctx.save();
+    ctx.strokeStyle = skin.floor.stencil;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 8]);
+    ctx.beginPath();
+    ctx.ellipse(padX, padY, 54, 40, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 0.5;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.ellipse(padX, padY, 40, 29, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.font = "600 9px 'DM Mono', monospace";
+    ctx.fillStyle = skin.floor.stencil;
+    ctx.textAlign = "center";
+    ctx.fillText("INSERTION", padX, padY + 3);
+    ctx.restore();
+    ctx.textAlign = "left";
     // Faded centre medallion, worn away at the edges.
     ctx.strokeStyle = "rgba(206, 196, 176, 0.07)";
     ctx.lineWidth = 6;
@@ -1854,7 +2151,7 @@ export class ArenaGame {
     ctx.stroke();
 
     // Stencilled sector marks, low contrast so they never fight the action.
-    ctx.fillStyle = FLOOR.stencil;
+    ctx.fillStyle = skin.floor.stencil;
     ctx.font = "600 11px 'DM Mono', monospace";
     ctx.fillText("SECTOR 01", 30, WORLD.height - 30);
     ctx.font = "500 9px 'DM Mono', monospace";
@@ -1884,33 +2181,47 @@ export class ArenaGame {
       [WORLD.width, WORLD.height, 260]
     ]) {
       const haze = ctx.createRadialGradient(x, y, 0, x, y, r);
-      haze.addColorStop(0, FLOOR.dust);
+      haze.addColorStop(0, skin.floor.dust);
       haze.addColorStop(1, "rgba(196, 186, 168, 0)");
       ctx.fillStyle = haze;
       ctx.fillRect(0, 0, WORLD.width, WORLD.height);
     }
+    // Walls are part of the terrain: they never move, and they are the biggest
+    // single win from baking, because a map is dozens of them.
+    for (const block of this.world.obstacles) {
+      if (isCrateBlock(block)) continue;
+      this.paintBlock(ctx, block, false);
+    }
+
     this.background = canvas;
-    this.backgroundScale = this.dpr;
+    this.backgroundKey = key;
     return canvas;
   }
 
+  /**
+   * Blits the visible slice of the terrain layer, then drops the operative's
+   * lamp pool on top of it.
+   *
+   * Only the window the camera is looking through is copied, so a 1500x1100
+   * layer costs about the same as the old single-screen one.
+   */
   private drawBackground(): void {
     const ctx = this.ctx;
-    ctx.drawImage(this.ensureBackground(), 0, 0, WORLD.width, WORLD.height);
+    const layer = this.ensureBackground();
+    const pad = 6;
+    const sx = Math.max(0, Math.floor(this.camera.x) - pad);
+    const sy = Math.max(0, Math.floor(this.camera.y) - pad);
+    const sw = Math.min(WORLD.width - sx, VIEW.width + pad * 2);
+    const sh = Math.min(WORLD.height - sy, VIEW.height + pad * 2);
+    ctx.drawImage(layer, sx * this.dpr, sy * this.dpr, sw * this.dpr, sh * this.dpr, sx, sy, sw, sh);
     // A soft pool of lamp light around the player; the only light source in the
     // room that moves, which keeps the eye on the player without any bloom.
-    const glow = ctx.createRadialGradient(
-      this.world.player.position.x,
-      this.world.player.position.y,
-      0,
-      this.world.player.position.x,
-      this.world.player.position.y,
-      250
-    );
+    const player = this.world.player;
+    const glow = ctx.createRadialGradient(player.position.x, player.position.y, 0, player.position.x, player.position.y, 250);
     glow.addColorStop(0, "rgba(226, 210, 176, 0.06)");
     glow.addColorStop(1, "rgba(226, 210, 176, 0)");
     ctx.fillStyle = glow;
-    ctx.fillRect(0, 0, WORLD.width, WORLD.height);
+    ctx.fillRect(player.position.x - 250, player.position.y - 250, 500, 500);
   }
 
   /** Scorch marks on the floor; crate-face marks are drawn with the blocks. */
@@ -1942,98 +2253,246 @@ export class ArenaGame {
     ctx.restore();
   }
 
-  private drawObstacles(): void {
-    const ctx = this.ctx;
-    // Two flat tints so every crate in the layout is exactly the same colour:
-    // the visual signature of a layout is the silhouette, not the paint.
-    const layout = ARENA_LAYOUTS[layoutForSeed(this.world.seed)];
-    const lift = 7;
-    for (const block of this.world.obstacles) {
-      // Ground shadow, offset away from the light so the crates sit on the floor.
-      ctx.fillStyle = "rgba(4, 5, 7, 0.42)";
-      ctx.fillRect(block.x + 6, block.y + lift + 6, block.w, block.h);
+  /** The biome skin of the arena this run is playing in. */
+  private get skin(): BiomeSkin {
+    return BIOMES[ARENA_LAYOUTS[this.world.arena].biome];
+  }
 
-      // Left and right side faces give the block its height.
-      ctx.fillStyle = BLOCK.face;
-      ctx.beginPath();
-      ctx.moveTo(block.x, block.y + lift);
-      ctx.lineTo(block.x, block.y + block.h + lift);
-      ctx.lineTo(block.x + block.w, block.y + block.h + lift);
-      ctx.lineTo(block.x + block.w, block.y + block.h);
-      ctx.lineTo(block.x + block.w * 0.12, block.y + block.h);
-      ctx.lineTo(block.x, block.y + block.h - lift);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = BLOCK.faceShade;
-      ctx.beginPath();
-      ctx.moveTo(block.x, block.y + block.h - lift);
-      ctx.lineTo(block.x, block.y + block.h + lift);
-      ctx.lineTo(block.x + block.w, block.y + block.h + lift);
-      ctx.lineTo(block.x + block.w, block.y + block.h);
-      ctx.lineTo(block.x + block.w * 0.16, block.y + block.h);
-      ctx.closePath();
-      ctx.fill();
+  /**
+   * One solid block, with its height, its top face and its edge.
+   *
+   * Walls and crates share the geometry because they are the same kind of thing
+   * on a floor plan; they differ in how they are painted, which is what tells the
+   * player a wall will stop a slug and a crate is worth shooting.
+   */
+  private paintBlock(ctx: CanvasRenderingContext2D, block: Rect, crate: boolean): void {
+    const skin = this.skin;
+    const layout = ARENA_LAYOUTS[this.world.arena];
+    const lift = crate ? 5 : 7;
 
-      // Top face: ribbed steel plate with a highlight along the near edge.
-      const top = ctx.createLinearGradient(block.x, block.y, block.x, block.y + block.h);
-      top.addColorStop(0, BLOCK.top);
-      top.addColorStop(1, "#252a31");
-      ctx.fillStyle = top;
+    // Ground shadow, offset away from the light, so blocks sit on the floor.
+    ctx.fillStyle = "rgba(4, 5, 7, 0.42)";
+    ctx.fillRect(block.x + 6, block.y + lift + 6, block.w, block.h);
+
+    // Left and right side faces give the block its height.
+    ctx.fillStyle = skin.wall.face;
+    ctx.beginPath();
+    ctx.moveTo(block.x, block.y + lift);
+    ctx.lineTo(block.x, block.y + block.h + lift);
+    ctx.lineTo(block.x + block.w, block.y + block.h + lift);
+    ctx.lineTo(block.x + block.w, block.y + block.h);
+    ctx.lineTo(block.x + block.w * 0.12, block.y + block.h);
+    ctx.lineTo(block.x, block.y + block.h - lift);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = skin.wall.faceShade;
+    ctx.beginPath();
+    ctx.moveTo(block.x, block.y + block.h - lift);
+    ctx.lineTo(block.x, block.y + block.h + lift);
+    ctx.lineTo(block.x + block.w, block.y + block.h + lift);
+    ctx.lineTo(block.x + block.w, block.y + block.h);
+    ctx.lineTo(block.x + block.w * 0.16, block.y + block.h);
+    ctx.closePath();
+    ctx.fill();
+
+    if (crate) {
+      // A crate: planks, a banded frame and a stencilled border, so it reads as
+      // quartermaster stock rather than as a wall painted a different colour.
+      const plankTop = ctx.createLinearGradient(block.x, block.y, block.x + block.w * 0.4, block.y + block.h);
+      plankTop.addColorStop(0, skin.crate.top);
+      plankTop.addColorStop(1, skin.crate.face);
+      ctx.fillStyle = plankTop;
       ctx.fillRect(block.x, block.y, block.w, block.h);
-      ctx.strokeStyle = BLOCK.topHighlight;
+      ctx.strokeStyle = skin.crate.plank;
+      ctx.lineWidth = 1;
+      for (let x = block.x + TILE * 0.5; x < block.x + block.w - 4; x += TILE * 0.5) {
+        ctx.beginPath();
+        ctx.moveTo(x + 0.5, block.y + 3);
+        ctx.lineTo(x + 0.5, block.y + block.h - 3);
+        ctx.stroke();
+      }
+      ctx.strokeStyle = skin.crate.band;
+      ctx.lineWidth = 1.8;
+      ctx.strokeRect(block.x + 5.5, block.y + 5.5, block.w - 11, block.h - 11);
+      ctx.strokeStyle = skin.wall.topEdge;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(block.x + 0.5, block.y + 1.5);
       ctx.lineTo(block.x + block.w - 0.5, block.y + 1.5);
       ctx.stroke();
-
-      // Ribs across the top, spaced so small and large blocks both read.
-      ctx.strokeStyle = "rgba(12, 14, 18, 0.35)";
-      const ribStep = block.w > 70 ? 16 : 11;
-      for (let x = block.x + ribStep; x < block.x + block.w - 4; x += ribStep) {
-        ctx.beginPath();
-        ctx.moveTo(x + 0.5, block.y + 4);
-        ctx.lineTo(x + 0.5, block.y + block.h - 4);
-        ctx.stroke();
-      }
-
-      // Rust bleeding down from the rim, deterministic per block.
-      const rustSeed = createRng(`rust-${Math.round(block.x)}-${Math.round(block.y)}`);
-      for (let i = 0; i < 4; i += 1) {
-        const rx = rustSeed.range(block.x + 3, block.x + block.w - 9);
-        const rw = rustSeed.range(3, 9);
-        const rh = rustSeed.range(6, block.h * 0.55);
-        const streak = ctx.createLinearGradient(rx, block.y, rx, block.y + rh);
-        streak.addColorStop(0, BLOCK.rust);
-        streak.addColorStop(1, "rgba(138, 96, 62, 0)");
-        ctx.fillStyle = streak;
-        ctx.fillRect(rx, block.y + 3, rw, rh);
-      }
-
-      // Painted hazard strip along the base, mostly worn away.
-      ctx.fillStyle = BLOCK.stripe;
-      ctx.fillRect(block.x + 6, block.y + block.h - 3 + lift * 0.4, block.w - 12, 3);
-
-      // Corner bolts.
-      ctx.fillStyle = BLOCK.bolt;
-      for (const [bx, by] of [
-        [block.x + 5, block.y + 5],
-        [block.x + block.w - 7, block.y + 5],
-        [block.x + 5, block.y + block.h - 7],
-        [block.x + block.w - 7, block.y + block.h - 7]
-      ]) {
-        ctx.fillRect(bx, by, 2.6, 2.6);
-      }
-
-      // Outline last, so the crisp edge sits above every surface detail. The
-      // layout accent tints it, which is how a run's arena reads at a glance.
-      ctx.strokeStyle = BLOCK.edge;
+      ctx.strokeStyle = "rgba(8, 6, 4, 0.75)";
       ctx.lineWidth = 1.4;
       ctx.strokeRect(block.x + 0.5, block.y + 0.5, block.w - 1, block.h - 1);
-      ctx.strokeStyle = layout.accent;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(block.x + 1.5, block.y + 1.5, block.w - 3, block.h - 3);
+      return;
     }
+
+    // Top face: ribbed plate with a highlight along the near edge.
+    const top = ctx.createLinearGradient(block.x, block.y, block.x, block.y + block.h);
+    top.addColorStop(0, skin.wall.top);
+    top.addColorStop(1, skin.wall.face);
+
+    ctx.fillStyle = top;
+    ctx.fillRect(block.x, block.y, block.w, block.h);
+    ctx.strokeStyle = skin.wall.topEdge;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(block.x + 0.5, block.y + 1.5);
+    ctx.lineTo(block.x + block.w - 0.5, block.y + 1.5);
+    ctx.stroke();
+
+    // Ribs across the top, spaced so small and large blocks both read.
+    ctx.strokeStyle = "rgba(12, 14, 18, 0.28)";
+    const ribStep = block.w > 70 ? 16 : 11;
+    for (let x = block.x + ribStep; x < block.x + block.w - 4; x += ribStep) {
+      ctx.beginPath();
+      ctx.moveTo(x + 0.5, block.y + 4);
+      ctx.lineTo(x + 0.5, block.y + block.h - 4);
+      ctx.stroke();
+    }
+
+    // Rust bleeding down from the rim, deterministic per block.
+    const rustSeed = createRng(`rust-${Math.round(block.x)}-${Math.round(block.y)}`);
+    for (let i = 0; i < 4; i += 1) {
+      const rx = rustSeed.range(block.x + 3, block.x + block.w - 9);
+      const rw = rustSeed.range(3, 9);
+      const rh = rustSeed.range(6, block.h * 0.55);
+      const streak = ctx.createLinearGradient(rx, block.y, rx, block.y + rh);
+      streak.addColorStop(0, skin.wall.rust);
+      streak.addColorStop(1, "rgba(138, 96, 62, 0)");
+      ctx.fillStyle = streak;
+      ctx.fillRect(rx, block.y + 3, rw, rh);
+    }
+
+    // Painted wear along the near base, mostly rubbed off.
+    ctx.fillStyle = skin.wall.rim;
+    ctx.fillRect(block.x + 6, block.y + block.h - 3 + lift * 0.4, block.w - 12, 2);
+
+    // Corner bolts.
+    ctx.fillStyle = "rgba(176, 186, 196, 0.28)";
+    for (const [bx, by] of [
+      [block.x + 5, block.y + 5],
+      [block.x + block.w - 7, block.y + 5],
+      [block.x + 5, block.y + block.h - 7],
+      [block.x + block.w - 7, block.y + block.h - 7]
+    ]) {
+      ctx.fillRect(bx, by, 2.6, 2.6);
+    }
+
+    // Outline last, so the crisp edge sits above every surface detail. The
+    // layout accent tints it, which is how a run's arena reads at a glance.
+    ctx.strokeStyle = "rgba(12, 14, 17, 0.85)";
+    ctx.lineWidth = 1.4;
+    ctx.strokeRect(block.x + 0.5, block.y + 0.5, block.w - 1, block.h - 1);
+    ctx.strokeStyle = layout.accent;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(block.x + 1.5, block.y + 1.5, block.w - 3, block.h - 3);
+  }
+
+  /** Crates are drawn live (walls are baked into the terrain layer). */
+  private drawObstacles(): void {
+    const ctx = this.ctx;
+    for (const block of this.world.obstacles) {
+      if (!isCrateBlock(block)) continue;
+      this.paintBlock(ctx, block, true);
+    }
+  }
+
+  /**
+   * Bush beds: the dark, trodden ground under a stand of foliage.
+   *
+   * Drawn under the actors so a unit standing in cover is *in* the bush, and the
+   * foliage pass afterwards covers them from the shoulders down.
+   */
+  private drawBushBeds(): void {
+    const ctx = this.ctx;
+    const skin = this.skin;
+    for (const bush of this.world.bushes) {
+      ctx.save();
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = skin.bush.leafDark;
+      ctx.beginPath();
+      ctx.ellipse(bush.x + bush.w / 2, bush.y + bush.h * 0.62, bush.w * 0.56, bush.h * 0.44, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  /**
+   * Bush foliage: clumps of leaves that sway on their own phase.
+   *
+   * The clump grid is derived from the rect, so one merged bush rect is drawn as
+   * many small bushes - which is what makes a hedge read as a hedge and not as a
+   * green rectangle.
+   */
+  private drawBushFoliage(): void {
+    const ctx = this.ctx;
+    const skin = this.skin;
+    const time = this.world.elapsed;
+    for (const bush of this.world.bushes) {
+      const cols = Math.max(1, Math.round(bush.w / 42));
+      const rows = Math.max(1, Math.round(bush.h / 40));
+      for (let row = 0; row < rows; row += 1) {
+        for (let col = 0; col < cols; col += 1) {
+          const cx = bush.x + ((col + 0.5) * bush.w) / cols;
+          const cy = bush.y + ((row + 0.5) * bush.h) / rows;
+          const phase = cx * 0.05 + cy * 0.07 + (row + col) * 1.7;
+          const sway = Math.sin(time * 1.1 + phase) * 1.6;
+          const size = Math.min(bush.w / cols, bush.h / rows) * 0.62;
+          ctx.save();
+          ctx.translate(cx + sway, cy);
+          // Dark base clump, then two lighter ones offset against the light.
+          ctx.fillStyle = skin.bush.leafDark;
+          ctx.beginPath();
+          ctx.ellipse(0, size * 0.28, size * 1.05, size * 0.72, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = skin.bush.leaf;
+          ctx.beginPath();
+          ctx.ellipse(-size * 0.22, -size * 0.1, size * 0.85, size * 0.66, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = skin.bush.leafPale;
+          ctx.globalAlpha = 0.5;
+          ctx.beginPath();
+          ctx.ellipse(-size * 0.34, -size * 0.3, size * 0.5, size * 0.34, -0.4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      }
+    }
+  }
+
+  /**
+   * Shallow water, baked into the terrain layer with a rim and a still glint.
+   *
+   * Water is scenery with a cost: it slows whoever wades through it and hides
+   * nobody, so an open arena full of it plays very differently from a hedge maze.
+   */
+  private paintWater(ctx: CanvasRenderingContext2D, rect: Rect): void {
+    const skin = this.skin;
+    ctx.save();
+    ctx.fillStyle = skin.water.fill;
+    ctx.beginPath();
+    ctx.moveTo(rect.x + 6, rect.y + 4);
+    ctx.lineTo(rect.x + rect.w - 8, rect.y + 2);
+    ctx.lineTo(rect.x + rect.w - 2, rect.y + rect.h - 6);
+    ctx.lineTo(rect.x + 8, rect.y + rect.h - 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = skin.water.rim;
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    const glint = createRng(`water-${Math.round(rect.x)}-${Math.round(rect.y)}`);
+    ctx.strokeStyle = skin.water.glint;
+    ctx.lineWidth = 1;
+    for (let i = 0; i < 5; i += 1) {
+      const gy = glint.range(rect.y + 6, rect.y + rect.h - 6);
+      const gx = glint.range(rect.x + 8, rect.x + rect.w * 0.6);
+      const gw = glint.range(12, Math.max(16, rect.w * 0.34));
+      ctx.beginPath();
+      ctx.moveTo(gx, gy);
+      ctx.lineTo(gx + gw, gy);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   /** Spawn warnings: a painted target ring that fills as the drop approaches. */
@@ -2184,6 +2643,18 @@ export class ArenaGame {
     const tint = TELEGRAPH[bot.kind];
     const settle = bot.aimSettle ?? 0;
     const locked = bot.windup > 0;
+    // The rail and the sight are not the same thing: the reticle can already be
+    // on the player while the barrel is still swinging round onto the line. A
+    // marksman will not fire wide, so this swing is a real delay - and the tell
+    // has to show it, or the shot looks late for no reason. While it lasts the
+    // crosshair opens back up and the core line dims; the instant the rail
+    // settles it snaps thin and bright and the shot follows.
+    const slewing =
+      locked &&
+      Math.abs(
+        shortestAngleDelta(bot.facing, Math.atan2(sight.y - bot.position.y, sight.x - bot.position.x))
+      ) > AIM_SETTLED_ERROR;
+    const tight = locked && !slewing;
     // The whole line is re-drawn every frame, and the far end is clipped by
     // cover so the sight never draws through a wall it cannot shoot through.
     const blocking = firstBlockingFraction(
@@ -2200,9 +2671,9 @@ export class ArenaGame {
 
     ctx.save();
     // The beam: thin, straight, brightest at the muzzle.
-    ctx.globalAlpha = 0.22 + settle * 0.3 + (locked ? 0.12 : 0);
+    ctx.globalAlpha = 0.22 + settle * 0.3 + (tight ? 0.12 : 0) - (slewing ? 0.06 : 0);
     ctx.strokeStyle = tint;
-    ctx.lineWidth = locked ? 1.6 : 1.4;
+    ctx.lineWidth = tight ? 1.6 : 1.4;
     ctx.beginPath();
     ctx.moveTo(muzzleX, muzzleY);
     ctx.lineTo(endX, endY);
@@ -2216,15 +2687,16 @@ export class ArenaGame {
     ctx.lineTo(endX, endY);
     ctx.stroke();
 
-    // The dot at the end, and a reticle that closes as the aim settles.
-    const spread = (1 - settle) * 26 + 5;
+    // The dot at the end, and a reticle that closes as the aim settles - and
+    // opens again for as long as the rail is still coming round.
+    const spread = tight ? 0.9 : (1 - settle) * 26 + 5 + (slewing ? 7 : 0);
     ctx.globalAlpha = 0.5 + settle * 0.45;
     ctx.fillStyle = tint;
     ctx.beginPath();
-    ctx.arc(endX, endY, locked ? 2.6 : 2.1 + pulse * 0.7, 0, Math.PI * 2);
+    ctx.arc(endX, endY, tight ? 2.6 : 2.1 + pulse * 0.7 + (slewing ? 0.8 : 0), 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = tint;
-    ctx.lineWidth = locked ? 2 : 1.4;
+    ctx.lineWidth = tight ? 2 : 1.4;
     ctx.beginPath();
     for (const [sx, sy] of [[-1, -1], [-1, 1], [1, -1], [1, 1]] as const) {
       ctx.moveTo(endX + sx * spread, endY + sy * spread);
@@ -2248,7 +2720,7 @@ export class ArenaGame {
     // and a dot, no bloom - a glint is a reflection, not a light source.
     if (aimFor(bot.kind).glint) {
       const spark = 0.45 + 0.55 * pulse;
-      const ray = locked ? 7 : 5 + settle * 3;
+      const ray = tight ? 7 : 5 + settle * 3;
       ctx.globalAlpha = 0.35 + settle * 0.4;
       ctx.strokeStyle = "rgba(24, 20, 14, 0.55)";
       ctx.lineWidth = 2.6;
@@ -2771,13 +3243,24 @@ export class ArenaGame {
       const art = BOT_ART[bot.kind];
       const spawning = bot.spawnGuard > 0;
       const materialise = spawning ? clamp(1 - bot.spawnGuard / 0.55, 0, 1) : 1;
+      const frame = frameOf(art);
+      const grow = 0.72 + materialise * 0.28;
       ctx.save();
       ctx.translate(bot.position.x, bot.position.y);
-      this.drawUnitShadow(ctx, BOT_RADIUS + 4, materialise);
+      this.drawUnitShadow(ctx, (BOT_RADIUS + 4) * ((frame.x + frame.y) / 2), materialise);
       ctx.globalAlpha = spawning ? 0.25 + materialise * 0.75 : 1;
-      ctx.scale(0.72 + materialise * 0.28, 0.72 + materialise * 0.28);
+      // The footprint is what makes the roster read as different animals: a
+      // marksman is a long low rail, a bulwark a slab stood broadside, a shard a
+      // speck. It is applied *inside* the unit's own frame, so a profile is
+      // shaped in the direction it is looking rather than along world x.
+      ctx.rotate(bot.facing);
+      ctx.scale(grow * frame.x, grow * frame.y);
       this.drawBotModel(ctx, bot, art);
       ctx.restore();
+      // The durability ring is a readout, not anatomy: it stays circular and is
+      // sized by the unit's overall bulk, so a shard's track does not vanish
+      // under its own body and a bulwark's does not swallow the floor.
+      if (!spawning) this.drawUnitRing(bot, art, ((frame.x + frame.y) / 2) * grow);
       // Kit states sit on top of the model in world space: a burning hostile
       // and a staggered one have to be tellable apart mid-fight.
       if (bot.burn && bot.burn > 0) this.drawBurnOverlay(bot);
@@ -2809,7 +3292,6 @@ export class ArenaGame {
 
     if (art.silhouette === "wedge") {
       // The Hunter: a squat siege mech with side skirts and a heavy cannon.
-      ctx.rotate(bot.facing);
       ctx.fillStyle = art.shade;
       ctx.fillRect(-11, -13, 22, 26);
 
@@ -2854,10 +3336,8 @@ export class ArenaGame {
       ctx.fillStyle = art.shade;
       ctx.fillRect(-9, -11 - charge, 5, 5 + charge * 2);
       ctx.fillRect(-9, 6, 5, 5 + charge * 2);
-      ctx.rotate(-bot.facing);
     } else if (art.silhouette === "dart") {
       // The Flanker: a narrow interceptor with swept prongs and thruster pods.
-      ctx.rotate(bot.facing);
       const flutter = Math.sin(this.world.elapsed * 9 + bot.id) * 1.4;
       ctx.fillStyle = art.shade;
       ctx.beginPath();
@@ -2918,11 +3398,9 @@ export class ArenaGame {
       ctx.fillRect(-14 - burn * 3, -7, 3 + burn * 3, 2);
       ctx.fillRect(-14 - burn * 3, 5, 3 + burn * 3, 2);
       ctx.globalAlpha /= 0.35 + burn * 0.5;
-      ctx.rotate(-bot.facing);
     } else if (art.silhouette === "lance") {
       // The Marksman: a long, low rifle platform. The barrel is longer than the
       // unit is wide, because a sniper has to read as a sniper at a glance.
-      ctx.rotate(bot.facing);
       const breathe = Math.sin(this.world.elapsed * 2.4 + bot.id) * 0.6;
 
       // Bipod legs splayed behind the receiver.
@@ -2973,11 +3451,9 @@ export class ArenaGame {
       ctx.fillStyle = art.plate;
       ctx.fillRect(-8, -8.5, 12, 2.6);
       ctx.fillRect(-8, 5.9, 12, 2.6);
-      ctx.rotate(-bot.facing);
     } else if (art.silhouette === "furnace") {
       // The Cinder: a round-shouldered furnace with a snout, a fuel tank and
       // vent slats. Wide at the shoulders, no straight edges anywhere.
-      ctx.rotate(bot.facing);
       const pulse = 0.6 + 0.4 * Math.sin(this.world.elapsed * 6 + bot.id);
 
       // Back tank.
@@ -3024,11 +3500,9 @@ export class ArenaGame {
       ctx.beginPath();
       ctx.ellipse(2, 10, 6, 3.4, -0.2, 0, Math.PI * 2);
       ctx.fill();
-      ctx.rotate(-bot.facing);
     } else if (art.silhouette === "pod") {
       // The Mortar: a tracked carrier with a stubby elevated tube. Tracked
       // units read differently from walking ones even in one flat colour.
-      ctx.rotate(bot.facing);
 
       // Two track bars, with cleats that cycle as it drives.
       const roll = (this.world.elapsed * 9) % 3;
@@ -3075,10 +3549,8 @@ export class ArenaGame {
         ctx.fill();
         ctx.globalAlpha /= 0.35 + charge * 0.65;
       }
-      ctx.rotate(-bot.facing);
     } else if (art.silhouette === "wall") {
       // The Bulwark: a broad tower shield on stubby legs. It is mostly shield.
-      ctx.rotate(bot.facing);
 
       // Legs, planted wide and short.
       ctx.fillStyle = art.shade;
@@ -3123,7 +3595,6 @@ export class ArenaGame {
       // A small visor slit peeking over the rim.
       ctx.fillStyle = art.detail ?? art.accent;
       ctx.fillRect(-1, -2, 3, 4);
-      ctx.rotate(-bot.facing);
     } else if (art.silhouette === "cluster") {
       // The Swarm Cell: an organic knot of pods. Its outline is deliberately
       // lumpy so it never reads as one of the machined units.
@@ -3170,7 +3641,6 @@ export class ArenaGame {
     } else if (art.silhouette === "ram") {
       // The Ram: angled armour over oversized pistons, all of it pointing
       // forward. While it charges, the pistons extend.
-      ctx.rotate(bot.facing);
       const lunge = bot.chargeTime > 0 ? 4 : 0;
 
       // Piston blocks either side.
@@ -3211,11 +3681,11 @@ export class ArenaGame {
       // Impact studs along the leading edge.
       ctx.fillStyle = art.detail ?? art.accent;
       ctx.fillRect(14 + lunge, -3, 2.4, 6);
-      ctx.rotate(-bot.facing);
     } else if (art.silhouette === "splinter") {
       // The Shard: a tiny faceted splinter with a visible fuse. Small, sharp
-      // and cheap-looking, because that is exactly what it is.
-      ctx.rotate(Math.atan2(bot.velocity.y, bot.velocity.x) || bot.facing);
+      // and cheap-looking, because that is exactly what it is. It lies along
+      // where it is going, which is not where its frame points.
+      ctx.rotate((Math.atan2(bot.velocity.y, bot.velocity.x) || bot.facing) - bot.facing);
       const flicker = 0.5 + 0.5 * Math.sin(this.world.elapsed * 18 + bot.id * 3);
       ctx.fillStyle = art.shade;
       ctx.beginPath();
@@ -3242,7 +3712,6 @@ export class ArenaGame {
       ctx.arc(-1, 0, 2.2, 0, Math.PI * 2);
       ctx.fill();
       ctx.globalAlpha /= 0.45 + flicker * 0.55;
-      ctx.rotate(-(Math.atan2(bot.velocity.y, bot.velocity.x) || bot.facing));
     } else {
       // The Mirror: a tall faceted prism with slowly orbiting shards.
       const turn = this.world.elapsed * 0.6 + bot.id;
@@ -3321,29 +3790,47 @@ export class ArenaGame {
       ctx.arc(-7, -5 - (this.world.elapsed * 14) % 8, 3.2, 0, Math.PI * 2);
       ctx.fill();
     }
+  }
 
-    // Durability ring: a dark track so the value is legible on any floor.
+  /**
+   * The durability ring and its wind-up blip.
+   *
+   * Kept out of the model on purpose: the model lives inside the unit's own
+   * frame, which is stretched to that unit's footprint, and a health track that
+   * stretched with it would be an ellipse on the bulwark and a speck on a shard.
+   * `bulk` is the unit's overall size, so the track grows with the unit without
+   * inheriting its shape.
+   */
+  private drawUnitRing(bot: AgentState, art: (typeof BOT_ART)["hunter"], bulk: number): void {
+    const ctx = this.ctx;
+    const healthFraction = clamp(bot.health / Math.max(1, bot.maxHealth), 0, 1);
+    const hurt = healthFraction <= 0.34;
+    const charge = bot.windup > 0 ? clamp(1 - bot.windup / Math.max(0.001, bot.windupDuration), 0, 1) : 0;
+    const radius = (BOT_RADIUS + 6) * bulk;
+    ctx.save();
+    ctx.translate(bot.position.x, bot.position.y);
+    // A dark track, so the value is legible on any floor.
     ctx.strokeStyle = STATUS.healthTrack;
     ctx.lineWidth = 3.4;
     ctx.beginPath();
-    ctx.arc(0, 0, BOT_RADIUS + 6, 0, Math.PI * 2);
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
     ctx.stroke();
     ctx.strokeStyle = hurt ? STATUS.healthLow : art.accent;
     ctx.lineWidth = 2.6;
     ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.arc(0, 0, BOT_RADIUS + 6, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * healthFraction);
+    ctx.arc(0, 0, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * healthFraction);
     ctx.stroke();
     ctx.lineCap = "butt";
-
     // A blip on the ring while it is winding up, so the charge is countable.
     if (charge > 0) {
       ctx.fillStyle = art.detail ?? art.accent;
       const angle = -Math.PI / 2 + Math.PI * 2 * charge;
       ctx.beginPath();
-      ctx.arc(Math.cos(angle) * (BOT_RADIUS + 6), Math.sin(angle) * (BOT_RADIUS + 6), 2.2, 0, Math.PI * 2);
+      ctx.arc(Math.cos(angle) * radius, Math.sin(angle) * radius, 2.2, 0, Math.PI * 2);
       ctx.fill();
     }
+    ctx.restore();
   }
 
   /**
@@ -3703,90 +4190,30 @@ export class ArenaGame {
     ctx.textAlign = "left";
   }
 
-  private drawOverlays(): void {
+  /**
+   * Where the last hit came from, as an arc painted on the operative.
+   *
+   * World space on purpose: it is anchored to the thing that was hit, not to the
+   * corner of the window the camera happens to be looking through.
+   */
+  private drawDamageIndicator(): void {
     const ctx = this.ctx;
     const player = this.world.player;
-    const healthFraction = clamp(player.health / Math.max(1, player.maxHealth), 0, 1);
-
-    // Damage vignette: flares on a hit and pulses while critically wounded.
-    const lowHealthPulse = healthFraction < 0.35 ? (0.35 - healthFraction) * (0.55 + 0.45 * Math.sin(this.world.elapsed * 6)) : 0;
-    const vignette = clamp(this.flash + lowHealthPulse, 0, 1);
-    if (vignette > 0.01) {
-      const gradient = ctx.createRadialGradient(WORLD.width / 2, WORLD.height / 2, WORLD.height * 0.32, WORLD.width / 2, WORLD.height / 2, WORLD.height * 0.78);
-      gradient.addColorStop(0, "rgba(190, 78, 62, 0)");
-      gradient.addColorStop(1, `rgba(190, 78, 62, ${0.42 * vignette})`);
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, WORLD.width, WORLD.height);
-    }
-
-    // Directional damage indicator: shows where the last hit came from.
-    if (player.hitFlash > 0) {
-      const angle = Math.atan2(player.lastHitDirection.y, player.lastHitDirection.x);
-      ctx.save();
-      ctx.translate(player.position.x, player.position.y);
-      ctx.rotate(angle);
-      ctx.globalAlpha = clamp(player.hitFlash / 0.3, 0, 1) * 0.85;
-      ctx.strokeStyle = "#c9695a";
-      ctx.lineWidth = 2.4;
-      ctx.beginPath();
-      ctx.arc(0, 0, 40, -0.34, 0.34);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(40, -6);
-      ctx.lineTo(40, 6);
-      ctx.stroke();
-      ctx.restore();
-    }
-
-    // Wave banner during the telegraph window.
-    if (this.bannerTimer > 0 && this.waveBanner.title) {
-      const alpha = clamp(this.bannerTimer / 0.6, 0, 1) * clamp((2.4 - this.bannerTimer) / 0.28 + 0.2, 0, 1);
-      ctx.save();
-      ctx.globalAlpha = clamp(alpha, 0, 1);
-      ctx.textAlign = "center";
-      ctx.fillStyle = "#e9f6ff";
-      ctx.font = "700 26px 'Space Grotesk', sans-serif";
-      ctx.fillText(this.waveBanner.title, WORLD.width / 2, 74);
-      ctx.fillStyle = "rgba(207, 162, 95, 0.9)";
-      ctx.font = "600 11px 'DM Mono', monospace";
-      ctx.fillText(this.waveBanner.subtitle, WORLD.width / 2, 94);
-      if (this.waveBanner.hint) {
-        ctx.fillStyle = "rgba(157, 243, 255, 0.75)";
-        ctx.fillText(this.waveBanner.hint, WORLD.width / 2, 112);
-      }
-      ctx.strokeStyle = "rgba(207, 162, 95, 0.5)";
-      ctx.lineWidth = 2;
-      const width = 240;
-      const ready = clamp(1 - this.bannerTimer / 2.4, 0, 1);
-      ctx.beginPath();
-      ctx.moveTo(WORLD.width / 2 - width / 2, this.waveBanner.hint ? 122 : 104);
-      ctx.lineTo(WORLD.width / 2 - width / 2 + width * ready, 104);
-      ctx.stroke();
-      ctx.restore();
-      ctx.textAlign = "left";
-    }
-
-    // Corner telemetry so the canvas is readable without the side panel.
+    if (player.hitFlash <= 0) return;
+    const angle = Math.atan2(player.lastHitDirection.y, player.lastHitDirection.x);
     ctx.save();
-    ctx.font = "600 9px 'DM Mono', monospace";
-    const currentWave = Math.max(1, this.world.wave);
-    ctx.fillStyle = "rgba(180, 205, 225, 0.55)";
-    ctx.fillText(`THREAT ${String(currentWave).padStart(2, "0")}/${String(MAX_WAVES).padStart(2, "0")}`, 26, 34);
-    const hostiles = this.world.bots.filter((bot) => bot.alive).length;
-    ctx.fillStyle = hostiles > 0 ? "rgba(201, 105, 90, 0.8)" : "rgba(143, 180, 140, 0.8)";
-    ctx.fillText(`HOSTILES ${String(hostiles).padStart(2, "0")}`, 26, 48);
-    if (this.world.pendingSpawns.length > 0) {
-      ctx.fillStyle = "rgba(207, 162, 95, 0.85)";
-      ctx.fillText(`INBOUND ${String(this.world.pendingSpawns.length).padStart(2, "0")}`, 26, 62);
-    }
-    const predictability = playerPredictability(this.world);
-    ctx.fillStyle = "rgba(150, 175, 200, 0.4)";
-    ctx.fillText("MIRROR READ", WORLD.width - 118, 34);
-    ctx.fillStyle = predictability > 0.5 ? "rgba(181, 140, 255, 0.95)" : "rgba(110, 130, 155, 0.6)";
-    ctx.fillRect(WORLD.width - 118, 40, 92 * predictability, 3);
-    ctx.strokeStyle = "rgba(110, 130, 155, 0.35)";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(WORLD.width - 118.5, 39.5, 92, 4);
+    ctx.translate(player.position.x, player.position.y);
+    ctx.rotate(angle);
+    ctx.globalAlpha = clamp(player.hitFlash / 0.3, 0, 1) * 0.85;
+    ctx.strokeStyle = "#c9695a";
+    ctx.lineWidth = 2.4;
+    ctx.beginPath();
+    ctx.arc(0, 0, 40, -0.34, 0.34);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(40, -6);
+    ctx.lineTo(40, 6);
+    ctx.stroke();
     ctx.restore();
   }
 }

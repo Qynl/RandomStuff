@@ -561,6 +561,8 @@ describe("fair damage", () => {
 describe("player movement", () => {
   it("cannot dash through arena blocks", () => {
     const world = readyWorld("dash-block");
+    // The coordinates below are the proving range's centre block.
+    pinLayout(world);
     run(world, 0.6);
     world.bots.length = 0;
     world.player.position = { x: OBSTACLES[4].x - 40, y: OBSTACLES[4].y + OBSTACLES[4].h / 2 };
@@ -781,6 +783,8 @@ describe("crowd behaviour", () => {
 describe("aim assist", () => {
   it("only tracks targets inside the forward cone", () => {
     const world = readyWorld("assist");
+    // Two bots in a clear lane: the proving range has the open floor for it.
+    pinLayout(world);
     world.bots.length = 0;
     world.player.position = { x: 300, y: 300 };
     world.player.aimDirection = { x: 1, y: 0 };

@@ -1,6 +1,18 @@
 import type { Rect, Vec2 } from "./types";
 
-export const WORLD = { width: 960, height: 600 };
+export const WORLD = { width: 1500, height: 1100 };
+
+/**
+ * The logical viewport: what the camera shows of the arena at once.
+ *
+ * The arenas are two and a half times the size of the window, so the camera
+ * tracks the player and the minimap carries the rest. A fight that spans a whole
+ * screen is a fight you can walk into by accident, which is the point.
+ */
+export const VIEW = { width: 960, height: 600 };
+
+/** One authored tile of an arena, in world units. */
+export const TILE = 50;
 
 /** Arena walls keep a little breathing room so effects near the edge stay readable. */
 export const WALL_INSET = 12;
@@ -8,19 +20,41 @@ export const WALL_INSET = 12;
 /**
  * Arena layouts.
  *
- * All four are hand-placed rather than random so that every one is fair: each
- * keeps a clear ring for spawns, a clear cross through the middle for movement,
- * and no block within a dash of the player's start. The seed only picks *which*
- * one, so a run code still replays exactly, and a layout is never generated in
- * a way that could produce an unreachable pocket.
+ * Each arena is authored as a *quadrant* - eleven rows of fifteen characters -
+ * which is mirrored across both axes, so every map is symmetric (nobody wins a
+ * fight by spawning on the good side) and the authored art is a quarter of the
+ * size. The tile language is deliberately simple:
+ *
+ *   `.` floor      `#` wall (blocks movement and shots)
+ *   `c` crate      `o` bush (hides whoever is inside it, blocks nothing)
+ *   `~` water (wade through slowly; shots fly over it)
+ *
+ * Blocks are merged from tiles into the fewest rectangles that cover them, so a
+ * long bank of wall is one collision box and one piece of art rather than fifty.
  */
-export type ArenaLayoutId = "quadrant" | "lanes" | "pillars" | "diamond";
+export type ArenaLayoutId = "foundry" | "crossroads" | "gardens" | "mine" | "plaza" | "boneyard" | "proving";
+
+/** What a solid tile is made of. Crates are painted as breakable wood. */
+export type ArenaBlockKind = "wall" | "crate";
+
+export interface ArenaBlock extends Rect {
+  kind: ArenaBlockKind;
+}
+
+/** Terrain skins. One per arena family, so the maps do not all look poured. */
+export type BiomeId = "foundry" | "quarry" | "garden" | "harbour";
 
 export interface ArenaLayout {
   name: string;
   /** One line for the arena sheet: what fighting here feels like. */
   blurb: string;
-  obstacles: Rect[];
+  /** Terrain skin: floor, wall and foliage paint for this arena. */
+  biome: BiomeId;
+  obstacles: ArenaBlock[];
+  /** Bushes: walk through them, shoot through them, but you are hidden inside. */
+  bushes: Rect[];
+  /** Water: wading is slow, and it hides nothing. Shots pass over the top. */
+  water: Rect[];
   /**
    * How much clear room the layout offers: 1 is an open field, 0 is a maze.
    * Hostiles scale their preferred fighting range by this, because a ring that
@@ -32,71 +66,240 @@ export interface ArenaLayout {
   accentSoft: string;
 }
 
+/** Merges every maximal horizontal run of tiles, then stacks identical runs. */
+function mergeTiles(rows: string[], chars: string): Rect[] {
+  const out: Rect[] = [];
+  let active = new Map<string, Rect>();
+  for (let y = 0; y < rows.length; y += 1) {
+    const row = rows[y];
+    const next = new Map<string, Rect>();
+    let x = 0;
+    while (x < row.length) {
+      if (!chars.includes(row[x])) {
+        x += 1;
+        continue;
+      }
+      let end = x;
+      while (end + 1 < row.length && chars.includes(row[end + 1])) end += 1;
+      const key = `${x}:${end - x + 1}`;
+      const open = active.get(key);
+      if (open) {
+        open.h += TILE;
+        next.set(key, open);
+      } else {
+        const rect: Rect = { x: x * TILE, y: y * TILE, w: (end - x + 1) * TILE, h: TILE };
+        out.push(rect);
+        next.set(key, rect);
+      }
+      x = end + 1;
+    }
+    active = next;
+  }
+  return out;
+}
+
+/**
+ * Mirrors an authored quadrant into a full tile grid.
+ *
+ * The bottom-centre pad is cleared afterwards: that is where the operator
+ * starts, and no map is allowed to begin with a wall in the player's face.
+ */
+function buildTiles(quadrant: string[]): string[] {
+  const cols = quadrant[0].length * 2;
+  const rows = quadrant.length * 2;
+  const grid: string[][] = Array.from({ length: rows }, () => Array.from({ length: cols }, () => "."));
+  for (let y = 0; y < quadrant.length; y += 1) {
+    for (let x = 0; x < quadrant[y].length; x += 1) {
+      const tile = quadrant[y][x];
+      const mirrorX = cols - 1 - x;
+      const mirrorY = rows - 1 - y;
+      grid[y][x] = tile;
+      grid[y][mirrorX] = tile;
+      grid[mirrorY][x] = tile;
+      grid[mirrorY][mirrorX] = tile;
+    }
+  }
+  for (let y = rows - 2; y < rows; y += 1) {
+    for (let x = cols / 2 - 2; x < cols / 2 + 2; x += 1) grid[y][x] = ".";
+  }
+  return grid.map((row) => row.join(""));
+}
+
+interface LayoutSpec {
+  name: string;
+  blurb: string;
+  biome: BiomeId;
+  openness: number;
+  accent: string;
+  accentSoft: string;
+  quadrant: string[];
+}
+
+function buildLayout(spec: LayoutSpec): ArenaLayout {
+  const tiles = buildTiles(spec.quadrant);
+  return {
+    name: spec.name,
+    blurb: spec.blurb,
+    biome: spec.biome,
+    obstacles: [
+      ...mergeTiles(tiles, "#").map((rect) => ({ ...rect, kind: "wall" as const })),
+      ...mergeTiles(tiles, "c").map((rect) => ({ ...rect, kind: "crate" as const }))
+    ],
+    bushes: mergeTiles(tiles, "o"),
+    water: mergeTiles(tiles, "~"),
+    openness: spec.openness,
+    accent: spec.accent,
+    accentSoft: spec.accentSoft
+  };
+}
+
 export const ARENA_LAYOUTS: Record<ArenaLayoutId, ArenaLayout> = {
-  quadrant: {
-    name: "QUADRANT",
-    blurb: "Four corner blocks. Open lanes cross the middle, so long shots have room and cover is always a step away.",
+  foundry: buildLayout({
+    name: "FOUNDRY",
+    blurb: "Four machine rooms with doorways. Fight through a bay, or go around and come in behind.",
+    biome: "foundry",
+    openness: 0.55,
+    accent: "rgba(93, 131, 161, 0.5)",
+    accentSoft: "rgba(255, 180, 84, 0.13)",
+    quadrant: [
+      "...............",
+      "...#####.......",
+      "...#.....#.....",
+      "...#..c..#.....",
+      "...#.....#.....",
+      "...###.###.....",
+      "...............",
+      "....oo....c....",
+      "....oo....#....",
+      "...............",
+      "..............."
+    ]
+  }),
+  crossroads: buildLayout({
+    name: "CROSSROADS",
+    blurb: "Long walls with gates punched through them. Every long sight line ends at a doorway.",
+    biome: "quarry",
+    openness: 0.6,
+    accent: "rgba(110, 140, 190, 0.55)",
+    accentSoft: "rgba(120, 190, 255, 0.14)",
+    quadrant: [
+      "...............",
+      "......#........",
+      "......#...oo...",
+      "....###........",
+      "...............",
+      "..c....#.......",
+      "..##...#.......",
+      ".......#...##..",
+      "...........#...",
+      "........oo.#...",
+      "..............."
+    ]
+  }),
+  gardens: buildLayout({
+    name: "GARDENS",
+    blurb: "Hedge blocks and four walled plots. Bushes break every line; the plots break every dash.",
+    biome: "garden",
+    openness: 0.5,
+    accent: "rgba(120, 165, 150, 0.5)",
+    accentSoft: "rgba(128, 232, 196, 0.12)",
+    quadrant: [
+      "...............",
+      "..ooo......ooo.",
+      "..ooo......ooo.",
+      ".....##.####...",
+      ".....##.#......",
+      "........#..c...",
+      ".....##.#......",
+      ".....##.####...",
+      "...............",
+      "......oo.......",
+      "......oo......."
+    ]
+  }),
+  mine: buildLayout({
+    name: "GEM MINE",
+    blurb: "Long banks, a wide central yard and ore crates in the corners. The middle is a killing field.",
+    biome: "quarry",
+    openness: 0.6,
+    accent: "rgba(190, 150, 100, 0.45)",
+    accentSoft: "rgba(240, 190, 120, 0.12)",
+    quadrant: [
+      "...............",
+      "....####.......",
+      "....#..........",
+      "....#.oo.......",
+      ".......oo..c...",
+      "...............",
+      "..###..........",
+      "..#...#..####..",
+      "..#...#........",
+      "..#...#........",
+      "..............."
+    ]
+  }),
+  plaza: buildLayout({
+    name: "SUNKEN PLAZA",
+    blurb: "Shallow water and a handful of stone blocks. Almost nowhere to hide, and nowhere to run fast.",
+    biome: "harbour",
+    openness: 0.8,
+    accent: "rgba(96, 132, 148, 0.5)",
+    accentSoft: "rgba(140, 200, 220, 0.12)",
+    quadrant: [
+      "...............",
+      ".........~~~~~~",
+      ".....~~~.......",
+      "..~~......#....",
+      ".........####..",
+      "..........#....",
+      "....c..........",
+      ".......oo......",
+      "...............",
+      "...............",
+      "..............."
+    ]
+  }),
+  // The training range: the fixed, sparse geometry the pure geometry tests are
+  // authored against (a block at a known coordinate, a clear lane to shoot down).
+  // It is not in the picker, so nobody ever plays a run in it by accident.
+  proving: {
+    name: "TRAINING RANGE",
+    blurb: "A sparse proving ground: four corner blocks and one in the middle. Nothing blocks a long shot here.",
+    biome: "foundry",
     openness: 0.85,
     accent: "rgba(93, 131, 161, 0.5)",
     accentSoft: "rgba(255, 180, 84, 0.13)",
     obstacles: [
-      { x: 218, y: 142, w: 74, h: 76 },
-      { x: 668, y: 142, w: 74, h: 76 },
-      { x: 218, y: 382, w: 74, h: 76 },
-      { x: 668, y: 382, w: 74, h: 76 },
-      { x: 430, y: 254, w: 100, h: 92 }
-    ]
+      { x: 218, y: 142, w: 74, h: 76, kind: "wall" },
+      { x: 668, y: 142, w: 74, h: 76, kind: "wall" },
+      { x: 218, y: 382, w: 74, h: 76, kind: "wall" },
+      { x: 668, y: 382, w: 74, h: 76, kind: "wall" },
+      { x: 430, y: 254, w: 100, h: 92, kind: "wall" }
+    ],
+    bushes: [],
+    water: []
   },
-  lanes: {
-    name: "LANES",
-    blurb: "Two long walls make three corridors. Fighting happens head-on down a lane and around its ends.",
-    openness: 0.6,
-    accent: "rgba(110, 140, 190, 0.55)",
-    accentSoft: "rgba(120, 190, 255, 0.14)",
-    // Two long walls with offset gaps: cover is continuous but the lanes always
-    // connect, which rewards route planning over open-field strafing.
-    obstacles: [
-      { x: 300, y: 96, w: 40, h: 168 },
-      { x: 300, y: 336, w: 40, h: 168 },
-      { x: 620, y: 96, w: 40, h: 168 },
-      { x: 620, y: 336, w: 40, h: 168 },
-      { x: 440, y: 276, w: 80, h: 48 }
-    ]
-  },
-  pillars: {
-    name: "PILLARS",
-    blurb: "A grid of columns: tight sight lines and constant peeking. Ring timings matter more than range here.",
+  boneyard: buildLayout({
+    name: "BONEYARD",
+    blurb: "Scattered cover at every range. Nothing blocks a shot for long, so keep moving.",
+    biome: "foundry",
     openness: 0.45,
-    accent: "rgba(150, 130, 190, 0.5)",
-    accentSoft: "rgba(197, 160, 255, 0.13)",
-    // Six small pillars: sight lines are short and cover is everywhere, which
-    // favours the player's dodge and hurts the long-range flanker.
-    obstacles: [
-      { x: 250, y: 170, w: 56, h: 56 },
-      { x: 654, y: 170, w: 56, h: 56 },
-      { x: 250, y: 374, w: 56, h: 56 },
-      { x: 654, y: 374, w: 56, h: 56 },
-      { x: 452, y: 128, w: 56, h: 56 },
-      { x: 452, y: 416, w: 56, h: 56 }
+    accent: "rgba(150, 130, 190, 0.4)",
+    accentSoft: "rgba(197, 160, 255, 0.1)",
+    quadrant: [
+      "...............",
+      "....##....#....",
+      "..........#....",
+      "..#......#.....",
+      "..#.oo.........",
+      "....oo....##...",
+      "..........##...",
+      ".....#....#....",
+      "..c..#.........",
+      "........#......",
+      "..............."
     ]
-  },
-  diamond: {
-    name: "DIAMOND",
-    blurb: "A rotated centre block with four open corners. Fast rotations and easy flanking, little true cover.",
-    openness: 0.7,
-    accent: "rgba(120, 165, 150, 0.5)",
-    accentSoft: "rgba(128, 232, 196, 0.12)",
-    // A stepped diamond around the middle: the centre is a strong position, and
-    // the steps break every long diagonal in the arena.
-    obstacles: [
-      { x: 452, y: 150, w: 56, h: 52 },
-      { x: 452, y: 398, w: 56, h: 52 },
-      { x: 292, y: 274, w: 56, h: 52 },
-      { x: 612, y: 274, w: 56, h: 52 },
-      { x: 392, y: 246, w: 40, h: 40 },
-      { x: 528, y: 246, w: 40, h: 40 }
-    ]
-  }
+  })
 };
 
 /**
@@ -119,16 +322,34 @@ export function layoutRecordForSeed(seed: number): ArenaLayout {
 
 /** The layout a seed plays in. Deterministic, and stable across versions. */
 export function layoutForSeed(seed: number): ArenaLayoutId {
-  const order = ARENA_ORDER;
   // A cheap avalanche so neighbouring seeds do not land on the same layout.
   const mixed = (Math.imul(seed ^ 0x9e3779b9, 0x85ebca6b) >>> 0) ^ 0x27d4eb2f;
-  return order[(mixed >>> 3) % order.length];
+  return ARENA_ORDER[(mixed >>> 3) % ARENA_ORDER.length];
 }
 
 /** Picker order for the arena sheet, so the UI never leans on object key order. */
-export const ARENA_ORDER: ArenaLayoutId[] = ["quadrant", "lanes", "pillars", "diamond"];
+export const ARENA_ORDER: ArenaLayoutId[] = ["foundry", "crossroads", "gardens", "mine", "plaza", "boneyard"];
 
-export const OBSTACLES: Rect[] = ARENA_LAYOUTS.quadrant.obstacles;
+/** The layout a set of blocks came from, by identity. Null for hand-made lists. */
+export function arenaIdForObstacles(obstacles: readonly Rect[]): ArenaLayoutId | null {
+  for (const id of ARENA_ORDER) {
+    if (ARENA_LAYOUTS[id].obstacles === obstacles) return id;
+  }
+  return null;
+}
+
+/** The arena a world uses before a seed names one. */
+export const DEFAULT_ARENA: ArenaLayoutId = "foundry";
+
+/**
+ * The fixed geometry the pure geometry helpers default to.
+ *
+ * Every runtime call hands in the world's own block list, so this default only
+ * exists for tests and one-off probes - and it is the training range on purpose,
+ * because that is the arena whose coordinates the geometry expectations were
+ * written against. Playable arenas are picked per seed from {@link ARENA_ORDER}.
+ */
+export const OBSTACLES: ArenaBlock[] = ARENA_LAYOUTS.proving.obstacles;
 
 export const clampToArena = (value: number, radius: number, limit: number): number =>
   Math.max(radius + WALL_INSET, Math.min(limit - radius - WALL_INSET, value));

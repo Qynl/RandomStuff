@@ -85,8 +85,8 @@ describe("class kit visuals", () => {
     restoreResizeObserver = installResizeObserver();
     game = new ArenaGame({ canvas, onSnapshot: () => undefined, onFeed: () => undefined, onRunEnd: () => undefined });
     game.beginRun("class-visuals");
-    // Hand-placed coordinates are written against the quadrant geometry.
-    pinLayout(game.activeWorld, "quadrant");
+    // Hand-placed coordinates are written against the training range geometry.
+    pinLayout(game.activeWorld, "proving");
     frames.advance(2);
   });
 

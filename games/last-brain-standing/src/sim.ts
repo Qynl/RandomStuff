@@ -4,6 +4,7 @@ import {
   botKeepsTracking,
   SIGHT_SETTLE_RATE,
   SIGHT_START_RANGE,
+  sightSweepFor,
   SIGHT_TRACK_RATE,
   telegraphScaleFor,
   diveSpeedScale,
@@ -31,10 +32,14 @@ import {
   rotateToward,
   windupAimPoint,
   windupDuration,
-  windupTurnRate
+  windupTurnRate,
+  tracksTargetAlways,
+  TARGET_TRACK_RATE,
+  windupDrainRate
 } from "./ai";
 import {
   ARENA_LAYOUTS,
+  DEFAULT_ARENA,
   firstBlockingFraction,
   findSpawnPositions,
   layoutForSeed,
@@ -42,7 +47,8 @@ import {
   segmentBlocked,
   segmentHitsCircle,
   sweepMovement,
-  WORLD
+  WORLD,
+  type ArenaLayoutId
 } from "./arena";
 import {
   BOT_RADIUS,
@@ -92,6 +98,15 @@ export interface PlayerState {
   phaseTime: number;
   /** Seconds this operative has been standing still: the Marksman's focus bank. */
   focusTime: number;
+  /**
+   * Seconds this operative is still lit up after firing from cover.
+   *
+   * Firing from a bush gives you away: the muzzle flash leaves you visible to
+   * everything for a moment, so cover is a place to reposition from rather than
+   * a place to shoot from with impunity. Zero means fully hidden while inside a
+   * bush, which is the state the wave AI checks.
+   */
+  revealTime: number;
 }
 
 export interface SimInput {
@@ -120,8 +135,14 @@ export interface World {
    * so a run plays in one fixed layout from start to finish.
    */
   obstacles: Rect[];
+  /** Which authored arena this run is playing in. */
+  arena: ArenaLayoutId;
   /** Human-readable name of the current layout, for the HUD. */
   arenaName: string;
+  /** Bushes in this arena: concealment that blocks nothing. */
+  bushes: Rect[];
+  /** Shallow water in this arena: slow to wade, no cover at all. */
+  water: Rect[];
   /** Primary weapon this run is played with. */
   loadout: Loadout;
   difficulty: DifficultyId;
@@ -184,8 +205,11 @@ export function createWorld(options: CreateWorldOptions = {}): World {
   const seedValue = options.seed ?? createRandomSeed();
   const world: World = {
     seed: 1,
-    obstacles: ARENA_LAYOUTS.quadrant.obstacles,
-    arenaName: ARENA_LAYOUTS.quadrant.name,
+    obstacles: ARENA_LAYOUTS[DEFAULT_ARENA].obstacles,
+    arena: DEFAULT_ARENA,
+    arenaName: ARENA_LAYOUTS[DEFAULT_ARENA].name,
+    bushes: ARENA_LAYOUTS[DEFAULT_ARENA].bushes,
+    water: ARENA_LAYOUTS[DEFAULT_ARENA].water,
     loadout: LOADOUTS.vanguard,
     difficulty: options.difficulty ?? DEFAULT_DIFFICULTY,
     rng: createRng(seedValue),
@@ -237,7 +261,8 @@ function createPlayer(loadout: Loadout): PlayerState {
     hitFlash: 0,
     lastHitDirection: { x: 0, y: 0 },
     phaseTime: 0,
-    focusTime: 0
+    focusTime: 0,
+    revealTime: 0
   };
 }
 
@@ -260,15 +285,55 @@ export function emptyStats(): RunStats {
 /** Resets a world in place for a fresh run, keeping object identity for React refs. */
 /** How open the world's current layout is, for behaviour that adapts to cover. */
 function opennessOf(world: World): number {
-  const layout = Object.values(ARENA_LAYOUTS).find((entry) => entry.obstacles === world.obstacles);
-  return layout?.openness ?? 1;
+  return ARENA_LAYOUTS[world.arena]?.openness ?? 1;
 }
 
 /** Points a world at the layout its seed names, and keeps the HUD name in sync. */
 function applyArenaLayoutForSeed(world: World): void {
   const layoutId = layoutForSeed(world.seed);
-  world.obstacles = ARENA_LAYOUTS[layoutId].obstacles;
-  world.arenaName = ARENA_LAYOUTS[layoutId].name;
+  const layout = ARENA_LAYOUTS[layoutId];
+  world.arena = layoutId;
+  world.obstacles = layout.obstacles;
+  world.bushes = layout.bushes;
+  world.water = layout.water;
+  world.arenaName = layout.name;
+}
+
+/** True when a point sits inside one of the given rects. */
+export function pointInRects(point: Vec2, rects: Rect[]): boolean {
+  for (const rect of rects) {
+    if (point.x > rect.x && point.x < rect.x + rect.w && point.y > rect.y && point.y < rect.y + rect.h) return true;
+  }
+  return false;
+}
+
+/**
+ * How far a hostile has to be before a bush hides the player completely.
+ *
+ * Inside this range the hostile is close enough to hear them, so a bush is not a
+ * get-out-of-jail card: it buys the moment it takes to walk out of the line, not
+ * a free escape from something already on top of you.
+ */
+export const BUSH_HIDE_RANGE = 170;
+
+/** Wading speed while standing in shallow water. Both sides get the same deal. */
+export const WATER_SPEED_SCALE = 0.78;
+
+/** How long firing leaves you lit up for. Shooting from cover is a real choice. */
+export const REVEAL_AFTER_FIRING = 1.15;
+
+/**
+ * Whether the player is hidden from a hostile right now.
+ *
+ * A bush hides an operative who is standing in it and has not given themselves
+ * away - unless the hostile is close enough to hear them.
+ */
+export function isPlayerHidden(world: World, observer: Vec2): boolean {
+  const player = world.player;
+  if (player.phaseTime > 0) return true;
+  if (player.revealTime > 0) return false;
+  if (!pointInRects(player.position, world.bushes)) return false;
+  return distance(observer, player.position) > BUSH_HIDE_RANGE;
 }
 
 /**
@@ -399,6 +464,7 @@ function updatePlayer(world: World, input: SimInput, dt: number): void {
   player.dashTimer = Math.max(0, player.dashTimer - dt);
   player.dashBuffer = Math.max(0, player.dashBuffer - dt);
   player.phaseTime = Math.max(0, player.phaseTime - dt);
+  player.revealTime = Math.max(0, player.revealTime - dt);
 
   const inputMagnitude = Math.hypot(input.move.x, input.move.y);
   const move = normalize(input.move);
@@ -412,7 +478,8 @@ function updatePlayer(world: World, input: SimInput, dt: number): void {
   if (inputMagnitude < 0.15) player.focusTime += dt;
   else player.focusTime = 0;
 
-  const speed = PLAYER_SPEED * world.loadout.speedScale * Math.min(1, inputMagnitude);
+  const wading = pointInRects(player.position, world.water) ? WATER_SPEED_SCALE : 1;
+  const speed = PLAYER_SPEED * world.loadout.speedScale * wading * Math.min(1, inputMagnitude);
   const previous = { ...player.position };
   const movement = { x: move.x * speed * dt, y: move.y * speed * dt };
   player.position = sweepMovement(player.position, movement, PLAYER_RADIUS, 6, world.obstacles).position;
@@ -592,6 +659,7 @@ function firePlayerBullet(world: World, input: SimInput): void {
       owner: "player"
     });
     world.stats.shotsFired += 1;
+    player.revealTime = Math.max(player.revealTime, REVEAL_AFTER_FIRING);
     world.shake = Math.max(world.shake, weapon.recoil);
     world.events.push({
       type: "shell-launched",
@@ -637,6 +705,7 @@ function firePlayerBullet(world: World, input: SimInput): void {
     });
     world.stats.shotsFired += 1;
   }
+  player.revealTime = Math.max(player.revealTime, REVEAL_AFTER_FIRING);
   world.shake = Math.max(world.shake, weapon.recoil + (focused ? 2.4 : 0));
   if (focused) {
     world.events.push({ type: "player-focus", position: { ...player.position }, direction });
@@ -662,8 +731,9 @@ function updateBots(world: World, dt: number): void {
     bot.detourTime = Math.max(0, bot.detourTime - dt);
     const profile = BOT_PROFILES[bot.kind];
     const range = distance(bot.position, player.position);
-    // A Ghost mid-phase is not there as far as hostile targeting is concerned.
-    const seesPlayer = player.phaseTime <= 0 && !segmentBlocked(bot.position, player.position, world.obstacles);
+    // A Ghost mid-phase is not there as far as hostile targeting is concerned,
+    // and neither is anyone lying in a bush with hostiles still far away.
+    const seesPlayer = !isPlayerHidden(world, bot.position) && !segmentBlocked(bot.position, player.position, world.obstacles);
     bot.blindTime = seesPlayer ? 0 : bot.blindTime + dt;
 
     const allies = collectAllies(world, bot);
@@ -781,7 +851,7 @@ function updateBots(world: World, dt: number): void {
       pressureSpeedScale(world.pressure) *
       plant *
       (burning ? BURN_SLOW : 1);
-    const speed = profile.speed * plan.speedMultiplier * speedScale;
+    const speed = profile.speed * plan.speedMultiplier * speedScale * (pointInRects(bot.position, world.water) ? WATER_SPEED_SCALE : 1);
     const steered = steerSafely(world, bot, decision.direction, Math.max(30, speed * 0.34));
     const previous = { ...bot.position };
     const swept = sweepMovement(bot.position, { x: steered.x * speed * dt, y: steered.y * speed * dt }, BOT_RADIUS, 5, world.obstacles);
@@ -809,7 +879,17 @@ function updateBots(world: World, dt: number): void {
       bot.strafeSign *= -1;
       bot.strafeLock = STRAFE_HOLD;
     }
-    if (!windingUp) bot.facing = shortestAngleLerp(bot.facing, Math.atan2(steered.y, steered.x), Math.min(1, dt * 6));
+    if (!windingUp) {
+      // A profile that keeps its glass on you steers its whole body at the
+      // player between shots, so its silhouette points at whoever it is about
+      // to shoot rather than at wherever it happens to be driving. Everything
+      // else - and every other profile - faces its own heading.
+      const watching = tracksTargetAlways(bot.kind) && seesPlayer;
+      const desired = watching
+        ? Math.atan2(player.position.y - bot.position.y, player.position.x - bot.position.x)
+        : Math.atan2(steered.y, steered.x);
+      bot.facing = shortestAngleLerp(bot.facing, desired, Math.min(1, dt * (watching ? TARGET_TRACK_RATE : 6)));
+    }
 
     if (bot.spawnGuard > 0) continue;
     // Body contact: the hostile body-checks you, both actors bounce apart, and
@@ -852,13 +932,17 @@ function beginAcquire(world: World, bot: AgentState, duration: number): void {
   const scaled = duration * preset(world).windupScale;
   bot.acquire = scaled;
   bot.acquireTotal = scaled;
-  // The sight does not appear on the player: it appears out along the barrel,
-  // where the rifle happens to be pointing, and then slides across the arena
-  // onto them. A player already in the line gets a shorter warning than one off
-  // to the side, and either way the swing is visible.
+  // The sight does not open on the player: it opens beside them - out at the
+  // range they are standing, swung off by a per-unit angle - and then sweeps
+  // across onto them. A player the rifle happens to be pointing at has the
+  // shortest swing to sit through, one well off the line the longest, and the
+  // reticle is a warning the player can act on rather than a sentence.
+  const toPlayer = Math.atan2(world.player.position.y - bot.position.y, world.player.position.x - bot.position.x);
+  const opening = toPlayer + sightSweepFor(bot.id);
+  const reach = Math.max(120, Math.min(SIGHT_START_RANGE, distance(bot.position, world.player.position)));
   bot.sight = clampToArena({
-    x: bot.position.x + Math.cos(bot.facing) * SIGHT_START_RANGE,
-    y: bot.position.y + Math.sin(bot.facing) * SIGHT_START_RANGE
+    x: bot.position.x + Math.cos(opening) * reach,
+    y: bot.position.y + Math.sin(opening) * reach
   });
   bot.aimSettle = 0;
   world.events.push({
@@ -1044,7 +1128,13 @@ function updateWindup(world: World, bot: AgentState, dt: number, seesPlayer: boo
     bot.facing = Math.atan2(bot.sight.y - bot.position.y, bot.sight.x - bot.position.x);
   }
   if (aimFor(bot.kind).tell === "sight") bot.aimSettle = progress < aimFor(bot.kind).lockAt ? progress : 1;
-  bot.windup -= dt;
+  // A profile that refuses to fire wide bleeds its wind-up slowly while the
+  // barrel is still coming round, so the shot always leaves down a settled line.
+  // Its patience bounds the wait, so a target it cannot line up is still
+  // answered rather than held for ever.
+  const aimError = Math.abs(shortestAngleDelta(bot.facing, Math.atan2(aimPoint.y - bot.position.y, aimPoint.x - bot.position.x)));
+  const drain = windupDrainRate(bot.kind, aimError, bot.windupDuration - bot.windup, bot.windupDuration);
+  bot.windup -= dt * drain;
   if (bot.windup > 0) return;
 
   bot.windup = 0;
@@ -1848,4 +1938,9 @@ export function predictedPlayerPoint(world: World, botPosition: Vec2, bulletSpee
 /** Shortest-path angle lerp, kept here so the math is testable in one place. */
 export function shortestAngleLerp(from: number, to: number, t: number): number {
   return from + normalizeAngle(to - from) * Math.max(0, Math.min(1, t));
+}
+
+/** Signed shortest turn from one heading to another, in radians. */
+export function shortestAngleDelta(from: number, to: number): number {
+  return normalizeAngle(to - from);
 }

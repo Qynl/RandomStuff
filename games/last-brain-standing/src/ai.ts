@@ -622,7 +622,7 @@ export function evaluateBotFire(
   const hasLineOfSight = options.hasLineOfSight ?? true;
   const blindTime = options.blindTime ?? 0;
   const fireScale = options.difficultyFireScale ?? 1;
-  const maxRange = kind === "hunter" ? 470 : kind === "flanker" ? 430 : 470;
+  const maxRange = kind === "sniper" ? 520 : kind === "hunter" ? 470 : kind === "flanker" ? 430 : 470;
   if (cooldown > 0 || range > maxRange || !hasLineOfSight || blindTime > 0.35) return { shouldFire: false, confidence: 0 };
 
   if (kind === "hunter") {
@@ -631,6 +631,15 @@ export function evaluateBotFire(
   if (kind === "flanker") {
     const aligned = range < 400 * fireScale;
     return { shouldFire: aligned, confidence: clamp01(1.05 - range / 420) };
+  }
+  if (kind === "sniper") {
+    // A marksman takes the long line whenever it has one: it does not wait for
+    // the player to look predictable the way the Mirror does. Its warning is not
+    // a tell in its habits, it is the sight itself crawling onto you, so the only
+    // question is whether it can settle before you move. The ceiling sits above
+    // the 470 it likes to hold, so the stance it is steering for is a stance it
+    // can actually shoot from.
+    return { shouldFire: true, confidence: clamp01(1.2 - range / 560) };
   }
   // The Mirror only commits while the player is predictable or standing still.
   const habitual = detectMovementHabit(telemetry.recentDirections).strength;
@@ -660,6 +669,67 @@ export function windupDuration(kind: AgentState["kind"], difficultyScale: number
 export function windupTurnRate(kind: AgentState["kind"], difficultyScale: number): number {
   const base = kind === "hunter" ? 2.6 : kind === "flanker" ? 2.1 : 2.35;
   return base / Math.max(0.4, difficultyScale);
+}
+
+/**
+ * Profiles that never take their glass off you.
+ *
+ * Most hostiles face the way they are driving and only swing onto you when they
+ * decide to shoot. The Marksman is an emplacement: its rail stays lined up on
+ * the player between shots as well, so the long low silhouette always points at
+ * whoever it is about to shoot, and the player can read the threat from the
+ * shape alone. Turning its whole body rather than just its barrel also makes it
+ * slow to come round, which is the counterplay: a hard sidestep is a real dodge.
+ */
+export function tracksTargetAlways(kind: AgentState["kind"]): boolean {
+  return kind === "sniper";
+}
+
+/** How fast that continuous track comes round, in radians per second. */
+export const TARGET_TRACK_RATE = 3.35;
+
+/**
+ * Where a body-to-target aim counts as settled, in radians. Under about three
+ * degrees the deviation is invisible at the ranges these units fight at, so a
+ * shot released inside it reads as pointed at the player.
+ */
+export const AIM_SETTLED_ERROR = 0.06;
+
+/**
+ * How much of its wind-up a profile that refuses to fire wide is allowed to
+ * bleed while it is still coming round, as a fraction of the wind-up it was
+ * granted. Bounded on purpose: a target it could never line up must still be
+ * answered rather than held for ever.
+ */
+export const AIM_HOLD_PATIENCE = 1.9;
+
+/** Drain rate applied to a wind-up being held while the aim is off. */
+export const AIM_HOLD_RATE = 0.3;
+
+/**
+ * Does this profile hold its shot rather than fire while still slewing?
+ *
+ * Only the Marksman: it is the one whose fantasy is the settled shot, and it is
+ * the one with a sight the player can watch come to rest.
+ */
+export function holdsFireWhileSlewing(kind: AgentState["kind"]): boolean {
+  return kind === "sniper";
+}
+
+/**
+ * How much of a wind-up drains this frame. One means "not held"; a smaller
+ * number is a profile that is waiting for its barrel to finish coming round.
+ */
+export function windupDrainRate(
+  kind: AgentState["kind"],
+  aimError: number,
+  elapsed: number,
+  granted: number
+): number {
+  if (!holdsFireWhileSlewing(kind)) return 1;
+  if (aimError <= AIM_SETTLED_ERROR) return 1;
+  if (granted > 0 && elapsed >= granted * AIM_HOLD_PATIENCE) return 1;
+  return AIM_HOLD_RATE;
 }
 
 /**
