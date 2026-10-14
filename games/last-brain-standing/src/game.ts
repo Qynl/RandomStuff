@@ -125,7 +125,7 @@ export class ArenaGame {
     this.lastFrame = now;
     this.update(dt);
     this.render();
-    this.frameId = requestAnimationFrame(this.loop);
+    if (this.running && !this.paused) this.frameId = requestAnimationFrame(this.loop);
   };
 
   private update(dt: number): void {
