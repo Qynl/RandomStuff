@@ -97,7 +97,7 @@ window, the operative, hostiles (except the ones in cover) and any supply on the
 | Terrain | Blocks movement | Blocks shots | What it does |
 |---|---|---|---|
 | Walls | yes | yes | Permanent. The map is the map. |
-| Crates | yes | yes | 60 hit points, and only the operative's rounds take them apart. A broken crate opens the lane it was closing and leaves a supply: a medkit (26 health) or a dash charge. |
+| Crates | yes | yes | 60 hit points, and only the operative's rounds take them apart. A broken crate opens the lane it was closing and leaves a supply: a medkit (26 health) or a dash charge. The Sapper's lob is the shortcut: it flies over the cover in the way and cracks the crates it lands among, so the class that cannot shoot past a crate can open one instead. |
 | Hedges | no | no | Hide whoever stands inside. Hostile sight cannot see into cover until it is within 170 units, and firing from a hedge gives you away for 1.15s. The HUD reads CONCEALED or EXPOSED. |
 | Water | no | no | Wading costs 22% of your speed, and hides nothing. |
 
@@ -135,7 +135,7 @@ Measured with the scripted autoplay policy over 24 seeds per difficulty (`tests/
 | STANDARD | 17/24 | 23.1 | 4.4 | 69 | 194 | 0 |
 | VETERAN | 8/24 | 20.5 | 3.7 | 125 | 161 | 0 |
 
-The same harness flies **every class over the same 24 seeds**, so a class cannot quietly become unplayable (`VANGUARD 17/24 · SAPPER 20/24 · MARKSMAN 17/24 · BREACHER 13/24 · GHOST 13/24 · CINDER 9/24`, each with zero fairness issues). The policy reacts to telegraphs perfectly, so it is a much stronger player than a first-timer: treat these as ordering and sanity figures, not a human win rate. Best score and best eliminations are stored per difficulty.
+The same harness flies **every class over the same 24 seeds**, so a class cannot quietly become unplayable (`VANGUARD 17/24 · SAPPER 22/24 · MARKSMAN 17/24 · BREACHER 13/24 · GHOST 13/24 · CINDER 9/24`, each with zero fairness issues). The policy reacts to telegraphs perfectly, so it is a much stronger player than a first-timer: treat these as ordering and sanity figures, not a human win rate. Best score and best eliminations are stored per difficulty.
 
 ## Look
 
@@ -161,7 +161,7 @@ You pick a class before a run, and it changes how the fight is played: a differe
 | **MARKSMAN** | RAILGUN | 30 damage, pierces 2, 0.7 s | 86 HP, ×0.96 | 132 u / 3.0 s | **FOCUS** — stand still 0.7 s: next shot +60 % and +2 pierce |
 | **GHOST** | BURST CARBINE | 3 × 6 damage, 0.34 s | 94 HP, ×1.12 | 126 u / 1.7 s | **PHASE** — the dash blanks hostile aim for 0.34 s; wind-ups in flight are cancelled |
 | **CINDER** | FLAME PROJECTOR | 5.5 damage, pierces 3, 0.06 s | 126 HP, ×0.97 | 124 u / 2.0 s | **IGNITE** — burning hostiles take 5/s and move 22 % slower for 3 s |
-| **SAPPER** | ARC LOBBER | 30 damage in an 84-unit burst, 0.8 s | 106 HP, ×1.00 | 118 u / 2.2 s | **ARC FIRE** — lob a shell over cover; it lands where the reticle is, 0.6 s later |
+| **SAPPER** | ARC LOBBER | 30 damage in an 84-unit burst, 0.8 s | 106 HP, ×1.00 | 118 u / 2.2 s | **ARC FIRE** — lob a shell over cover; it lands where the reticle is, 0.6 s later, and cracks the crates it lands among |
 
 Every class is visible while you play, not just in the picker: each has its own armour paint, its own weapon drawn in the operative's hands, and a kit readout in the run panel (focus charging → ready, phase seconds remaining, and a one-line reminder for the rest). On the canvas the marksman banks focus into a brass gauge that closes into a bracket, the ghost turns into an outline with afterimages, burning hostiles sprout flame tongues and a scorched ring, staggered hostiles wear amber ticks, and the sapper's own shell paints the radius it is going to clear.
 
