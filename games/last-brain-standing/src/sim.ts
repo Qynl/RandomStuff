@@ -357,16 +357,14 @@ const FOCUS_TIME = 0.7;
 const FOCUS_DAMAGE_SCALE = 1.6;
 /** How many extra hostiles a focused round passes through. */
 const FOCUS_PIERCE = 2;
+/** Shortest lob a Sapper can make: the shell still has to arc. */
+const SHELL_MIN_RANGE = 90;
 /** Seconds a Cinder's flames keep burning after they land. */
-const BURN_DURATION = 2.5;
+const BURN_DURATION = 3;
 /** Damage per second while alight. */
-const BURN_DPS = 3;
+const BURN_DPS = 5;
 /** How much slower a burning hostile moves. */
-const BURN_SLOW = 0.85;
-// The Sapper's lob.
-const SAPPER_RANGE = 420;
-const SAPPER_FLIGHT = 0.75;
-const SAPPER_RADIUS = 74;
+const BURN_SLOW = 0.78;
 
 /**
  * Publishes what the Mirror could exploit right now. The HUD turns this into
@@ -420,7 +418,7 @@ function updatePlayer(world: World, input: SimInput, dt: number): void {
   if (input.dash) player.dashBuffer = DASH_BUFFER;
   if (player.dashBuffer > 0 && player.dashCooldown <= 0) tryDash(world);
 
-  if (input.firing && player.fireCooldown <= 0) firePlayerBullet(world);
+  if (input.firing && player.fireCooldown <= 0) firePlayerBullet(world, input);
 }
 
 function updateTelemetry(world: World, move: Vec2, dt: number): void {
@@ -545,7 +543,7 @@ export function selectDashDirection(world: World): Vec2 {
   return normalize(world.player.aimDirection);
 }
 
-function firePlayerBullet(world: World): void {
+function firePlayerBullet(world: World, input: SimInput): void {
   const player = world.player;
   const weapon = world.loadout;
   const direction = normalize(player.aimDirection);
@@ -555,17 +553,20 @@ function firePlayerBullet(world: World): void {
   if (world.telemetry.recentShots.length > TELEMETRY_SHOT_SAMPLES) world.telemetry.recentShots.shift();
 
   if (weapon.trait === "arc") {
-    // The Sapper lobs: the round is not aimed at a hostile, it is aimed at a
-    // patch of floor, and it clears anything in between.
-    const range = Math.min(SAPPER_RANGE, 420);
-    const target = { x: player.position.x + direction.x * range, y: player.position.y + direction.y * range };
+    // The Sapper lobs: the round is aimed at a patch of floor and clears
+    // anything in between. It lands where the reticle is, so a lob at a hostile
+    // standing twenty metres away explodes there rather than sailing past it,
+    // and the class's maximum range is the only clamp.
+    const cursor = Math.hypot(input.aim.x - player.position.x, input.aim.y - player.position.y);
+    const reach = Math.min(weapon.shellRange ?? 420, Math.max(SHELL_MIN_RANGE, cursor));
+    const target = { x: player.position.x + direction.x * reach, y: player.position.y + direction.y * reach };
     world.shells.push({
       position: { ...player.position },
       from: { ...player.position },
       target,
-      flight: SAPPER_FLIGHT,
-      totalFlight: SAPPER_FLIGHT,
-      radius: SAPPER_RADIUS,
+      flight: weapon.shellFlight ?? 0.75,
+      totalFlight: weapon.shellFlight ?? 0.75,
+      radius: weapon.shellRadius ?? 74,
       damage: weapon.damage,
       kind: "mortar",
       botId: -1,
@@ -573,7 +574,15 @@ function firePlayerBullet(world: World): void {
     });
     world.stats.shotsFired += 1;
     world.shake = Math.max(world.shake, weapon.recoil);
-    world.events.push({ type: "shell-launched", botId: -1, kind: "mortar", from: { ...player.position }, target, flight: SAPPER_FLIGHT, radius: SAPPER_RADIUS });
+    world.events.push({
+      type: "shell-launched",
+      botId: -1,
+      kind: "mortar",
+      from: { ...player.position },
+      target,
+      flight: weapon.shellFlight ?? 0.75,
+      radius: weapon.shellRadius ?? 74
+    });
     return;
   }
 

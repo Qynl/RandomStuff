@@ -3,6 +3,7 @@ import { autoplay, type AutoplayResult } from "./helpers/autoplay";
 import { accuracyPercent, computeScore } from "../src/scoring";
 import { stepWorld, createWorld, emptyInput } from "../src/sim";
 import { getWavePlan } from "../src/progression";
+import { LOADOUT_ORDER, LOADOUTS } from "../src/loadouts";
 import type { DifficultyId } from "../src/types";
 
 // 24 seeds per difficulty. The first 12 are the fast smoke sample; the rest make
@@ -158,6 +159,56 @@ describe("balance sweep", () => {
     }
     expect(standard.avgScore).toBeGreaterThan(0);
   });
+
+  it("keeps every class viable on standard, with no class left behind", () => {
+    // The point of six classes is that any of them can carry a run. Each is
+    // flown over the same 12 seeds by the same scripted policy, so the only
+    // thing changing between the numbers is the class itself.
+    // The same 24 seeds the difficulty sweep uses, so a class number is not a
+    // coin flip on one seed.
+    const classSeeds = SEEDS;
+    const lines: string[] = [];
+    const rates: number[] = [];
+    for (const id of LOADOUT_ORDER) {
+      const runs = classSeeds.map((seed) => autoplay({ seed, difficulty: "standard", loadout: id, maxSeconds: 200 }));
+      const wins = runs.filter((run) => run.victory).length;
+      const rate = wins / runs.length;
+      // Every class has to be able to clear a run: a roster where one pick
+      // cannot win is not a roster.
+      expect(wins).toBeGreaterThanOrEqual(2);
+      const issues = runs.reduce(
+        (sum, run) =>
+          sum +
+          run.fairness.unexplainedHits +
+          run.fairness.closeSpawns +
+          run.fairness.botsInsideGeometry +
+          run.fairness.playerInsideGeometry +
+          run.fairness.shotsThroughWalls +
+          run.fairness.untelegraphedShots,
+        0
+      );
+      const kills = runs.reduce((sum, run) => sum + run.stats.kills, 0) / runs.length;
+      const dealt = runs.reduce((sum, run) => sum + run.stats.damageDealt, 0) / runs.length;
+      const taken = runs.reduce((sum, run) => sum + run.stats.damageTaken, 0) / runs.length;
+      const waves = runs.reduce((sum, run) => sum + run.stats.wavesCleared, 0) / runs.length;
+      lines.push(
+        `${LOADOUTS[id].name.padEnd(9)} wins ${String(wins).padStart(2)}/${runs.length}` +
+          ` · kills ${kills.toFixed(1)} · waves ${waves.toFixed(1)}` +
+          ` · out ${dealt.toFixed(0)} · in ${taken.toFixed(0)} · issues ${issues}`
+      );
+      rates.push(rate);
+      expect(issues).toBe(0);
+    }
+    // Printed so the sweep doubles as a class report.
+    console.log(lines.join("\n"));
+    for (const rate of rates) {
+      // No class is a free win either.
+      expect(rate).toBeLessThan(0.95);
+    }
+    // The spread between the best and worst class has to stay small enough that
+    // the roster reads as a choice rather than a tier list.
+    expect(Math.max(...rates) - Math.min(...rates)).toBeLessThan(0.7);
+  }, 60_000);
 
   it("simulates a full late wave fast enough for the fixed 120 Hz step", () => {
     // The real cost is a crowded arena: six hostiles on the floor at once with

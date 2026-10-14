@@ -49,6 +49,12 @@ export interface Loadout {
   /** Mobility: a dash, or a shoulder charge that knocks hostiles down. */
   dashKind: DashKind;
   /** The signature rule, in one line, for the picker. */
+  /** Lobbed classes only: seconds of flight before the shell lands. */
+  shellFlight?: number;
+  /** Lobbed classes only: radius of the burst, in world units. */
+  shellRadius?: number;
+  /** Lobbed classes only: how far the shell can be lobbed, in units. */
+  shellRange?: number;
   traitName: string;
   traitRule: string;
   trait: ClassTrait;
@@ -151,23 +157,24 @@ export const LOADOUTS: Record<LoadoutId, Loadout> = {
     id: "cinder",
     name: "CINDER",
     kind: "FLAME PROJECTOR",
-    tagline: "A short cone of fire. Everything it touches keeps burning.",
+    tagline: "A short cone of fire that pours through a crowd. Everything it touches keeps burning.",
     counter: "Get close behind cover, light them up, then back out and let the burn work.",
     shots: 1,
-    spread: 0.2,
-    damage: 4.5,
+    spread: 0.15,
+    damage: 5.5,
     fireInterval: 0.06,
-    bulletSpeed: 300,
-    bulletLife: 0.4,
+    bulletSpeed: 320,
+    bulletLife: 0.6,
     recoil: 0.8,
-    pierce: 0,
-    maxHealth: 118,
-    speedScale: 0.94,
-    dashCooldown: 2.3,
+    // Fire is not stopped by the first body it touches: a cone lights up a line.
+    pierce: 3,
+    maxHealth: 126,
+    speedScale: 0.97,
+    dashCooldown: 2,
     dashDistance: 124,
     dashKind: "dash",
     traitName: "IGNITE",
-    traitRule: "Burning hostiles take 3/s and move 15% slower for 2.5s.",
+    traitRule: "Burning hostiles take 5/s and move 22% slower for 3s.",
     trait: "ignite"
   },
   sapper: {
@@ -178,8 +185,8 @@ export const LOADOUTS: Record<LoadoutId, Loadout> = {
     counter: "You do not need the line of sight they keep. Fire where they will be.",
     shots: 1,
     spread: 0,
-    damage: 24,
-    fireInterval: 0.95,
+    damage: 30,
+    fireInterval: 0.8,
     bulletSpeed: 260,
     bulletLife: 1,
     recoil: 4.2,
@@ -189,8 +196,11 @@ export const LOADOUTS: Record<LoadoutId, Loadout> = {
     dashCooldown: 2.2,
     dashDistance: 118,
     dashKind: "dash",
+    shellFlight: 0.6,
+    shellRadius: 84,
+    shellRange: 420,
     traitName: "ARC FIRE",
-    traitRule: "Shells clear cover: a 74-unit burst for 24, landing where you aim.",
+    traitRule: "Shells clear cover: an 84-unit burst for 30, landing where you aim.",
     trait: "arc"
   }
 };

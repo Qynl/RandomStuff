@@ -1,8 +1,9 @@
 import { normalize } from "../../src/ai";
 import { attackFor } from "../../src/signatures";
 import { pointInObstacle, segmentBlocked, WORLD } from "../../src/arena";
-import { PLAYER_BULLET_SPEED, PLAYER_RADIUS, BOT_RADIUS } from "../../src/constants";
-import { createWorld, emptyInput, stepWorld, type SimInput, type World } from "../../src/sim";
+import { PLAYER_RADIUS, BOT_RADIUS } from "../../src/constants";
+import { createWorld, emptyInput, setWorldLoadout, stepWorld, type SimInput, type World } from "../../src/sim";
+import type { LoadoutId } from "../../src/loadouts";
 import type { DifficultyId, Rect, RunStats, SimEvent } from "../../src/types";
 
 export type PlayStyle = "competent" | "reckless" | "passive";
@@ -15,6 +16,8 @@ export interface AutoplayOptions {
   standOff?: number;
   /** Simulated frame length. Defaults to 1/60 to match a normal monitor. */
   step?: number;
+  /** Operative class to fly. Defaults to the game's default class. */
+  loadout?: LoadoutId;
   maxSeconds?: number;
   /** Optional per-step probe, used by debugging tests. */
   probe?: (world: World) => void;
@@ -46,6 +49,13 @@ export interface AutoplayResult {
   events: SimEvent[];
   world: World;
 }
+
+/**
+ * Classes are all free, so a headless run is allowed to fly any of them: this
+ * career figure is high enough that no gate could ever matter, and
+ * `setWorldLoadout` ignores it anyway since the unlock system was removed.
+ */
+const gameCareerForClass = 1_000_000;
 
 const emptyFairness = (): FairnessReport => ({
   unexplainedHits: 0,
@@ -93,6 +103,12 @@ export function autoplay(options: AutoplayOptions): AutoplayResult {
   const maxSeconds = options.maxSeconds ?? 240;
   const policy = createPolicy(style, options.standOff ?? 0);
   const world = createWorld({ seed: options.seed, difficulty: options.difficulty ?? "standard" });
+  if (options.loadout) {
+    // Every class carries its own body and weapon, so the sweep has to fly the
+    // class itself rather than just renaming the default one.
+    setWorldLoadout(world, options.loadout, gameCareerForClass);
+    world.player.health = world.player.maxHealth;
+  }
   world.phase = "running";
   world.waveState = "cleared";
   world.waveTimer = 0.3;
@@ -153,14 +169,24 @@ export function autoplay(options: AutoplayOptions): AutoplayResult {
         if (!indirect && everyLaneBlocked) fairness.shotsThroughWalls += 1;
       }
       if (event.type === "player-hit") {
-        const nearestBullet = bulletsBefore.reduce((min, position) => Math.min(min, Math.hypot(position.x - world.player.position.x, position.y - world.player.position.y)), Infinity);
+        // A hit is explained when something was close to the player at either
+        // end of the frame. The second check matters: a contact hit knocks the
+        // player clear in the same step, so by the time the frame ends the
+        // hostile that just body-checked them is already a hundred units away.
+        const nearest = (points: Array<{ x: number; y: number }>, radius: number) =>
+          Math.min(
+            points.reduce((min, point) => Math.min(min, Math.hypot(point.x - playerBefore.x, point.y - playerBefore.y)), Infinity),
+            points.reduce((min, point) => Math.min(min, Math.hypot(point.x - world.player.position.x, point.y - world.player.position.y)), Infinity)
+          ) <= radius;
         // A bulwark's bash and a shard's detonation happen at arm's length, so
         // proximity is the cause: allow the melee radius, not just body contact.
-        const nearestBot = botsBefore.reduce((min, entry) => Math.min(min, Math.hypot(entry.position.x - world.player.position.x, entry.position.y - world.player.position.y)), Infinity);
         // A shell in the air over the player's head is a cause too: it is
         // telegraphed by the marked circle, not by a projectile on screen.
-        const nearestShell = shellsBefore.reduce((min, position) => Math.min(min, Math.hypot(position.x - world.player.position.x, position.y - world.player.position.y)), Infinity);
-        if (nearestBullet > 120 && nearestBot > 100 && nearestShell > 90) fairness.unexplainedHits += 1;
+        const explained =
+          nearest(bulletsBefore, 120) ||
+          nearest(botsBefore.map((entry) => entry.position), 100) ||
+          nearest(shellsBefore, 90);
+        if (!explained) fairness.unexplainedHits += 1;
       }
       if (event.type === "bot-spawned") {
         if (Math.hypot(event.position.x - world.player.position.x, event.position.y - world.player.position.y) < 200) fairness.closeSpawns += 1;
@@ -188,6 +214,11 @@ function buildInput(world: World, style: PlayStyle, standOff: number): SimInput 
   }
 
   const player = world.player.position;
+  const weapon = world.loadout;
+  // A lobbed class cannot be flown like a rifle: the shell flies for a fixed
+  // time and clears cover, so the scripted player leads by that flight and
+  // stops caring about walls. Everything else leads by its own muzzle speed.
+  const lobbed = weapon.trait === "arc";
   const live = world.bots.filter((bot) => bot.alive);
   const visible = live.filter((bot) => !segmentBlocked(player, bot.position, world.obstacles));
   const target = (visible.length > 0 ? visible : live).sort(
@@ -195,22 +226,31 @@ function buildInput(world: World, style: PlayStyle, standOff: number): SimInput 
   )[0];
 
   // Aim with a simple intercept so the scripted player is a fair stand-in for a human.
+  const leadTime = target
+    ? lobbed
+      ? weapon.shellFlight ?? 0.75
+      : Math.hypot(target.position.x - player.x, target.position.y - player.y) / Math.max(1, weapon.bulletSpeed)
+    : 0;
   const aimPoint = target
     ? {
-        x: target.position.x + target.velocity.x * (Math.hypot(target.position.x - player.x, target.position.y - player.y) / PLAYER_BULLET_SPEED),
-        y: target.position.y + target.velocity.y * (Math.hypot(target.position.x - player.x, target.position.y - player.y) / PLAYER_BULLET_SPEED)
+        x: target.position.x + target.velocity.x * leadTime,
+        y: target.position.y + target.velocity.y * leadTime
       }
     : { x: player.x, y: player.y - 100 };
 
   const aimDirection = normalize({ x: aimPoint.x - player.x, y: aimPoint.y - player.y });
   const toTarget = target ? normalize({ x: target.position.x - player.x, y: target.position.y - player.y }) : { x: 0, y: 0 };
   const aligned = aimDirection.x * toTarget.x + aimDirection.y * toTarget.y;
-  const laneClear = target ? !segmentBlocked(player, aimPoint, world.obstacles) : false;
-  const firing = Boolean(target) && laneClear && aligned > 0.985;
+  const laneClear = target ? lobbed || !segmentBlocked(player, aimPoint, world.obstacles) : false;
+  // Area weapons do not need a perfect lane, only a landed one.
+  const firing = Boolean(target) && laneClear && aligned > (lobbed ? 0.9 : 0.985);
 
-  // Movement: hold a ring around the nearest hostile, dodge telegraphed shots and bullets.
+  // Movement: hold a ring around the nearest hostile, dodge telegraphed shots
+  // and bullets. The ring is the class's own fighting range, so a shotgun or a
+  // flamethrower closes in instead of plinking from rifle distance.
   let moveDirection = { x: 0, y: 0 };
-  const ringDistance = 230 + standOff;
+  const reach = lobbed ? weapon.shellRange ?? 420 : weapon.bulletSpeed * weapon.bulletLife;
+  const ringDistance = Math.min(230, Math.max(80, reach * 0.75)) + standOff;
   if (target) {
     const range = Math.hypot(target.position.x - player.x, target.position.y - player.y);
     const radial = range > ringDistance ? 1 : range < ringDistance - 60 ? -1 : 0;
