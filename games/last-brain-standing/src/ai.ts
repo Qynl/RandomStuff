@@ -2,6 +2,7 @@ import type { AgentState, BotProfile, PlayerTelemetry, Vec2 } from "./types";
 import { BOT_RADIUS } from "./constants";
 
 export const BOT_PROFILES: Record<AgentState["kind"], BotProfile> = {
+  // ---- the first three: the ones every run opens with -----------------------
   hunter: {
     kind: "hunter",
     name: "THE HUNTER",
@@ -14,7 +15,10 @@ export const BOT_PROFILES: Record<AgentState["kind"], BotProfile> = {
     preferredRange: 215,
     maxHealth: 48,
     damage: 11,
-    bulletSpeed: 380
+    bulletSpeed: 380,
+    attack: "salvo",
+    movement: "press",
+    attackLabel: "DOUBLE SALVO"
   },
   flanker: {
     kind: "flanker",
@@ -28,7 +32,10 @@ export const BOT_PROFILES: Record<AgentState["kind"], BotProfile> = {
     preferredRange: 258,
     maxHealth: 42,
     damage: 10,
-    bulletSpeed: 360
+    bulletSpeed: 360,
+    attack: "shot",
+    movement: "orbit",
+    attackLabel: "MOVING SHOT"
   },
   mirror: {
     kind: "mirror",
@@ -42,11 +49,157 @@ export const BOT_PROFILES: Record<AgentState["kind"], BotProfile> = {
     preferredRange: 285,
     maxHealth: 56,
     damage: 12,
-    bulletSpeed: 400
+    bulletSpeed: 400,
+    attack: "copy",
+    movement: "predict",
+    attackLabel: "MIRRORED COPY"
+  },
+
+  // ---- the later roster ----------------------------------------------------
+  sniper: {
+    kind: "sniper",
+    name: "THE MARKSMAN",
+    tactic: "RANGED DENIAL",
+    signature: "A LASER-FAST SLUG ACROSS THE WHOLE ARENA · 1.5 S AIM LINE · NO CHASE",
+    counter: "BREAK THE LINE OR MOVE THE MOMENT THE AIM LINE APPEARS — IT NEVER LEADS MUCH",
+    color: "#cbb37f",
+    speed: 104,
+    fireRate: 2.05,
+    preferredRange: 470,
+    maxHealth: 38,
+    damage: 19,
+    bulletSpeed: 900,
+    attack: "beam",
+    movement: "sniper",
+    attackLabel: "RAIL SLUG"
+  },
+  pyro: {
+    kind: "pyro",
+    name: "THE CINDER",
+    tactic: "AREA DENIAL",
+    signature: "SIX-SECOND FLAME CONE · SHORT RANGE · BURNS YOU OUT OF COVER",
+    counter: "STAY OUTSIDE ARM'S REACH AND KILL IT WHILE IT SPRAYS",
+    color: "#d08a4a",
+    speed: 132,
+    fireRate: 3.4,
+    preferredRange: 96,
+    maxHealth: 62,
+    damage: 3.2,
+    bulletSpeed: 265,
+    attack: "flame",
+    movement: "brawl",
+    attackLabel: "FLAME CONE"
+  },
+  mortar: {
+    kind: "mortar",
+    name: "THE MORTAR",
+    tactic: "INDIRECT FIRE",
+    signature: "LOBS A SHELL AT WHERE YOU ARE · LANDS ON A MARKED CIRCLE 1.6 S LATER",
+    counter: "WATCH THE MARKER AND WALK OUT OF IT — IT CANNOT SHOOT WHERE YOU WILL BE",
+    color: "#a9926a",
+    speed: 108,
+    fireRate: 2.4,
+    preferredRange: 330,
+    maxHealth: 52,
+    damage: 21,
+    bulletSpeed: 150,
+    attack: "mortar",
+    movement: "pod",
+    attackLabel: "LOBBED SHELL"
+  },
+  shielder: {
+    kind: "shielder",
+    name: "THE BULWARK",
+    tactic: "ATTRITION",
+    signature: "A TOWER SHIELD THAT BLOCKS EVERYTHING IN FRONT · WALKS YOU DOWN",
+    counter: "GET BEHIND IT OR DASH PAST — THE SHIELD ONLY COVERS ONE SIDE",
+    color: "#8a97a6",
+    speed: 96,
+    fireRate: 1.5,
+    preferredRange: 120,
+    maxHealth: 68,
+    damage: 14,
+    bulletSpeed: 330,
+    attack: "shield",
+    movement: "turtle",
+    attackLabel: "SHIELD BASH"
+  },
+  splitter: {
+    kind: "splitter",
+    name: "THE SWARM CELL",
+    tactic: "NUMBER PRESSURE",
+    signature: "COMES APART INTO TWO FAST SHARDS WHEN IT DIES",
+    counter: "KILL IT EARLY AND AT RANGE, OR PLAN FOR THE TWO THAT FOLLOW",
+    color: "#8fb48c",
+    speed: 124,
+    fireRate: 1.35,
+    preferredRange: 240,
+    maxHealth: 46,
+    damage: 9,
+    bulletSpeed: 355,
+    attack: "split",
+    movement: "swarm",
+    attackLabel: "SPORE VOLLEY"
+  },
+  charger: {
+    kind: "charger",
+    name: "THE RAM",
+    tactic: "BURST PRESSURE",
+    signature: "WIND-UP THEN A 3× CHARGE ALONG A MARKED LANE · STAGGERED IF IT MISSES",
+    counter: "STEP OUT OF THE LANE AND PUNISH THE STAGGER — IT TAKES EXTRA DAMAGE",
+    color: "#c9744f",
+    speed: 128,
+    fireRate: 2.6,
+    preferredRange: 300,
+    maxHealth: 66,
+    damage: 16,
+    bulletSpeed: 340,
+    attack: "charge",
+    movement: "ram",
+    attackLabel: "CHARGE"
+  },
+  shard: {
+    kind: "shard",
+    name: "THE SHARD",
+    tactic: "KAMIKAZE",
+    signature: "TINY, FAST, AND EXPLODES ON CONTACT",
+    counter: "SHOOT IT OUT OF THE AIR — IT DIES TO A SINGLE ROUND",
+    color: "#a9c7a4",
+    speed: 196,
+    fireRate: 99,
+    preferredRange: 0,
+    maxHealth: 9,
+    damage: 11,
+    bulletSpeed: 300,
+    attack: "kamikaze",
+    movement: "kamikaze",
+    attackLabel: "CONTACT BURST"
   }
 };
 
-export const BOT_KINDS: Array<AgentState["kind"]> = ["hunter", "flanker", "mirror"];
+/** Profiles a wave may field, in the order the side panel lists them. */
+export const BOT_KINDS: Array<AgentState["kind"]> = [
+  "hunter",
+  "flanker",
+  "mirror",
+  "sniper",
+  "pyro",
+  "mortar",
+  "shielder",
+  "splitter",
+  "charger"
+];
+
+/** The small ones the swarm cell leaves behind; never spawned by a wave. */
+export const SUMMONED_KINDS: Array<AgentState["kind"]> = ["shard"];
+
+
+/** A zeroed per-profile tally. Every table that counts hostiles is built this way. */
+export function emptyKindTotals(): Record<AgentState["kind"], number> {
+  const totals = {} as Record<AgentState["kind"], number>;
+  for (const kind of [...BOT_KINDS, ...SUMMONED_KINDS]) totals[kind] = 0;
+  return totals;
+}
 
 export const distance = (a: Vec2, b: Vec2): number => Math.hypot(b.x - a.x, b.y - a.y);
 
@@ -193,6 +346,82 @@ export function chooseBotMovement(
     });
     const intent: BotDirectionResult["intent"] = range < inner ? "retreat" : range > outer ? "advance" : "flank";
     return pressedResult(base, intent, toward, bot, context);
+  }
+
+  if (bot.kind === "sniper") {
+    // Owns the long lane: backs off hard when crowded, edges sideways for a
+    // clean shot, and never chases. Getting close to a marksman is the answer.
+    const hold = profile.preferredRange * rangeScale;
+    const approach = range > hold + 120 ? 0.9 : range < hold - 110 ? -0.95 : 0.05;
+    const base = normalize({
+      x: toward.x * approach + tangent.x * 0.26,
+      y: toward.y * approach + tangent.y * 0.26
+    });
+    const intent: BotDirectionResult["intent"] = approach < 0 ? "retreat" : approach > 0.4 ? "advance" : "hold";
+    return pressedResult(base, intent, toward, bot, context);
+  }
+
+  if (bot.kind === "pyro") {
+    // Owns the short range: walks straight into your face and stays there.
+    const approach = range > 74 ? 1 : -0.2;
+    const base = normalize({
+      x: toward.x * approach + tangent.x * 0.24,
+      y: toward.y * approach + tangent.y * 0.24
+    });
+    return pressedResult(base, approach > 0 ? "advance" : "hold", toward, bot, context);
+  }
+
+  if (bot.kind === "mortar") {
+    // Owns the mid ring: content to lob from cover and drift sideways.
+    const hold = profile.preferredRange * rangeScale;
+    const approach = range > hold + 80 ? 0.8 : range < hold - 90 ? -0.7 : 0.08;
+    const base = normalize({
+      x: toward.x * approach + tangent.x * 0.42,
+      y: toward.y * approach + tangent.y * 0.42
+    });
+    const intent: BotDirectionResult["intent"] = approach < 0 ? "retreat" : approach > 0.4 ? "advance" : "hold";
+    return pressedResult(base, intent, toward, bot, context);
+  }
+
+  if (bot.kind === "shielder") {
+    // Owns the approach: straight in behind the shield, no orbiting, no fear.
+    const approach = range > 96 ? 1 : -0.15;
+    const base = normalize({
+      x: toward.x * approach + tangent.x * 0.08,
+      y: toward.y * approach + tangent.y * 0.08
+    });
+    return pressedResult(base, approach > 0 ? "advance" : "hold", toward, bot, context);
+  }
+
+  if (bot.kind === "splitter") {
+    // The swarm cell drifts in on a slow weave: it never holds a straight line,
+    // so tracking it is different from tracking a marching soldier.
+    const approach = range > 90 ? 1 : 0.1;
+    // The weave is a function of position, not identity: identical inputs give
+    // identical movement, which the determinism tests insist on.
+    const weave = Math.sin(elapsed * 2.2 + bot.position.x * 0.01) * 0.55;
+    const base = normalize({
+      x: toward.x * approach + tangent.x * weave,
+      y: toward.y * approach + tangent.y * weave
+    });
+    return pressedResult(base, "advance", toward, bot, context);
+  }
+
+  if (bot.kind === "shard") {
+    // A shard only knows the straight line between it and you.
+    const approach = range > 40 ? 1 : 0.1;
+    const base = normalize({ x: toward.x * approach, y: toward.y * approach });
+    return pressedResult(base, "advance", toward, bot, context);
+  }
+
+  if (bot.kind === "charger") {
+    // Lines up head on and holds the lane it wants to run down.
+    const approach = range > 240 ? 1 : range < 150 ? -0.75 : 0.05;
+    const base = normalize({
+      x: toward.x * approach + towardIntercept.x * 0.5,
+      y: toward.y * approach + towardIntercept.y * 0.5
+    });
+    return pressedResult(base, approach > 0.4 ? "advance" : approach < 0 ? "retreat" : "hold", toward, bot, context);
   }
 
   // Mirror: reads sustained movement habits and repeated firing lanes, then
@@ -349,7 +578,14 @@ export function detectFiringHabit(recentShots: Vec2[], window = 8): FiringHabitR
 export const WINDUP_MOVE_SCALE: Record<AgentState["kind"], number> = {
   hunter: 0.24,
   flanker: 0.72,
-  mirror: 0.44
+  mirror: 0.44,
+  sniper: 0.12,
+  pyro: 0.0,
+  mortar: 0.2,
+  shielder: 0.3,
+  splitter: 0.5,
+  charger: 0.0,
+  shard: 0.8
 };
 
 /**

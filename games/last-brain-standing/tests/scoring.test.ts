@@ -115,7 +115,7 @@ describe("run summary detail", () => {
   it("adds breakdown, difficulty best and ending rows when the runtime provides them", () => {
     const rows = buildRunSummary(stats(), computeScore(runStats), "7F3A2C", false, {
       endedBy: "hunter",
-      killsByKind: { hunter: 4, flanker: 0, mirror: 1 },
+      killsByKind: { hunter: 4, flanker: 0, mirror: 1, sniper: 0, pyro: 0, mortar: 0, shielder: 0, splitter: 0, charger: 0, shard: 0 },
       bestScoreOnDifficulty: 4200,
       isDifficultyBest: false
     });

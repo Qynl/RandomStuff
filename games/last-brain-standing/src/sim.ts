@@ -1,10 +1,13 @@
 import {
+  attackFor,
   botKeepsTracking,
   diveSpeedScale,
   FLANKER_DIVE,
   flankerHoldsFire,
   flankerShouldDive,
   platingScale,
+  shieldBlocks,
+  STUNNED_DAMAGE_SCALE,
   volleyFor,
   type VolleyRound
 } from "./signatures";
@@ -56,7 +59,7 @@ import {
 import { LOADOUTS, resolveLoadout, type Loadout } from "./loadouts";
 import { getWavePlan, MAX_WAVES, type WavePlan } from "./progression";
 import { createRandomSeed, createRng, normalizeSeed, type Rng } from "./rng";
-import type { AimMode, AgentState, Bullet, DifficultyId, PendingSpawn, PlayerTelemetry, Rect, RunStats, SimEvent, Vec2 } from "./types";
+import type { AimMode, AgentState, Bullet, DifficultyId, PendingSpawn, PlayerTelemetry, Rect, RunStats, Shell, SimEvent, Vec2 } from "./types";
 
 export type SimPhase = "standby" | "running" | "victory" | "defeat";
 export type WaveState = "idle" | "cleared" | "telegraph" | "active";
@@ -128,6 +131,8 @@ export interface World {
   pressure: number;
   /** Set once the pressure warning has been announced for this wave. */
   pressureAnnounced: boolean;
+  /** Lobbed shells currently in the air. */
+  shells: Shell[];
   telemetry: PlayerTelemetry;
   stats: RunStats;
   wave: number;
@@ -185,6 +190,7 @@ export function createWorld(options: CreateWorldOptions = {}): World {
     stallTimer: 0,
     pressure: 0,
     pressureAnnounced: false,
+    shells: [],
     telemetry: { recentDirections: [], recentShots: [], stationaryTime: 0, lastMoveDirection: { x: 0, y: 0 } },
     stats: emptyStats(),
     wave: 0,
@@ -315,6 +321,7 @@ export function stepWorld(world: World, input: SimInput, dt: number): SimEvent[]
   updatePressure(world, step);
   updateBots(world, step);
   updateBullets(world, step);
+  updateShells(world, step);
   updateSpawns(world, step);
   updateWaveState(world, step);
   return world.events;
@@ -528,17 +535,38 @@ function updateBots(world: World, dt: number): void {
       const holdsFire =
         bot.kind === "flanker" &&
         flankerHoldsFire(bot.position, player.position, collectAllies(world, bot, "flanker"), range);
-      const intent = holdsFire
-        ? { shouldFire: false, confidence: 0 }
-        : evaluateBotFire(bot.kind, range, bot.fireCooldown, world.telemetry, {
-            hasLineOfSight: seesPlayer,
-            blindTime: bot.blindTime,
-            difficultyFireScale: difficulty.fireScale
-          });
-      if (intent.shouldFire) startWindup(world, bot);
+      const attack = attackFor(bot.kind);
+      const inRange = range <= attack.range + 40;
+      const hasSight = attack.requiresSight ? seesPlayer : bot.blindTime < 1.6;
+      // A staggered hostile is a free target for a moment: it cannot act.
+      if (bot.stun <= 0) {
+        const intent = holdsFire || !inRange || !hasSight
+          ? { shouldFire: false, confidence: 0 }
+          : evaluateBotFire(bot.kind, range, bot.fireCooldown, world.telemetry, {
+              hasLineOfSight: hasSight,
+              blindTime: bot.blindTime,
+              difficultyFireScale: difficulty.fireScale
+            });
+        const wantsCharge = attack.charge !== undefined && inRange && !holdsFire;
+        if (intent.shouldFire || wantsCharge) startWindup(world, bot);
+      }
     }
 
     const windingUp = bot.windup > 0;
+    bot.stun = Math.max(0, bot.stun - dt);
+    updateSpray(world, bot, dt);
+
+    // A committed charge overrides steering entirely: it runs down the lane it
+    // marked, and if it comes up empty it staggers and is easy prey.
+    if (bot.chargeTime > 0) {
+      advanceCharge(world, bot, dt);
+      continue;
+    }
+    if (bot.stun > 0) {
+      bot.velocity = { x: 0, y: 0 };
+      continue;
+    }
+
     // The Flanker dives to close a gap instead of jogging across the arena.
     if (bot.kind === "flanker" && flankerShouldDive(range, bot.diveCooldown, windingUp, profile.preferredRange * rangeScaleForOpenness(openness))) {
       bot.diveTime = FLANKER_DIVE.duration;
@@ -618,11 +646,15 @@ function updateBots(world: World, dt: number): void {
     const gap = distance(bot.position, player.position);
     if (gap >= PLAYER_RADIUS + BOT_RADIUS + 4 || player.contactCooldown > 0 || player.invulnerability > 0) continue;
     const away = contactNormal(bot.position, player.position, world);
-    player.position = sweepMovement(player.position, { x: away.x * CONTACT_KNOCKBACK, y: away.y * CONTACT_KNOCKBACK }, PLAYER_RADIUS, 5, world.obstacles).position;
+    const detonates = attackFor(bot.kind).kamikaze === true;
+    const knockback = detonates ? CONTACT_KNOCKBACK * 1.8 : CONTACT_KNOCKBACK;
+    player.position = sweepMovement(player.position, { x: away.x * knockback, y: away.y * knockback }, PLAYER_RADIUS, 5, world.obstacles).position;
     bot.position = sweepMovement(bot.position, { x: -away.x * 16, y: -away.y * 16 }, BOT_RADIUS, 4, world.obstacles).position;
     player.contactCooldown = CONTACT_COOLDOWN;
-    world.shake = Math.max(world.shake, 7);
-    damagePlayer(world, CONTACT_DAMAGE * difficulty.damageScale, bot.position, away, bot.kind);
+    world.shake = Math.max(world.shake, detonates ? 9 : 7);
+    damagePlayer(world, (detonates ? profile.damage : CONTACT_DAMAGE) * difficulty.damageScale, bot.position, away, bot.kind);
+    // A shard spends itself on the hit.
+    if (detonates) eliminateBot(world, bot);
   }
 }
 
@@ -717,6 +749,19 @@ function updateWindup(world: World, bot: AgentState, dt: number, seesPlayer: boo
 
   bot.windup = 0;
   bot.windupDuration = 0;
+
+  // Cover is cover: a straight-lane shot is not released into a block. The
+  // marksman is exempt from nothing here either - hiding is the counterplay to
+  // every direct-fire profile, and the lane is re-checked at the last instant.
+  const attack = attackFor(bot.kind);
+  const direct = attack.rounds !== undefined || attack.slug !== undefined;
+
+  if (direct && !attack.spray && segmentBlocked(bot.position, player.position, world.obstacles)) {
+    bot.fireCooldown = Math.max(bot.fireCooldown, 0.45);
+    world.events.push({ type: "bot-windup-cancel", botId: bot.id, kind: bot.kind, position: { ...bot.position } });
+    return;
+  }
+
   startVolley(world, bot);
 }
 
@@ -725,13 +770,220 @@ function updateWindup(world: World, bot: AgentState, dt: number, seesPlayer: boo
  * two-round salvo on a short delay, the Flanker a single moving shot, and the
  * Mirror a copy of the player's own weapon geometry.
  */
+/**
+ * A telegraph just finished. What comes out is entirely the profile's business:
+ * a salvo, a copied weapon, a rail slug, a flame cone, a lobbed shell, a shield
+ * bash, a committed charge, or nothing at all until contact.
+ */
 function startVolley(world: World, bot: AgentState): void {
-  const volley = volleyFor(bot.kind, world.loadout.id);
-  for (const round of volley.rounds) fireVolleyRound(world, bot, round);
-  bot.fireCooldown =
-    BOT_PROFILES[bot.kind].fireRate /
-      Math.max(0.5, preset(world).fireScale * pressureFireScale(world.pressure)) +
-    world.rng.range(-0.08, 0.14);
+  const profile = BOT_PROFILES[bot.kind];
+  const attack = attackFor(bot.kind);
+
+  if (attack.charge) {
+    bot.chargeTime = attack.charge.duration;
+    bot.chargeDirection = { x: Math.cos(bot.facing), y: Math.sin(bot.facing) };
+    world.events.push({
+      type: "bot-charge",
+      botId: bot.id,
+      kind: bot.kind,
+      from: { ...bot.position },
+      direction: { ...bot.chargeDirection },
+      distance: attack.charge.reach
+    });
+    setCooldown(world, bot);
+    return;
+  }
+
+  if (attack.shell) {
+    const player = world.player;
+    // It aims at where you are, with a little lead: it can shoot over cover but
+    // it cannot predict a corner, so the marked circle is always survivable.
+    const target = {
+      x: player.position.x + player.velocity.x * attack.shell.lead,
+      y: player.position.y + player.velocity.y * attack.shell.lead
+    };
+    world.shells.push({
+      position: { ...bot.position },
+      from: { ...bot.position },
+      target,
+      flight: attack.shell.flight,
+      totalFlight: attack.shell.flight,
+      radius: attack.shell.radius,
+      damage: profile.damage * preset(world).damageScale,
+      kind: bot.kind,
+      botId: bot.id
+    });
+    world.events.push({
+      type: "shell-launched",
+      botId: bot.id,
+      kind: bot.kind,
+      from: { ...bot.position },
+      target,
+      flight: attack.shell.flight,
+      radius: attack.shell.radius
+    });
+    setCooldown(world, bot);
+    return;
+  }
+
+  if (attack.melee) {
+    // The bulwark's bash: a shockwave at arm's length, not a projectile.
+    const player = world.player;
+    const gap = distance(bot.position, player.position);
+    const direction = normalize({ x: player.position.x - bot.position.x, y: player.position.y - bot.position.y });
+    world.events.push({ type: "bot-fired", botId: bot.id, kind: bot.kind, position: { ...bot.position }, direction });
+    if (gap <= attack.melee.radius && player.invulnerability <= 0) {
+      player.position = sweepMovement(
+        player.position,
+        { x: direction.x * attack.melee.knockback, y: direction.y * attack.melee.knockback },
+        PLAYER_RADIUS,
+        4,
+        world.obstacles
+      ).position;
+      damagePlayer(world, profile.damage * preset(world).damageScale, bot.position, direction, bot.kind);
+    }
+    setCooldown(world, bot);
+    return;
+  }
+
+  if (attack.kamikaze) {
+    // It only knows how to explode; the contact rule does the rest.
+    setCooldown(world, bot);
+    return;
+  }
+
+  if (attack.spray) {
+    // A continuous attack: the first round leaves now, the rest tick out while
+    // the player runs for cover.
+    bot.sprayTime = attack.spray.duration;
+    bot.burstTimer = 0;
+    fireSprayRound(world, bot);
+    bot.burstTimer = attack.spray.interval;
+    setCooldown(world, bot);
+    return;
+  }
+
+  if (attack.slug) {
+    fireVolleyRound(world, bot, {
+      delay: 0,
+      spread: attack.spread ?? 0.03,
+      damageShare: 1,
+      speedScale: attack.slug.speedScale,
+      lifeScale: attack.slug.lifeScale
+    });
+  } else if (attack.rounds && bot.kind === "splitter") {
+    const rounds = attack.rounds;
+    for (let index = 0; index < rounds; index += 1) {
+      fireVolleyRound(world, bot, {
+        delay: 0,
+        spread: attack.spread ?? 0.2,
+        damageShare: 1 / rounds,
+        speedScale: 1,
+        lifeScale: 1
+      });
+    }
+  } else {
+    for (const round of volleyFor(bot.kind, world.loadout.id).rounds) fireVolleyRound(world, bot, round);
+  }
+  setCooldown(world, bot);
+}
+
+/** Sets the profile's next shot time, scaled by difficulty and arena pressure. */
+function setCooldown(world: World, bot: AgentState): void {
+  const fireScale = preset(world).fireScale * pressureFireScale(world.pressure);
+  bot.fireCooldown = BOT_PROFILES[bot.kind].fireRate / Math.max(0.5, fireScale) + world.rng.range(-0.08, 0.14);
+}
+
+/** Ticks a continuous attack while it lasts. */
+function updateSpray(world: World, bot: AgentState, dt: number): void {
+  if (bot.sprayTime <= 0) return;
+  // Fire stops when the target is hidden: a pyro never burns down a wall.
+  if (bot.blindTime > 0.35) {
+    bot.sprayTime = 0;
+    return;
+  }
+  bot.sprayTime = Math.max(0, bot.sprayTime - dt);
+  bot.burstTimer -= dt;
+  if (bot.burstTimer > 0) return;
+  const attack = attackFor(bot.kind);
+  fireSprayRound(world, bot);
+  bot.burstTimer = attack.spray?.interval ?? 0.1;
+}
+
+/** One round of a spray: short-lived, wide, and drawn as fire. */
+function fireSprayRound(world: World, bot: AgentState): void {
+  const spray = attackFor(bot.kind).spray;
+  if (!spray) return;
+  const profile = BOT_PROFILES[bot.kind];
+  const difficulty = preset(world);
+  const speed = profile.bulletSpeed * difficulty.bulletSpeedScale * spray.speedScale;
+  const direction = world.rng.spreadDirection(bot.facing, spray.spread);
+  const origin = { x: bot.position.x + direction.x * 15, y: bot.position.y + direction.y * 15 };
+  world.bullets.push({
+    position: origin,
+    velocity: { x: direction.x * speed, y: direction.y * speed },
+    owner: "bot",
+    damage: profile.damage * difficulty.damageScale,
+    life: 1.9 * spray.lifeScale,
+    color: profile.color,
+    source: bot.kind,
+    travelled: 0,
+    flame: true
+  });
+  world.events.push({ type: "bot-fired", botId: bot.id, kind: bot.kind, position: origin, direction });
+}
+
+/** Runs a committed charge, and staggers the charger once it is spent. */
+function advanceCharge(world: World, bot: AgentState, dt: number): void {
+  const charge = attackFor(bot.kind).charge;
+  if (!charge) {
+    bot.chargeTime = 0;
+    return;
+  }
+  const difficulty = preset(world);
+  const speed = BOT_PROFILES[bot.kind].speed * charge.speedScale;
+  const previous = { ...bot.position };
+  bot.position = sweepMovement(
+    bot.position,
+    { x: bot.chargeDirection.x * speed * dt, y: bot.chargeDirection.y * speed * dt },
+    BOT_RADIUS,
+    5,
+    world.obstacles
+  ).position;
+  bot.facing = Math.atan2(bot.chargeDirection.y, bot.chargeDirection.x);
+  bot.velocity = {
+    x: (bot.position.x - previous.x) / Math.max(dt, 0.0001),
+    y: (bot.position.y - previous.y) / Math.max(dt, 0.0001)
+  };
+
+  // Contact during a charge is what makes it dangerous.
+  const gap = distance(bot.position, world.player.position);
+  if (gap < PLAYER_RADIUS + BOT_RADIUS + 4 && world.player.invulnerability <= 0 && world.player.contactCooldown <= 0) {
+    const away = contactNormal(bot.position, world.player.position, world);
+    world.player.position = sweepMovement(
+      world.player.position,
+      { x: away.x * CONTACT_KNOCKBACK * 1.7, y: away.y * CONTACT_KNOCKBACK * 1.7 },
+      PLAYER_RADIUS,
+      5,
+      world.obstacles
+    ).position;
+    world.player.contactCooldown = CONTACT_COOLDOWN;
+    damagePlayer(world, BOT_PROFILES[bot.kind].damage * difficulty.damageScale, bot.position, away, bot.kind);
+    bot.chargeTime = 0;
+  }
+
+  bot.chargeTime -= dt;
+  if (bot.chargeTime <= 0) {
+    bot.chargeTime = 0;
+    bot.stun = charge.stunOnMiss;
+    world.events.push({
+      type: "bot-stunned",
+      botId: bot.id,
+      kind: bot.kind,
+      position: { ...bot.position },
+      duration: charge.stunOnMiss
+    });
+  }
 }
 
 function fireVolleyRound(world: World, bot: AgentState, round: VolleyRound): void {
@@ -751,6 +1003,34 @@ function fireVolleyRound(world: World, bot: AgentState, round: VolleyRound): voi
     travelled: 0
   });
   world.events.push({ type: "bot-fired", botId: bot.id, kind: bot.kind, position: origin, direction });
+}
+
+/** Lobbed shells: fly for a fixed time, then burst on the marked circle. */
+function updateShells(world: World, dt: number): void {
+  for (let index = world.shells.length - 1; index >= 0; index -= 1) {
+    const shell = world.shells[index];
+    shell.flight -= dt;
+    if (shell.flight > 0) continue;
+    world.shells.splice(index, 1);
+    const player = world.player;
+    const gap = distance(shell.target, player.position);
+    world.shake = Math.max(world.shake, 8);
+    world.events.push({ type: "shell-landed", kind: shell.kind, position: { ...shell.target }, radius: shell.radius });
+    if (gap > shell.radius || player.invulnerability > 0) continue;
+    // Falls off toward the rim, so clipping the edge is a graze not a hit.
+    const falloff = shell.radius * (attackFor(shell.kind).shell?.falloff ?? 0.45);
+    const share = gap <= shell.radius - falloff ? 1 : Math.max(0.25, (shell.radius - gap) / falloff);
+    const direction = normalize({ x: player.position.x - shell.target.x, y: player.position.y - shell.target.y });
+    const push = direction.x === 0 && direction.y === 0 ? { x: 0, y: 0 } : direction;
+    player.position = sweepMovement(
+      player.position,
+      { x: push.x * 22, y: push.y * 22 },
+      PLAYER_RADIUS,
+      4,
+      world.obstacles
+    ).position;
+    damagePlayer(world, shell.damage * share, shell.target, push, shell.kind);
+  }
 }
 
 function updateBullets(world: World, dt: number): void {
@@ -784,9 +1064,24 @@ function updateBullets(world: World, dt: number): void {
       if (target) {
         world.bullets.splice(i, 1);
         const impact = { ...bullet.position };
-        // Plated profiles shrug off part of a frontal hit; the feedback says so.
+        // A raised shield stops the round dead; a staggered one has dropped it.
+        // The guard is up while it walks, and drops while it winds up a bash or
+        // recovers from a failed charge: those are the windows to shoot through.
+        const guardDown = target.stun > 0 || target.windup > 0;
+        if (shieldBlocks(target.kind, target.facing, target.position, impact, guardDown)) {
+          world.events.push({
+            type: "bot-blocked",
+            botId: target.id,
+            kind: target.kind,
+            position: { ...impact }
+          });
+          continue;
+        }
+        // Plated profiles shrug off part of a frontal hit; a staggered one takes
+        // extra damage instead.
         const plating = platingScale(target.kind, target.position, target.facing, impact);
-        const applied = bullet.damage * plating;
+        const stagger = target.stun > 0 ? STUNNED_DAMAGE_SCALE : 1;
+        const applied = bullet.damage * plating * stagger;
         target.health -= applied;
         target.hitFlash = 0.16;
         world.stats.damageDealt += applied;
@@ -896,6 +1191,67 @@ export function eliminateBot(world: World, bot: AgentState): void {
     kills: world.stats.kills,
     interrupted
   });
+
+  // The swarm cell comes apart: it dies into two shards rather than leaving a
+  // gap in the wave, so the fight gets louder before it gets quieter.
+  const splits = attackFor(bot.kind).splitsInto;
+  if (splits) summonShards(world, bot, splits.kind, splits.count);
+}
+
+/** Materialises the smaller hostiles a dying profile leaves behind. */
+function summonShards(world: World, parent: AgentState, kind: AgentState["kind"], count: number): void {
+  const profile = BOT_PROFILES[kind];
+  const plan = world.activePlan;
+  for (let index = 0; index < count; index += 1) {
+    const angle = (index / Math.max(1, count)) * Math.PI * 2 + world.rng.range(-0.4, 0.4);
+    const spawn = sweepMovement(
+      parent.position,
+      { x: Math.cos(angle) * 26, y: Math.sin(angle) * 26 },
+      BOT_RADIUS,
+      4,
+      world.obstacles
+    ).position;
+    const health = Math.max(6, Math.round(profile.maxHealth * plan.healthMultiplier));
+    world.bots.push({
+      id: world.nextBotId,
+      kind,
+      position: spawn,
+      velocity: { x: 0, y: 0 },
+      health,
+      maxHealth: health,
+      fireCooldown: world.rng.range(0.2, 0.6),
+      windup: 0,
+      windupDuration: 0,
+      windupTurnRate: 2,
+      facing: world.rng.range(-Math.PI, Math.PI),
+      spawnGuard: 0.25,
+      strafeSign: world.rng.chance(0.5) ? 1 : -1,
+      strafeLock: 0,
+      alive: true,
+      hitFlash: 0,
+      blindTime: 0,
+      pendingRounds: 0,
+      burstTimer: 0,
+      diveTime: 0,
+      diveCooldown: 0,
+      detourTime: 0,
+      detourSign: 1,
+      grindTime: 0,
+      stun: 0,
+      chargeTime: 0,
+      chargeDirection: { x: 0, y: 0 },
+      sprayTime: 0
+    });
+    world.nextBotId += 1;
+  }
+  world.events.push({
+    type: "bot-split",
+    botId: parent.id,
+    kind: parent.kind,
+    into: kind,
+    count,
+    position: { ...parent.position }
+  });
 }
 
 function updateSpawns(world: World, dt: number): void {
@@ -974,7 +1330,11 @@ function materialiseBot(world: World, pending: PendingSpawn): void {
     diveCooldown: FLANKER_DIVE.cooldown * 0.5,
     detourTime: 0,
     detourSign: 1,
-    grindTime: 0
+    grindTime: 0,
+    stun: 0,
+    chargeTime: 0,
+    chargeDirection: { x: 0, y: 0 },
+    sprayTime: 0
   };
   world.nextBotId += 1;
   world.bots.push(bot);

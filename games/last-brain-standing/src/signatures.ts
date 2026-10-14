@@ -1,4 +1,4 @@
-import type { AgentState } from "./types";
+import type { AgentState, BotAttack, BotKind } from "./types";
 import type { LoadoutId } from "./loadouts";
 
 /**
@@ -161,8 +161,116 @@ export function botKeepsTracking(kind: AgentState["kind"], progress: number): bo
 export const PROFILE_PITCH: Record<AgentState["kind"], number> = {
   hunter: 0.78,
   flanker: 1.22,
-  mirror: 0.98
+  mirror: 0.98,
+  sniper: 0.62,
+  pyro: 0.86,
+  mortar: 0.7,
+  shielder: 1.05,
+  splitter: 1.34,
+  charger: 0.74,
+  shard: 1.55
 };
+
+// ----------------------------------------------------------------- the new ones
+
+/**
+ * What each attack does when a telegraph completes. Everything specific to a
+ * profile's *attack* lives here, so the simulation only has to ask "how does
+ * this one hurt me?" and never has to know which profile it is looking at.
+ */
+export interface AttackSpec {
+  /** How much longer (`>1`) or shorter (`<1`) its telegraph is than the base. */
+  telegraphScale: number;
+  /** Distance it will start an attack from. */
+  range: number;
+  /** Needs a clear line at the moment the telegraph starts. */
+  requiresSight: boolean;
+  /** Rounds fired in one volley, if it fires rounds. */
+  rounds?: number;
+  /** Random spread per round. */
+  spread?: number;
+  /** Damage split across the volley, as a share of the profile's damage. */
+  damageShare?: number;
+  /** A faster, longer-lived round: the marksman's slug. */
+  slug?: { speedScale: number; lifeScale: number };
+  /** A continuous attack: several short-lived rounds on a timer. */
+  spray?: { duration: number; interval: number; spread: number; speedScale: number; lifeScale: number; damageShare: number };
+  /** A lobbed shell that lands on a marked circle. */
+  shell?: { flight: number; radius: number; lead: number; falloff: number };
+  /** A committed charge along a marked lane. */
+  charge?: { duration: number; speedScale: number; reach: number; stunOnMiss: number };
+  /** Blocks player rounds inside this arc of its facing. */
+  shieldArc?: number;
+  /** Splits into these when it dies. */
+  splitsInto?: { kind: BotKind; count: number };
+  /** Melee burst instead of a projectile. */
+  melee?: { radius: number; knockback: number };
+  /** Detonates on contact with the player. */
+  kamikaze?: boolean;
+}
+
+export const ATTACKS: Record<BotAttack, AttackSpec> = {
+  salvo: { telegraphScale: 1, range: 470, requiresSight: true, rounds: 2, spread: 0.04 },
+  shot: { telegraphScale: 1, range: 430, requiresSight: true, rounds: 1, spread: 0.1 },
+  copy: { telegraphScale: 1, range: 470, requiresSight: true, rounds: 1, spread: 0.05 },
+  // The marksman's telegraph is long and its line is drawn across the arena, so
+  // the shot is always survivable; it also cannot chase, so cover resets it.
+  beam: { telegraphScale: 2.8, range: 620, requiresSight: true, rounds: 1, spread: 0.012, slug: { speedScale: 1.6, lifeScale: 1.5 } },
+  // Six seconds of fire, one short round every 0.11 s: a wall of flame that
+  // forces movement rather than one hit that has to be dodged.
+  flame: { telegraphScale: 0.7, range: 210, requiresSight: true, spray: { duration: 0.55, interval: 0.055, spread: 0.34, speedScale: 0.95, lifeScale: 0.42, damageShare: 1 } },
+  mortar: { telegraphScale: 1.5, range: 520, requiresSight: false, shell: { flight: 1.75, radius: 64, lead: 0.35, falloff: 0.45 } },
+  // A walking wall: the shield covers the front, the bash only reaches arm's
+  // length, and it takes a long time to wind up so it is never a surprise.
+  shield: { telegraphScale: 1.5, range: 150, requiresSight: false, shieldArc: 1.15, melee: { radius: 84, knockback: 34 } },
+  split: { telegraphScale: 1, range: 430, requiresSight: true, rounds: 3, spread: 0.22, splitsInto: { kind: "shard", count: 2 } },
+  charge: { telegraphScale: 1.3, range: 460, requiresSight: false, charge: { duration: 0.62, speedScale: 3.1, reach: 330, stunOnMiss: 2.1 } },
+  kamikaze: { telegraphScale: 1, range: 0, requiresSight: false, kamikaze: true }
+};
+
+/** The attack a profile uses. */
+export function attackFor(kind: AgentState["kind"]): AttackSpec {
+  return ATTACKS[BOT_PROFILES_ATTACK[kind]];
+}
+
+/**
+ * Which attack each profile owns. Kept as a table rather than read off the
+ * profile object so `signatures` stays free of the AI module's imports.
+ */
+export const BOT_PROFILES_ATTACK: Record<BotKind, BotAttack> = {
+  hunter: "salvo",
+  flanker: "shot",
+  mirror: "copy",
+  sniper: "beam",
+  pyro: "flame",
+  mortar: "mortar",
+  shielder: "shield",
+  splitter: "split",
+  charger: "charge",
+  shard: "kamikaze"
+};
+
+/** Player rounds are stopped outright inside a bulwark's shield arc. */
+export function shieldBlocks(
+  kind: AgentState["kind"],
+  facing: number,
+  position: { x: number; y: number },
+  impact: { x: number; y: number },
+  /** A staggered bulwark has dropped its guard. */
+  staggered = false
+): boolean {
+  const arc = ATTACKS[BOT_PROFILES_ATTACK[kind]].shieldArc;
+  if (!arc || staggered) return false;
+  const dx = impact.x - position.x;
+  const dy = impact.y - position.y;
+  const gap = Math.hypot(dx, dy);
+  if (gap < 0.001) return false;
+  const cos = (dx / gap) * Math.cos(facing) + (dy / gap) * Math.sin(facing);
+  return cos > Math.cos(arc);
+}
+
+/** Damage multiplier once a hostile has been staggered by a failed charge. */
+export const STUNNED_DAMAGE_SCALE = 1.5;
 
 // ------------------------------------------------------------------ the Flanker
 

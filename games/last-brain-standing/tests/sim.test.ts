@@ -171,7 +171,11 @@ describe("wind-up interrupts", () => {
     diveCooldown: 0,
       detourTime: 0,
       detourSign: 1,
-      grindTime: 0};
+      grindTime: 0,
+      stun: 0,
+      chargeTime: 0,
+      chargeDirection: { x: 0, y: 0 },
+      sprayTime: 0};
     world.bots.push(bot);
     return bot;
   };
@@ -308,7 +312,12 @@ describe("pincer behaviour", () => {
     diveCooldown: 0,
       detourTime: 0,
       detourSign: 1,
-      grindTime: 0});
+      grindTime: 0,
+      stun: 0,
+      chargeTime: 0,
+      chargeDirection: { x: 0, y: 0 },
+      sprayTime: 0
+    });
   };
 
   it("splits two flankers that start on the same side into opposite sides", () => {
@@ -388,7 +397,12 @@ describe("mirror read", () => {
     diveCooldown: 0,
       detourTime: 0,
       detourSign: 1,
-      grindTime: 0});
+      grindTime: 0,
+      stun: 0,
+      chargeTime: 0,
+      chargeDirection: { x: 0, y: 0 },
+      sprayTime: 0
+    });
   };
 
   it("publishes nothing while no mirror is on the floor", () => {
@@ -856,5 +870,9 @@ function makeBot(id: number, position: Vec2) {
   diveCooldown: 0,
       detourTime: 0,
       detourSign: 1,
-      grindTime: 0};
+      grindTime: 0,
+      stun: 0,
+      chargeTime: 0,
+      chargeDirection: { x: 0, y: 0 },
+      sprayTime: 0};
 }

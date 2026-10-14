@@ -1,3 +1,4 @@
+import { BOT_KINDS } from "./ai";
 import type { BotKind, DifficultyId } from "./types";
 import { DIFFICULTIES } from "./constants";
 
@@ -19,18 +20,24 @@ export function getWaveProgressPercent(wave: number): number {
 }
 
 /**
- * Deliberate wave composition. Early waves teach one profile at a time so the
- * player can learn each telegraph before the fights get crowded.
+ * Deliberate wave composition. Each wave headlines the profiles it introduces
+ * so the player learns a telegraph before the fight around it gets crowded.
+ *
+ *  1  the rifleman, alone
+ *  2  the pincer arrives
+ *  3  the marksman arrives: one long lane to respect in a close fight
+ *  4  the mirror, the flame, the wall and the swarm cell
+ *  5  the finale: indirect fire and a battering ram on top of everything
  */
 const WAVE_COMPOSITION: BotKind[][] = [
   ["hunter", "hunter", "hunter"],
   ["hunter", "flanker", "flanker", "hunter"],
-  ["hunter", "flanker", "mirror", "flanker", "hunter"],
-  ["hunter", "flanker", "mirror", "mirror", "flanker", "hunter"],
-  ["hunter", "flanker", "mirror", "hunter", "flanker", "mirror"]
+  ["hunter", "flanker", "sniper", "flanker", "hunter"],
+  ["hunter", "flanker", "mirror", "pyro", "shielder", "splitter"],
+  ["mortar", "charger", "sniper", "pyro", "mirror", "shielder", "hunter"]
 ];
 
-const COMPOSITION_CYCLE: BotKind[] = ["hunter", "flanker", "mirror", "flanker", "hunter", "mirror"];
+const COMPOSITION_CYCLE: BotKind[] = ["hunter", "flanker", "mirror", "sniper", "pyro", "mortar", "shielder", "splitter", "charger"];
 
 export interface WavePlan {
   wave: number;
@@ -77,9 +84,8 @@ export function getWavePlan(wave: number, difficulty: DifficultyId = "standard")
 /**
  * One short, wave-specific piece of advice shown under the inbound banner.
  *
- * Waves introduce profiles one at a time, so the tip for the wave that first
- * fields a profile can teach it before the fight starts. Waves 4 and 5 mix
- * profiles rather than introducing new ones, so their tips are about pressure.
+ * The tip for the wave that first fields a profile teaches that profile before
+ * the fight starts; later waves mix them and their tips are about pressure.
  */
 export function getWaveHint(wave: number): string {
   const clamped = Math.max(1, Math.min(MAX_WAVES, Math.round(wave)));
@@ -87,8 +93,14 @@ export function getWaveHint(wave: number): string {
     WAVE_COMPOSITION[clamped - 1].includes(kind) && !WAVE_COMPOSITION.slice(0, clamped - 1).some((entry) => entry.includes(kind));
   if (introduces("hunter")) return "RINGS MARK INCOMING SHOTS — MOVE OR DASH";
   if (introduces("flanker")) return "BREAK ITS LINE OF SIGHT AND THE SHOT DIES";
+  if (introduces("sniper")) return "THE AIM LINE MEANS A SLUG IS COMING — CROSS IT EARLY";
+  if (introduces("pyro") || introduces("shielder") || introduces("splitter")) {
+    return "A FLAME, A WALL AND A SWARM BRAWL UP CLOSE — STEP BACK, AND MIND THE MIRROR";
+  }
   if (introduces("mirror")) return "STOP REPEATING YOURSELF — IT READS PATTERNS";
-  if (clamped >= 5) return "KILL MID-TELEGRAPH: THE SHOT NEVER LANDS";
+  if (introduces("mortar") || introduces("charger")) {
+    return "SHELLS MARK A CIRCLE AND RAMS MARK A LANE — READ THE FLOOR";
+  }
   return "MORE OF THEM, LESS ROOM — KEEP MOVING";
 }
 
@@ -97,7 +109,7 @@ export function getWaveBriefing(wave: number): string {
   const plan = getWavePlan(wave);
   const counts = new Map<BotKind, number>();
   for (const kind of plan.kinds) counts.set(kind, (counts.get(kind) ?? 0) + 1);
-  const order: BotKind[] = ["hunter", "flanker", "mirror"];
+  const order = BOT_KINDS;
   const parts = order
     .filter((kind) => (counts.get(kind) ?? 0) > 0)
     .map((kind) => `${counts.get(kind)}×${kind.toUpperCase()}`);

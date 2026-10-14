@@ -23,7 +23,18 @@ export interface UnitArt {
   /** Ink used for fine details (barrels, bolts). */
   ink: string;
   /** How the model is assembled, keyed to a drawing routine. */
-  silhouette: "trooper" | "wedge" | "dart" | "prism";
+  silhouette:
+    | "trooper"
+    | "wedge"
+    | "dart"
+    | "prism"
+    | "lance"
+    | "furnace"
+    | "pod"
+    | "wall"
+    | "cluster"
+    | "ram"
+    | "splinter";
   /** Optional second accent for small details. */
   detail?: string;
 }
@@ -60,7 +71,7 @@ export const PLAYER_ART: UnitArt = {
   silhouette: "trooper"
 };
 
-export const BOT_ART: Record<AgentState["kind"], UnitArt> = {
+const BASE_BOT_ART: Record<"hunter" | "flanker" | "mirror", UnitArt> = {
   // A squat siege mech: heavy plates, a single amber sensor slit, a stubby
   // cannon. Reads as slow and direct at a glance.
   hunter: {
@@ -96,11 +107,132 @@ export const BOT_ART: Record<AgentState["kind"], UnitArt> = {
   }
 };
 
+/** Ten profiles, ten silhouettes: no two hostiles read the same at a glance. */
+export const MORE_BOT_ART: Record<string, UnitArt> = {
+  // A long, low rifle platform with a bipod and one very long barrel.
+  sniper: {
+    body: "#2b2a26",
+    plate: "#464339",
+    shade: "#171614",
+    accent: "#cbb37f",
+    detail: "#efe3c6",
+    ink: "#0b0a09",
+    silhouette: "lance"
+  },
+  // A round-shouldered furnace with a snout, tank, and vents along its back.
+  pyro: {
+    body: "#332a22",
+    plate: "#4d3d2c",
+    shade: "#1c1712",
+    accent: "#d08a4a",
+    detail: "#f0c088",
+    ink: "#0d0a07",
+    silhouette: "furnace"
+  },
+  // A squat tracked mortar carrier: wide base, short tube, one tilted plate.
+  mortar: {
+    body: "#302c24",
+    plate: "#4a4436",
+    shade: "#191712",
+    accent: "#a9926a",
+    detail: "#d8c9a6",
+    ink: "#0c0b08",
+    silhouette: "pod"
+  },
+  // A broad, upright wall of plating on two stubby legs.
+  shielder: {
+    body: "#2c3036",
+    plate: "#454b53",
+    shade: "#181b1f",
+    accent: "#8a97a6",
+    detail: "#ced6e0",
+    ink: "#0a0c0f",
+    silhouette: "wall"
+  },
+  // An organic cluster of pods and spores with a soft, uneven outline.
+  splitter: {
+    body: "#26302a",
+    plate: "#37473c",
+    shade: "#151c17",
+    accent: "#8fb48c",
+    detail: "#d6e6d2",
+    ink: "#080c09",
+    silhouette: "cluster"
+  },
+  // Angled armour over oversized pistons, built to go forward only.
+  charger: {
+    body: "#332620",
+    plate: "#4c372c",
+    shade: "#1c1410",
+    accent: "#c9744f",
+    detail: "#e8b394",
+    ink: "#0d0806",
+    silhouette: "ram"
+  },
+  // A faceted splinter: small, sharp and deliberately cheap-looking.
+  shard: {
+    body: "#26302a",
+    plate: "#3a4b3e",
+    shade: "#141b16",
+    accent: "#a9c7a4",
+    detail: "#e2efdf",
+    ink: "#070c08",
+    silhouette: "splinter"
+  }
+};
+
+/** Every hostile's art, keyed by kind. */
+export const BOT_ART: Record<AgentState["kind"], UnitArt> = {
+  ...BASE_BOT_ART,
+  sniper: MORE_BOT_ART.sniper,
+  pyro: MORE_BOT_ART.pyro,
+  mortar: MORE_BOT_ART.mortar,
+  shielder: MORE_BOT_ART.shielder,
+  splitter: MORE_BOT_ART.splitter,
+  charger: MORE_BOT_ART.charger,
+  shard: MORE_BOT_ART.shard
+};
+
+/** One glyph per profile for the HUD list, so the eye can tell them apart fast. */
+export const BOT_SYMBOLS: Record<AgentState["kind"], string> = {
+  hunter: "+",
+  flanker: "◇",
+  mirror: "⌁",
+  sniper: "⋙",
+  pyro: "▲",
+  mortar: "⌒",
+  shielder: "▮",
+  splitter: "❉",
+  charger: "➤",
+  shard: "·"
+};
+
+/** How each profile warns you: a lane, a cone, a floor marker, a guard arc. */
+export const TELEGRAPH_STYLE: Record<AgentState["kind"], "lane" | "beam" | "cone" | "marker" | "guard" | "ram" | "none"> = {
+  hunter: "lane",
+  flanker: "lane",
+  mirror: "lane",
+  sniper: "beam",
+  pyro: "cone",
+  mortar: "marker",
+  shielder: "guard",
+  splitter: "lane",
+  charger: "ram",
+  shard: "none"
+};
+
 /** Muted ink for telegraphs: an aim line is a warning, not a light show. */
 export const TELEGRAPH = {
   hunter: "rgba(214, 118, 104, 0.72)",
   flanker: "rgba(206, 162, 96, 0.72)",
-  mirror: "rgba(168, 148, 200, 0.72)"
+  mirror: "rgba(168, 148, 200, 0.72)",
+  sniper: "rgba(203, 179, 127, 0.8)",
+  pyro: "rgba(208, 138, 74, 0.72)",
+  mortar: "rgba(169, 146, 106, 0.72)",
+  shielder: "rgba(138, 151, 166, 0.72)",
+  splitter: "rgba(143, 180, 140, 0.72)",
+  charger: "rgba(201, 116, 79, 0.8)",
+  shard: "rgba(169, 199, 164, 0.72)"
 } as const;
 
 export const BULLET = {

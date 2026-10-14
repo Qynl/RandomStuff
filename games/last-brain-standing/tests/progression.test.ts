@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { MAX_WAVES, getNextWave, getWaveBriefing, getWaveHint, getWavePlan, getWaveProgressPercent, getWaveSpawnCount } from "../src/progression";
 import { DIFFICULTY_ORDER, DIFFICULTIES } from "../src/constants";
+import { BOT_KINDS } from "../src/ai";
+import type { BotKind } from "../src/types";
 
 describe("wave progression", () => {
   it("starts at wave one and advances by one", () => {
@@ -29,10 +31,36 @@ describe("wave progression", () => {
 });
 
 describe("wave plans", () => {
-  it("teaches one profile at a time", () => {
+  it("introduces each profile in a deliberate order", () => {
     expect(getWavePlan(1).kinds).toEqual(["hunter", "hunter", "hunter"]);
-    expect(new Set(getWavePlan(2).kinds).size).toBe(2);
-    expect(new Set(getWavePlan(3).kinds)).toEqual(new Set(["hunter", "flanker", "mirror"]));
+    // Wave two brings the pincer, and nothing else new.
+    expect(getWavePlan(2).kinds).toContain("flanker");
+    const waveTwoNew = new Set(getWavePlan(2).kinds.filter((kind) => !getWavePlan(1).kinds.includes(kind)));
+    expect(waveTwoNew).toEqual(new Set(["flanker"]));
+    // Wave three is the marksman's debut.
+    const waveThreeNew = new Set(
+      getWavePlan(3).kinds.filter((kind) => !getWavePlan(1).kinds.includes(kind) && !getWavePlan(2).kinds.includes(kind))
+    );
+    expect(waveThreeNew).toEqual(new Set(["sniper"]));
+    // Wave four introduces the brawling trio and the mirror; wave five the
+    // indirect fire and the ram.
+    const seen = new Set([...getWavePlan(1).kinds, ...getWavePlan(2).kinds, ...getWavePlan(3).kinds]);
+    const waveFourNew = new Set(getWavePlan(4).kinds.filter((kind) => !seen.has(kind)));
+    expect(waveFourNew).toEqual(new Set(["mirror", "pyro", "shielder", "splitter"]));
+    for (const kind of waveFourNew) seen.add(kind);
+    const waveFiveNew = new Set(getWavePlan(5).kinds.filter((kind) => !seen.has(kind)));
+    expect(waveFiveNew).toEqual(new Set(["mortar", "charger"]));
+  });
+
+  it("fields every profile in the campaign", () => {
+    const fielded = new Set<BotKind>();
+    for (let wave = 1; wave <= MAX_WAVES; wave += 1) {
+      for (const kind of getWavePlan(wave).kinds) fielded.add(kind);
+    }
+    // Every kind a wave may field is used somewhere in the five waves...
+    for (const kind of BOT_KINDS) expect(fielded.has(kind)).toBe(true);
+    // ...and the shard only ever appears when a swarm cell comes apart.
+    expect(fielded.has("shard")).toBe(false);
   });
 
   it("keeps every wave inside the 2..7 hostile envelope on every difficulty", () => {
@@ -76,7 +104,14 @@ describe("wave plans", () => {
     const briefing = getWaveBriefing(3);
     expect(briefing).toContain("HUNTER");
     expect(briefing).toContain("FLANKER");
-    expect(briefing).toContain("MIRROR");
+    expect(briefing).toContain("SNIPER");
+    const finale = getWaveBriefing(5);
+    expect(finale).toContain("MORTAR");
+    expect(finale).toContain("CHARGER");
+    // Names appear in roster order, not in whatever order they spawn.
+    expect(finale.indexOf("MORTAR")).toBeLessThan(finale.indexOf("CHARGER"));
+    expect(finale.indexOf("PYRO")).toBeLessThan(finale.indexOf("CHARGER"));
+    expect(finale.indexOf("SNIPER")).toBeLessThan(finale.indexOf("SHIELDER"));
   });
 });
 
@@ -105,9 +140,10 @@ describe("wave tips", () => {
   it("teaches each profile in the wave that first fields it", () => {
     expect(getWaveHint(1)).toContain("RINGS MARK");
     expect(getWaveHint(2)).toContain("LINE OF SIGHT");
-    expect(getWaveHint(3)).toContain("PATTERNS");
-    expect(getWaveHint(4)).toContain("KEEP MOVING");
-    expect(getWaveHint(5)).toContain("MID-TELEGRAPH");
+    expect(getWaveHint(3)).toContain("AIM LINE");
+    expect(getWaveHint(4)).toContain("STEP BACK");
+    expect(getWaveHint(4)).toContain("MIRROR");
+    expect(getWaveHint(5)).toContain("READ THE FLOOR");
   });
 
   it("gives every wave a non-empty tip and clamps nonsense input", () => {

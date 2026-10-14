@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   angleApart,
+  attackFor,
   botKeepsTracking,
   diveSpeedScale,
   FLANKER_DIVE,
@@ -14,10 +15,15 @@ import {
   mirrorVolley,
   pincerSide,
   platingScale,
+  PROFILE_PITCH,
+  shieldBlocks,
+  STUNNED_DAMAGE_SCALE,
   volleyDamage,
   volleyFor
 } from "../src/signatures";
-import { chooseBotSpeedScale } from "../src/ai";
+import { BOT_KINDS, BOT_PROFILES, chooseBotSpeedScale, emptyKindTotals } from "../src/ai";
+import { BOT_ART, TELEGRAPH } from "../src/art";
+import type { BotKind, SimEvent } from "../src/types";
 import {
   DETOUR_TIME,
   DETOUR_TRIGGER,
@@ -242,7 +248,7 @@ describe("stall pressure", () => {
 
 describe("archetype behaviour in the simulation", () => {
   /** Drops a single hostile into a pinned arena and steps it forward. */
-  const soloWorld = (kind: "hunter" | "flanker" | "mirror", seed: string) => {
+  const soloWorld = (kind: BotKind, seed: string) => {
     const world = createWorld({ seed });
     world.phase = "running";
     pinLayout(world);
@@ -271,6 +277,10 @@ describe("archetype behaviour in the simulation", () => {
       burstTimer: 0,
       diveTime: 0,
       diveCooldown: 0,
+      stun: 0,
+      chargeTime: 0,
+      chargeDirection: { x: 0, y: 0 },
+      sprayTime: 0,
       detourTime: 0,
       detourSign: 1,
       grindTime: 0
@@ -281,10 +291,11 @@ describe("archetype behaviour in the simulation", () => {
 
   it("fires two rounds per Hunter telegraph and one per Flanker telegraph", () => {
     const events = autoplay({ seed: "archetypes-volley", maxSeconds: 60 }).events;
-    const shots: Record<string, number> = { hunter: 0, flanker: 0, mirror: 0 };
-    const started: Record<string, number> = { hunter: 0, flanker: 0, mirror: 0 };
-    const cancelled: Record<string, number> = { hunter: 0, flanker: 0, mirror: 0 };
-    const kindOf = new Map<number, "hunter" | "flanker" | "mirror">();
+    const counts = () => emptyKindTotals();
+    const shots = counts();
+    const started = counts();
+    const cancelled = counts();
+    const kindOf = new Map<number, BotKind>();
     for (const event of events) {
       if (event.type === "bot-fired") shots[event.kind] += 1;
       if (event.type === "bot-windup") {
@@ -419,13 +430,21 @@ describe("archetype behaviour in the simulation", () => {
     // measures one full run per seed and checks that each profile's own
     // mechanics actually fire, and that none of them bleeds into another.
     const seeds = Array.from({ length: 12 }, (_, index) => `balance-${String(index + 1).padStart(2, "0")}`);
-    const totals: Record<string, { windups: number; shots: number; dives: number; plated: number; hits: number }> = {
-      hunter: { windups: 0, shots: 0, dives: 0, plated: 0, hits: 0 },
-      flanker: { windups: 0, shots: 0, dives: 0, plated: 0, hits: 0 },
-      mirror: { windups: 0, shots: 0, dives: 0, plated: 0, hits: 0 }
+    const blank = () => ({ windups: 0, shots: 0, dives: 0, plated: 0, hits: 0 });
+    const totals: Record<BotKind, { windups: number; shots: number; dives: number; plated: number; hits: number }> = {
+      hunter: blank(),
+      flanker: blank(),
+      mirror: blank(),
+      sniper: blank(),
+      pyro: blank(),
+      mortar: blank(),
+      shielder: blank(),
+      splitter: blank(),
+      charger: blank(),
+      shard: blank()
     };
-    const cancelled: Record<string, number> = { hunter: 0, flanker: 0, mirror: 0 };
-    const kindOf = new Map<number, "hunter" | "flanker" | "mirror">();
+    const cancelled = emptyKindTotals();
+    const kindOf = new Map<number, BotKind>();
     for (const seed of seeds) {
       for (const event of autoplay({ seed, maxSeconds: 200 }).events) {
         if (event.type === "bot-windup") {
@@ -446,7 +465,8 @@ describe("archetype behaviour in the simulation", () => {
       }
     }
     // Everyone fights.
-    for (const kind of ["hunter", "flanker", "mirror"]) {
+    const firstThree: BotKind[] = ["hunter", "flanker", "mirror"];
+    for (const kind of firstThree) {
       expect(totals[kind].windups).toBeGreaterThan(20);
       expect(totals[kind].shots).toBeGreaterThan(20);
     }
@@ -463,7 +483,7 @@ describe("archetype behaviour in the simulation", () => {
     // A Hunter salvo puts two rounds in the air for every telegraph it
     // finishes; the other two profiles put one each. Measured over the sweep,
     // with cancelled wind-ups and run-ending kills taken out of the count.
-    const roundsPerTelegraph = (kind: "hunter" | "flanker" | "mirror") =>
+    const roundsPerTelegraph = (kind: BotKind) =>
       totals[kind].shots / Math.max(1, totals[kind].windups - cancelled[kind]);
     expect(roundsPerTelegraph("hunter")).toBeGreaterThan(1.9);
     expect(roundsPerTelegraph("hunter")).toBeLessThan(2.05);
@@ -491,7 +511,10 @@ describe("archetype behaviour in the simulation", () => {
     };
     const stacked = shotsWithAllyAt({ x: 560, y: 500 });
     const split = shotsWithAllyAt({ x: 240, y: 330 });
-    console.log("pincer stacked", stacked, "split", split);
+    // Two flankers stacked on the same angle hold fire; two on different angles
+    // do not. That is the pincer discipline in one measurement.
+    expect(stacked).toBeLessThan(split);
+    expect(split).toBeGreaterThan(0);
     // Far out of position with nobody to share the angle with: it dives.
     const world = soloWorld("flanker", "flanker-pincer");
     const bot = world.bots[0];
@@ -523,5 +546,216 @@ describe("archetype behaviour in the simulation", () => {
     }
     // And a fight that has not stalled never has pressure applied.
     expect(world.pressure).toBeLessThan(1);
+  });
+});
+
+describe("the new profiles", () => {
+  /** The same pinned single-hostile world the sweep above uses. */
+  const soloWorld = (kind: BotKind, seed: string) => {
+    const world = createWorld({ seed });
+    world.phase = "running";
+    pinLayout(world);
+    world.waveState = "active";
+    world.pendingSpawns.length = 0;
+    world.bots.length = 0;
+    world.bots.push({
+      id: 1,
+      kind,
+      position: { x: 700, y: 500 },
+      velocity: { x: 0, y: 0 },
+      health: 500,
+      maxHealth: 500,
+      fireCooldown: 0,
+      windup: 0,
+      windupDuration: 0,
+      windupTurnRate: 2,
+      facing: Math.PI,
+      spawnGuard: 0,
+      strafeSign: 1,
+      strafeLock: 0,
+      alive: true,
+      hitFlash: 0,
+      blindTime: 0,
+      pendingRounds: 0,
+      burstTimer: 0,
+      diveTime: 0,
+      diveCooldown: 0,
+      stun: 0,
+      chargeTime: 0,
+      chargeDirection: { x: 0, y: 0 },
+      sprayTime: 0,
+      detourTime: 0,
+      detourSign: 1,
+      grindTime: 0
+    });
+    world.player.position = { x: 400, y: 500 };
+    return world;
+  };
+
+  const runFor = (world: ReturnType<typeof soloWorld>, seconds: number) => {
+    const events: SimEvent[] = [];
+    for (let i = 0; i < Math.round(seconds * 60); i += 1) {
+      events.push(...stepWorld(world, emptyInput(), 1 / 60));
+    }
+    return events;
+  };
+
+  it("gives every profile its own attack, movement, silhouette, tint and pitch", () => {
+    const attacks = new Set<string>();
+    const movements = new Set<string>();
+    const silhouettes = new Set<string>();
+    const tints = new Set<string>();
+    const pitches = new Set<number>();
+    for (const kind of [...BOT_KINDS, "shard" as BotKind]) {
+      const profile = BOT_PROFILES[kind];
+      attacks.add(profile.attack);
+      movements.add(profile.movement);
+      silhouettes.add(BOT_ART[kind].silhouette);
+      tints.add(TELEGRAPH[kind]);
+      pitches.add(PROFILE_PITCH[kind]);
+    }
+    // Nine fielded profiles, nine different ways of hurting you and nine ways of
+    // moving. Nothing is a re-skin of anything else.
+    expect(attacks.size).toBe(10);
+    expect(movements.size).toBe(10);
+    expect(silhouettes.size).toBe(10);
+    expect(tints.size).toBe(10);
+    expect(pitches.size).toBe(10);
+    // Every kind's art table is complete, so no unit can render as another's.
+    for (const kind of [...BOT_KINDS, "shard" as BotKind]) {
+      const art = BOT_ART[kind];
+      for (const slot of [art.body, art.plate, art.shade, art.accent, art.ink]) {
+        expect(typeof slot).toBe("string");
+        expect(slot.length).toBeGreaterThan(3);
+      }
+      expect(BOT_PROFILES[kind].signature.length).toBeGreaterThan(20);
+      expect(BOT_PROFILES[kind].counter.length).toBeGreaterThan(20);
+      expect(BOT_PROFILES[kind].attackLabel.length).toBeGreaterThan(3);
+    }
+  });
+
+  it("has the marksman hold long range and fire one rail slug", () => {
+    const world = soloWorld("sniper", "sniper-range");
+    const bot = world.bots[0];
+    const events = runFor(world, 6);
+    const fired = events.filter((event) => event.type === "bot-fired" && event.kind === "sniper");
+    const windups = events.filter((event) => event.type === "bot-windup" && event.kind === "sniper");
+    expect(windups.length).toBeGreaterThan(0);
+    expect(fired.length).toBeGreaterThan(0);
+    // One round per completed telegraph, and it is a fast one.
+    expect(fired.length).toBeLessThanOrEqual(windups.length);
+    for (const shot of fired) {
+      if (shot.type !== "bot-fired") continue;
+      const speed = Math.hypot(world.bullets[0]?.velocity.x ?? 0, world.bullets[0]?.velocity.y ?? 0);
+      expect(speed).toBeGreaterThan(600);
+    }
+    // It never closes: a marksman is the profile that punishes standing still.
+    expect(Math.hypot(bot.position.x - world.player.position.x, bot.position.y - world.player.position.y)).toBeGreaterThan(120);
+    expect(attackFor("sniper").telegraphScale).toBeGreaterThan(2);
+  });
+
+  it("sprays fire that dies on walls instead of crossing the room", () => {
+    const world = soloWorld("pyro", "pyro-spray");
+    world.bots[0].position = { x: 480, y: 500 };
+    world.player.position = { x: 400, y: 500 };
+    const events = runFor(world, 5);
+    const shots = events.filter((event) => event.type === "bot-fired" && event.kind === "pyro");
+    expect(shots.length).toBeGreaterThan(6);
+    // Every round it made is a short-lived flame, not a slug.
+    expect(world.bullets.every((bullet) => bullet.source !== "pyro" || bullet.flame === true)).toBe(true);
+    for (const bullet of world.bullets.filter((entry) => entry.source === "pyro")) {
+      expect(bullet.life).toBeLessThanOrEqual(0.9);
+    }
+    expect(attackFor("pyro").spray?.duration).toBeGreaterThan(0.4);
+  });
+
+  it("lobs shells that mark the floor and burst for damage", () => {
+    const world = soloWorld("mortar", "mortar-shell");
+    const events = runFor(world, 8);
+    const launched = events.filter((event) => event.type === "shell-launched");
+    const landed = events.filter((event) => event.type === "shell-landed");
+    expect(launched.length).toBeGreaterThan(0);
+    expect(landed.length).toBeGreaterThan(0);
+    expect(events.some((event) => event.type === "bot-fired" && event.kind === "mortar")).toBe(false);
+    const first = launched[0];
+    if (first.type === "shell-launched") {
+      expect(first.flight).toBeGreaterThan(1);
+      expect(first.radius).toBeGreaterThan(30);
+      // It aims at the player's side of the room, not at its own feet.
+      expect(Math.hypot(first.target.x - first.from.x, first.target.y - first.from.y)).toBeGreaterThan(80);
+    }
+  });
+
+  it("blocks shots on the raised shield and opens up while it winds up", () => {
+    const world = soloWorld("shielder", "bulwark-guard");
+    const bot = world.bots[0];
+    bot.position = { x: 500, y: 500 };
+    world.player.position = { x: 380, y: 500 };
+    const front = { x: 400, y: 500 };
+    const behind = { x: 560, y: 500 };
+    expect(shieldBlocks("shielder", Math.PI, bot.position, front)).toBe(true);
+    expect(shieldBlocks("shielder", Math.PI, bot.position, behind)).toBe(false);
+    // A staggered or winding-up bulwark has dropped its guard.
+    expect(shieldBlocks("shielder", Math.PI, bot.position, front, true)).toBe(false);
+    expect(STUNNED_DAMAGE_SCALE).toBeGreaterThan(1);
+    expect(attackFor("shielder").melee?.radius).toBeGreaterThan(40);
+  });
+
+  it("comes apart into two shards when a swarm cell dies", () => {
+    const world = soloWorld("splitter", "swarm-split");
+    const bot = world.bots[0];
+    const before = world.bots.length;
+    eliminateBot(world, bot);
+    // Events live for the frame they were raised in, so read them before stepping.
+    const events = [...world.events];
+    const split = events.filter((event) => event.type === "bot-split");
+    expect(split.length).toBe(1);
+    expect(split[0].type === "bot-split" ? split[0].count : 0).toBe(2);
+    const shards = world.bots.filter((entry) => entry.kind === "shard" && entry.alive);
+    expect(shards.length).toBe(2);
+    expect(world.bots.length).toBe(before + 2);
+    // Shards belong to no wave: they are only ever left behind.
+    expect(BOT_KINDS.includes("shard")).toBe(false);
+  });
+
+  it("charges along a marked lane and staggers when the lane comes up empty", () => {
+    const world = soloWorld("charger", "ram-charge");
+    const bot = world.bots[0];
+    let charged = false;
+    let stunned = false;
+    let travelled = 0;
+    for (let i = 0; i < 60 * 8; i += 1) {
+      const before = { ...bot.position };
+      for (const event of stepWorld(world, emptyInput(), 1 / 60)) {
+        if (event.type === "bot-charge" && event.kind === "charger") charged = true;
+        if (event.type === "bot-stunned" && event.kind === "charger") stunned = true;
+      }
+      travelled += Math.hypot(bot.position.x - before.x, bot.position.y - before.y);
+      if (charged && stunned) break;
+    }
+    expect(charged).toBe(true);
+    expect(stunned).toBe(true);
+    expect(bot.stun).toBeGreaterThan(0);
+    expect(travelled).toBeGreaterThan(60);
+    expect(attackFor("charger").charge?.speedScale).toBeGreaterThan(2);
+  });
+
+  it("lets a shard spend itself on contact", () => {
+    const world = soloWorld("shard", "shard-contact");
+    const shard = world.bots[0];
+    shard.position = { x: 420, y: 500 };
+    world.player.position = { x: 400, y: 500 };
+    world.player.contactCooldown = 0;
+    // A run starts with a moment of grace; a contact test is not that moment.
+    world.player.invulnerability = 0;
+    let hit = false;
+    for (let i = 0; i < 150; i += 1) {
+      for (const event of stepWorld(world, emptyInput(), 1 / 60)) {
+        if (event.type === "player-hit" && event.source === "shard") hit = true;
+      }
+      if (hit) break;
+    }
+    expect(hit).toBe(true);
+    expect(shard.alive).toBe(false);
   });
 });

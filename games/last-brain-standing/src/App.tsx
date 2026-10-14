@@ -3,6 +3,7 @@ import { ArenaGame, type FeedLine, type GameSnapshot, type RunResult } from "./g
 import { DIFFICULTIES, DIFFICULTY_ORDER } from "./constants";
 import { buildRunSummary } from "./scoring";
 import { BOT_KINDS, BOT_PROFILES, summarizeMirrorRead } from "./ai";
+import { BOT_SYMBOLS } from "./art";
 import { isMobileUserAgent, shouldShowTouchControls, stickVectorFromPointer } from "./input";
 import { layoutRecordForSeed } from "./arena";
 import { isUnlocked, LOADOUTS, LOADOUT_ORDER, type LoadoutId } from "./loadouts";
@@ -910,10 +911,14 @@ export default function App({ onGameReady }: AppProps = {}) {
               const alive = snapshot?.liveKinds[kind] ?? 0;
               return (
                 <div className="opponent" key={kind} data-bot={kind} title={BOT_PROFILES[kind].counter}>
-                  <span className={`opponent-symbol ${kind}-symbol`}>{kind === "hunter" ? "+" : kind === "flanker" ? "◇" : "⌁"}</span>
+                  <span className={`opponent-symbol ${kind}-symbol`} aria-hidden="true">
+                    {BOT_SYMBOLS[kind]}
+                  </span>
                   <div className="opponent-copy">
                     <strong>{BOT_PROFILES[kind].name}</strong>
-                    <small>{BOT_PROFILES[kind].tactic}</small>
+                    <small>
+                      {BOT_PROFILES[kind].tactic} · <span className="opponent-attack">{BOT_PROFILES[kind].attackLabel}</span>
+                    </small>
                     <em className="opponent-signature">{BOT_PROFILES[kind].signature}</em>
                   </div>
                   <span className={`opponent-state${alive > 0 ? "" : " down"}`}>{alive > 0 ? `×${alive}` : "DOWN"}</span>

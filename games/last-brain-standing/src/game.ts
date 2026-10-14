@@ -1,7 +1,7 @@
-import { BOT_KINDS, BOT_PROFILES } from "./ai";
-import { PROFILE_PITCH, volleyFor } from "./signatures";
+import { BOT_KINDS, BOT_PROFILES, emptyKindTotals } from "./ai";
+import { attackFor, PROFILE_PITCH, volleyFor } from "./signatures";
 import { ARENA_LAYOUTS, firstBlockingFraction, layoutForSeed, rangeScaleForOpenness, WORLD } from "./arena";
-import { BLOCK, BOT_ART, BULLET, FLOOR, PLAYER_ART, STATUS, TELEGRAPH } from "./art";
+import { BLOCK, BOT_ART, BULLET, FLOOR, PLAYER_ART, STATUS, TELEGRAPH, TELEGRAPH_STYLE } from "./art";
 import { SoundEngine, type SoundName } from "./audio";
 import { BOT_RADIUS, DIFFICULTIES, MAX_PARTICLES, PLAYER_MAX_HEALTH, PLAYER_RADIUS } from "./constants";
 import {
@@ -355,10 +355,10 @@ export class ArenaGame {
   private careerArenas: string[] = [];
   private careerLevels: string[] = [];
   private weaponRecords: WeaponRecords = emptyWeaponRecords();
-  private careerKillsByKind: Record<BotKind, number> = { hunter: 0, flanker: 0, mirror: 0 };
-  private careerDeathsByKind: Record<BotKind, number> = { hunter: 0, flanker: 0, mirror: 0 };
+  private careerKillsByKind: Record<BotKind, number> = emptyKindTotals();
+  private careerDeathsByKind: Record<BotKind, number> = emptyKindTotals();
   private history: RunRecord[] = [];
-  private killsByKind: Record<BotKind, number> = { hunter: 0, flanker: 0, mirror: 0 };
+  private killsByKind: Record<BotKind, number> = emptyKindTotals();
   private lastHitBy: BotKind | "unknown" | null = null;
   private background: HTMLCanvasElement | null = null;
   private backgroundScale = 0;
@@ -451,7 +451,7 @@ export class ArenaGame {
     this.comboTimer = 0;
     this.lowHealthAlarm = 0;
     this.renderFaultReported = false;
-    this.killsByKind = { hunter: 0, flanker: 0, mirror: 0 };
+    this.killsByKind = emptyKindTotals();
     this.lastHitBy = null;
     this.lastFrame = 0;
     this.pushFeed("Simulation online. Three hostile profiles inbound.", "info");
@@ -980,8 +980,70 @@ export class ArenaGame {
           break;
         }
         case "bot-fired": {
-          this.burst(event.position, BOT_PROFILES[event.kind].color, 3, 0.2, 100);
-          this.playSound("bot-shot", 1, PROFILE_PITCH[event.kind]);
+          // A spray is many rounds a second: one small puff each, and only
+          // every other round gets a cue so the mix does not turn to mud.
+          const spray = attackFor(event.kind).spray !== undefined;
+          this.burst(event.position, BOT_PROFILES[event.kind].color, spray ? 1 : 3, spray ? 0.12 : 0.2, spray ? 60 : 100);
+          if (!spray || Math.floor(this.world.elapsed * 6) % 2 === 0) {
+            this.playSound("bot-shot", spray ? 0.7 : 1, PROFILE_PITCH[event.kind]);
+          }
+          break;
+        }
+        case "bot-blocked": {
+          // Rounds stop dead on a raised shield: sparks, a chime, and a word.
+          this.burst(event.position, "#b9c2cc", 6, 0.2, 120);
+          this.texts.push({
+            position: { ...event.position },
+            text: "BLOCKED",
+            life: 0.4,
+            maxLife: 0.4,
+            color: "#cfd6de",
+            size: 9
+          });
+          this.playSound("impact", 0.7, 1.35);
+          break;
+        }
+        case "bot-charge": {
+          this.dashTrail.push({ position: { ...event.from }, life: 0.34 });
+          this.burst(event.from, BOT_PROFILES[event.kind].color, 8, 0.26, 160);
+          this.pushFeed("A RAM IS COMMITTED — BREAK THE LANE.", "warn");
+          this.playSound("dive", 1, PROFILE_PITCH[event.kind]);
+          break;
+        }
+        case "bot-stunned": {
+          // A failed charge leaves it wide open: the feedback says so loudly.
+          this.texts.push({
+            position: { x: event.position.x, y: event.position.y - 26 },
+            text: "STAGGERED",
+            life: 0.7,
+            maxLife: 0.7,
+            color: "#f0c088",
+            size: 11
+          });
+          this.burst(event.position, "#c9a15a", 12, 0.4, 120);
+          this.pulses.push({ position: { ...event.position }, life: 0.4, maxLife: 0.4, radius: 30, color: "#c9a15a" });
+          this.playSound("impact", 0.9, 0.7);
+          break;
+        }
+        case "bot-split": {
+          this.pushFeed("THE SWARM CELL CAME APART — TWO SHARDS.", "warn");
+          this.burst(event.position, BOT_PROFILES[event.kind].color, 14, 0.4, 150);
+          this.pulses.push({ position: { ...event.position }, life: 0.5, maxLife: 0.5, radius: 40, color: BOT_PROFILES[event.kind].color });
+          this.playSound("spawn", 0.6, PROFILE_PITCH[event.kind]);
+          break;
+        }
+        case "shell-launched": {
+          this.burst(event.from, BOT_PROFILES[event.kind].color, 6, 0.3, 110);
+          this.playSound("bot-shot", 0.9, PROFILE_PITCH[event.kind]);
+          break;
+        }
+        case "shell-landed": {
+          // The burst is the warning made good: dust, a ring, and a hard shake.
+          this.burst(event.position, "#d8c9a6", 18, 0.45, 190);
+          this.pulses.push({ position: { ...event.position }, life: 0.45, maxLife: 0.45, radius: event.radius, color: "#d8c9a6" });
+          this.spawnDecal(event.position, event.radius * 0.45, "bot");
+          this.shake = Math.max(this.shake, 7);
+          this.playSound("impact", 1, 0.62);
           break;
         }
         case "bot-hit": {
@@ -1277,7 +1339,7 @@ export class ArenaGame {
   private buildSnapshot(): GameSnapshot {
     const world = this.world;
     const difficulty = DIFFICULTIES[world.difficulty];
-    const liveKinds: Record<BotKind, number> = { hunter: 0, flanker: 0, mirror: 0 };
+    const liveKinds: Record<BotKind, number> = emptyKindTotals();
     for (const bot of world.bots) if (bot.alive) liveKinds[bot.kind] += 1;
     const hostileCount = liveKinds.hunter + liveKinds.flanker + liveKinds.mirror;
     return {
@@ -1395,7 +1457,7 @@ export class ArenaGame {
 
   /** Reads a stored per-profile total, ignoring junk and clamping to sane values. */
   private readKindTotals(key: string): Record<BotKind, number> {
-    const totals: Record<BotKind, number> = { hunter: 0, flanker: 0, mirror: 0 };
+    const totals: Record<BotKind, number> = emptyKindTotals();
     const raw = this.readString(key);
     if (!raw) return totals;
     try {
@@ -1500,6 +1562,7 @@ export class ArenaGame {
       this.drawDashTrail();
       this.drawAimLine();
       this.drawTelegraphs();
+      this.drawShells();
       this.drawBullets();
       this.drawAgents();
       this.drawPulses();
@@ -2006,6 +2069,180 @@ export class ArenaGame {
         this.world.obstacles
       );
       const length = blocking === null ? 900 : blocking * 900;
+      const style = TELEGRAPH_STYLE[bot.kind];
+
+      if (style === "marker") {
+        // Indirect fire marks the floor, not the barrel: a ring at the place
+        // the shell will land, growing tighter as the shot closes.
+        const shell = attackFor(bot.kind).shell;
+        const target = {
+          x: this.world.player.position.x + this.world.player.velocity.x * (shell?.lead ?? 0.3),
+          y: this.world.player.position.y + this.world.player.velocity.y * (shell?.lead ?? 0.3)
+        };
+        const radius = shell?.radius ?? 60;
+        ctx.save();
+        ctx.globalAlpha = 0.2 + progress * 0.4;
+        ctx.fillStyle = tint;
+        ctx.beginPath();
+        ctx.arc(target.x, target.y, radius * (1.35 - progress * 0.35), 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 0.45 + progress * 0.5;
+        ctx.strokeStyle = tint;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([6, 6]);
+        ctx.lineDashOffset = -this.world.elapsed * 20;
+        ctx.beginPath();
+        ctx.arc(target.x, target.y, radius, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.arc(target.x, target.y, radius * Math.max(0.05, 1 - progress), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+        ctx.save();
+        ctx.translate(bot.position.x, bot.position.y);
+        this.drawChargeGauge(ctx, tint, progress);
+        ctx.restore();
+        continue;
+      }
+
+      if (style === "ram") {
+        // A charge lane: two rails with chevrons that advance as it commits.
+        ctx.save();
+        ctx.globalAlpha = 0.2 + progress * 0.45;
+        ctx.strokeStyle = tint;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(bot.position.x + direction.x * 14 + direction.y * 9, bot.position.y + direction.y * 14 - direction.x * 9);
+        ctx.lineTo(bot.position.x + direction.x * length + direction.y * 9, bot.position.y + direction.y * length - direction.x * 9);
+        ctx.moveTo(bot.position.x + direction.x * 14 - direction.y * 9, bot.position.y + direction.y * 14 + direction.x * 9);
+        ctx.lineTo(bot.position.x + direction.x * length - direction.y * 9, bot.position.y + direction.y * length + direction.x * 9);
+        ctx.stroke();
+        ctx.lineWidth = 2.4;
+        for (let step = 0; step < 5; step += 1) {
+          const at = step * 40 + ((this.world.elapsed * 60) % 40);
+          if (at > length - 20 || at < 20) continue;
+          const cx = bot.position.x + direction.x * at;
+          const cy = bot.position.y + direction.y * at;
+          ctx.globalAlpha = (0.15 + progress * 0.35) * (1 - at / Math.max(60, length));
+          ctx.beginPath();
+          ctx.moveTo(cx - direction.x * 7 + direction.y * 7, cy - direction.y * 7 - direction.x * 7);
+          ctx.lineTo(cx, cy);
+          ctx.lineTo(cx - direction.x * 7 - direction.y * 7, cy - direction.y * 7 + direction.x * 7);
+          ctx.stroke();
+        }
+        ctx.restore();
+        ctx.save();
+        ctx.translate(bot.position.x, bot.position.y);
+        this.drawChargeGauge(ctx, tint, progress);
+        ctx.restore();
+        continue;
+      }
+
+      if (style === "cone") {
+        // Area denial shows its reach as a cone, not a lane: the whole wedge is
+        // the danger, so stepping out of the arc is the counterplay.
+        const reach = attackFor(bot.kind).range;
+        ctx.save();
+        ctx.globalAlpha = 0.14 + progress * 0.26;
+        ctx.fillStyle = tint;
+        ctx.beginPath();
+        ctx.moveTo(bot.position.x, bot.position.y);
+        ctx.arc(bot.position.x, bot.position.y, reach, bot.facing - 0.5, bot.facing + 0.5);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 0.3 + progress * 0.5;
+        ctx.strokeStyle = tint;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(bot.position.x, bot.position.y);
+        ctx.arc(bot.position.x, bot.position.y, reach, bot.facing - 0.5, bot.facing + 0.5);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+        ctx.save();
+        ctx.translate(bot.position.x, bot.position.y);
+        this.drawChargeGauge(ctx, tint, progress);
+        ctx.restore();
+        continue;
+      }
+
+      if (style === "beam") {
+        // The marksman's lane is longer, straighter and darker at the core: one
+        // thin line the whole way across the room.
+        ctx.save();
+        ctx.globalAlpha = 0.18 + progress * 0.42;
+        ctx.strokeStyle = tint;
+        ctx.lineWidth = 0.9 + progress * 1.2;
+        ctx.setLineDash([16, 4]);
+        ctx.lineDashOffset = -this.world.elapsed * 90;
+        ctx.beginPath();
+        ctx.moveTo(bot.position.x + direction.x * 24, bot.position.y + direction.y * 24);
+        ctx.lineTo(bot.position.x + direction.x * length, bot.position.y + direction.y * length);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 0.35 + progress * 0.5;
+        ctx.lineWidth = 0.8;
+        ctx.strokeStyle = "rgba(20, 18, 16, 0.5)";
+        ctx.beginPath();
+        ctx.moveTo(bot.position.x + direction.x * 24, bot.position.y + direction.y * 24);
+        ctx.lineTo(bot.position.x + direction.x * length, bot.position.y + direction.y * length);
+        ctx.stroke();
+        ctx.restore();
+        ctx.save();
+        ctx.translate(bot.position.x, bot.position.y);
+        this.drawChargeGauge(ctx, tint, progress);
+        // Corner brackets at the far end, like a scope reticle.
+        const endX = direction.x * length;
+        const endY = direction.y * length;
+        ctx.globalAlpha = 0.35 + progress * 0.5;
+        ctx.strokeStyle = tint;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (const [sx, sy] of [[-1, -1], [-1, 1], [1, -1], [1, 1]] as const) {
+          ctx.moveTo(endX + sx * 6, endY + sy * 14);
+          ctx.lineTo(endX + sx * 6, endY + sy * 6);
+          ctx.lineTo(endX + sx * 14, endY + sy * 6);
+        }
+        ctx.stroke();
+        ctx.restore();
+        continue;
+      }
+
+      if (style === "guard") {
+        // The bulwark shows its guard arc and its short reach instead of a
+        // firing lane: the shield is the whole threat.
+        const arc = attackFor(bot.kind).shieldArc ?? 1.2;
+        const reach = attackFor(bot.kind).melee?.radius ?? 80;
+        ctx.save();
+        ctx.translate(bot.position.x, bot.position.y);
+        ctx.globalAlpha = 0.35 + progress * 0.45;
+        ctx.strokeStyle = tint;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.arc(0, 0, BOT_RADIUS + 8, bot.facing - arc, bot.facing + arc);
+        ctx.stroke();
+        ctx.globalAlpha = 0.12 + progress * 0.2;
+        ctx.fillStyle = tint;
+        ctx.beginPath();
+        ctx.arc(0, 0, reach, bot.facing - 0.9, bot.facing + 0.9);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        ctx.save();
+        ctx.translate(bot.position.x, bot.position.y);
+        this.drawChargeGauge(ctx, tint, progress);
+        ctx.restore();
+        continue;
+      }
+
+      if (style === "none") {
+        ctx.save();
+        ctx.translate(bot.position.x, bot.position.y);
+        this.drawChargeGauge(ctx, tint, progress);
+        ctx.restore();
+        continue;
+      }
 
       // Firing lane: dashes that thicken as the shot nears release.
       ctx.save();
@@ -2043,16 +2280,7 @@ export class ArenaGame {
       // Charge gauge over the unit itself: a dark track with a filling arc.
       ctx.save();
       ctx.translate(bot.position.x, bot.position.y);
-      ctx.strokeStyle = STATUS.healthTrack;
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.arc(0, 0, BOT_RADIUS + 11, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.strokeStyle = tint;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(0, 0, BOT_RADIUS + 11, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
-      ctx.stroke();
+      this.drawChargeGauge(ctx, tint, progress);
 
       // Threat wedge aimed at the player, only while the player is the target.
       const toPlayer = Math.atan2(player.y - bot.position.y, player.x - bot.position.x);
@@ -2070,6 +2298,70 @@ export class ArenaGame {
     }
   }
 
+  /** The countable ring over a hostile that is winding up an attack. */
+  private drawChargeGauge(ctx: CanvasRenderingContext2D, tint: string, progress: number): void {
+    ctx.strokeStyle = STATUS.healthTrack;
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(0, 0, BOT_RADIUS + 11, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.strokeStyle = tint;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, BOT_RADIUS + 11, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+    ctx.stroke();
+  }
+
+  /**
+   * Lobbed shells: a dark projectile on a visible arc, plus the landing ring it
+   * is going to land on, so the mechanic never has to be guessed.
+   */
+  private drawShells(): void {
+    const ctx = this.ctx;
+    for (const shell of this.world.shells) {
+      const art = BOT_ART[shell.kind];
+      const remaining = clamp(shell.flight / Math.max(0.001, shell.totalFlight), 0, 1);
+      // Ballistic arc: the shadow stays on the floor while the shell climbs.
+      const at = { x: shell.from.x + (shell.target.x - shell.from.x) * (1 - remaining), y: shell.from.y + (shell.target.y - shell.from.y) * (1 - remaining) };
+      const height = Math.sin((1 - remaining) * Math.PI) * 46;
+
+      ctx.save();
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = STATUS.shadow;
+      ctx.beginPath();
+      ctx.ellipse(at.x, at.y + 4, 6 - height * 0.03, 3.4 - height * 0.015, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      ctx.save();
+      ctx.translate(at.x, at.y - height);
+      ctx.rotate(Math.atan2(shell.target.y - shell.from.y, shell.target.x - shell.from.x) + this.world.elapsed * 6);
+      ctx.fillStyle = art.plate;
+      ctx.beginPath();
+      ctx.ellipse(0, 0, 5.2, 3.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = art.ink;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = art.accent;
+      ctx.fillRect(-1.4, -3.4, 2.8, 1.6);
+      ctx.restore();
+
+      // Landing ring: dark ink plus the profile tint, closing as it falls.
+      ctx.save();
+      ctx.globalAlpha = 0.3 + (1 - remaining) * 0.45;
+      ctx.strokeStyle = art.accent;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([7, 5]);
+      ctx.lineDashOffset = -this.world.elapsed * 22;
+      ctx.beginPath();
+      ctx.arc(shell.target.x, shell.target.y, shell.radius * (0.55 + remaining * 0.45), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+    }
+  }
+
   /** Rounds are tracers: a brass streak with a bright tip, no glow. */
   private drawBullets(): void {
     const ctx = this.ctx;
@@ -2080,6 +2372,36 @@ export class ArenaGame {
       const fromPlayer = bullet.owner === "player";
       const trail = fromPlayer ? BULLET.playerTrail : BULLET.botTrail;
       const core = fromPlayer ? BULLET.playerCore : BULLET.botCore;
+
+      if (bullet.flame) {
+        // Fire is drawn as stacked, shrinking puffs in the emitter's own colour,
+        // never as a glowing beam: hot, sooty, and clearly not a slug.
+        const art = BOT_ART[bullet.source === "player" ? "hunter" : bullet.source];
+        const puff = clamp((bullet.travelled % 26) / 26, 0, 1);
+        ctx.save();
+        ctx.globalAlpha = 0.30 + (1 - puff) * 0.25;
+        ctx.fillStyle = art.accent;
+        for (let index = 0; index < 3; index += 1) {
+          const at = index * 7;
+          const radius = 5.4 - index * 1.3 - puff * 1.2;
+          ctx.beginPath();
+          ctx.arc(
+            bullet.position.x - direction.x * at + Math.sin(this.world.elapsed * 22 + index) * 1.4,
+            bullet.position.y - direction.y * at + Math.cos(this.world.elapsed * 19 + index) * 1.4,
+            Math.max(1.2, radius),
+            0,
+            Math.PI * 2
+          );
+          ctx.fill();
+        }
+        ctx.globalAlpha = 0.5 + (1 - puff) * 0.3;
+        ctx.fillStyle = art.detail ?? art.accent;
+        ctx.beginPath();
+        ctx.arc(bullet.position.x, bullet.position.y, 2 + (1 - puff) * 1.4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        continue;
+      }
 
       ctx.save();
       ctx.lineCap = "round";
@@ -2272,6 +2594,330 @@ export class ArenaGame {
       ctx.fillRect(-14 - burn * 3, 5, 3 + burn * 3, 2);
       ctx.globalAlpha /= 0.35 + burn * 0.5;
       ctx.rotate(-bot.facing);
+    } else if (art.silhouette === "lance") {
+      // The Marksman: a long, low rifle platform. The barrel is longer than the
+      // unit is wide, because a sniper has to read as a sniper at a glance.
+      ctx.rotate(bot.facing);
+      const breathe = Math.sin(this.world.elapsed * 2.4 + bot.id) * 0.6;
+
+      // Bipod legs splayed behind the receiver.
+      ctx.strokeStyle = art.ink;
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(-6, 0);
+      ctx.lineTo(-15, -9);
+      ctx.moveTo(-6, 0);
+      ctx.lineTo(-15, 9);
+      ctx.stroke();
+
+      // Receiver: narrow, with a scope rail on top.
+      ctx.fillStyle = art.shade;
+      ctx.fillRect(-9, -6, 17, 12);
+      ctx.fillStyle = plateFill;
+      ctx.beginPath();
+      ctx.moveTo(-9, -6);
+      ctx.lineTo(8, -4.4);
+      ctx.lineTo(8, 4.4);
+      ctx.lineTo(-9, 6);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = art.ink;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // The long barrel, with a muzzle brake at the far end. It recoils a
+      // little as the wind-up completes.
+      const recoil = charge * 2.4;
+      ctx.fillStyle = art.ink;
+      ctx.fillRect(6 - recoil, -1.7, 30, 3.4);
+      ctx.fillStyle = art.plate;
+      ctx.fillRect(32 - recoil, -2.6, 5, 5.2);
+      ctx.fillRect(24 - recoil, -3.2, 2.4, 6.4);
+
+      // Scope: a dark tube with a lit lens that narrows as it charges.
+      ctx.fillStyle = art.shade;
+      ctx.fillRect(-2, -5.6 - breathe * 0.2, 9, 3);
+      ctx.fillStyle = art.detail ?? art.accent;
+      ctx.globalAlpha *= 0.4 + charge * 0.6;
+      ctx.beginPath();
+      ctx.arc(7, -4.1, 1.7 - charge * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha /= 0.4 + charge * 0.6;
+
+      // Prone skids so it looks planted rather than hovering.
+      ctx.fillStyle = art.plate;
+      ctx.fillRect(-8, -8.5, 12, 2.6);
+      ctx.fillRect(-8, 5.9, 12, 2.6);
+      ctx.rotate(-bot.facing);
+    } else if (art.silhouette === "furnace") {
+      // The Cinder: a round-shouldered furnace with a snout, a fuel tank and
+      // vent slats. Wide at the shoulders, no straight edges anywhere.
+      ctx.rotate(bot.facing);
+      const pulse = 0.6 + 0.4 * Math.sin(this.world.elapsed * 6 + bot.id);
+
+      // Back tank.
+      ctx.fillStyle = art.shade;
+      ctx.beginPath();
+      ctx.ellipse(-8, 0, 8, 10, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Rounded body.
+      ctx.fillStyle = bodyFill;
+      ctx.beginPath();
+      ctx.ellipse(-1, 0, 12, 11.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = art.ink;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Vent slats across the back, hot while it sprays.
+      ctx.fillStyle = art.plate;
+      for (let i = 0; i < 3; i += 1) ctx.fillRect(-10 + i * 4, -8.5, 2, 17);
+
+      // Nozzle: a tapered snout with a pilot light.
+      ctx.fillStyle = art.plate;
+      ctx.beginPath();
+      ctx.moveTo(8, -5.5);
+      ctx.lineTo(17, -3);
+      ctx.lineTo(17, 3);
+      ctx.lineTo(8, 5.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.fillStyle = art.detail ?? art.accent;
+      ctx.globalAlpha *= 0.3 + charge * 0.5 + pulse * 0.2;
+      ctx.beginPath();
+      ctx.arc(16, 0, 2 + charge * 2.4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha /= 0.3 + charge * 0.5 + pulse * 0.2;
+
+      // Shoulder pauldrons.
+      ctx.fillStyle = art.plate;
+      ctx.beginPath();
+      ctx.ellipse(2, -10, 6, 3.4, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(2, 10, 6, 3.4, -0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.rotate(-bot.facing);
+    } else if (art.silhouette === "pod") {
+      // The Mortar: a tracked carrier with a stubby elevated tube. Tracked
+      // units read differently from walking ones even in one flat colour.
+      ctx.rotate(bot.facing);
+
+      // Two track bars, with cleats that cycle as it drives.
+      const roll = (this.world.elapsed * 9) % 3;
+      ctx.fillStyle = art.shade;
+      ctx.fillRect(-13, -11.5, 27, 6);
+      ctx.fillRect(-13, 5.5, 27, 6);
+      ctx.fillStyle = art.plate;
+      for (let i = 0; i < 6; i += 1) {
+        ctx.fillRect(-12 + i * 4.6 + roll, -11, 1.6, 5);
+        ctx.fillRect(-12 + i * 4.6 + roll, 6, 1.6, 5);
+      }
+      ctx.fillStyle = art.ink;
+      ctx.fillRect(-13, -11.5, 27, 1.2);
+      ctx.fillRect(-13, 10.3, 27, 1.2);
+
+      // Hull between the tracks, with a sloped glacis.
+      ctx.fillStyle = plateFill;
+      ctx.beginPath();
+      ctx.moveTo(-10, -5.5);
+      ctx.lineTo(10, -4.5);
+      ctx.lineTo(13, 0);
+      ctx.lineTo(10, 4.5);
+      ctx.lineTo(-10, 5.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = art.ink;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // The tube, angled up, with a shell visible as it charges.
+      ctx.save();
+      ctx.translate(2, 0);
+      ctx.rotate(-0.5);
+      ctx.fillStyle = art.shade;
+      ctx.fillRect(0, -2.6, 15, 5.2);
+      ctx.fillStyle = art.ink;
+      ctx.fillRect(13, -3.4, 3, 6.8);
+      ctx.restore();
+      if (charge > 0.05) {
+        ctx.fillStyle = art.detail ?? art.accent;
+        ctx.globalAlpha *= 0.35 + charge * 0.65;
+        ctx.beginPath();
+        ctx.arc(11, -6 - charge * 2, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha /= 0.35 + charge * 0.65;
+      }
+      ctx.rotate(-bot.facing);
+    } else if (art.silhouette === "wall") {
+      // The Bulwark: a broad tower shield on stubby legs. It is mostly shield.
+      ctx.rotate(bot.facing);
+
+      // Legs, planted wide and short.
+      ctx.fillStyle = art.shade;
+      ctx.fillRect(-9, -10, 6, 6);
+      ctx.fillRect(-9, 4, 6, 6);
+
+      // Torso behind the shield, kept small on purpose.
+      ctx.fillStyle = bodyFill;
+      ctx.fillRect(-11, -7, 12, 14);
+
+      // The shield: a tall hexagonal plate held on the leading edge, with a
+      // rivet line and a worn smear where rounds have hit it.
+      ctx.save();
+      ctx.translate(2, 0);
+      const open = bot.windup > 0 ? 0.55 : 0; // guard drops while it winds up
+      ctx.rotate(-open * 0.5);
+      ctx.fillStyle = plateFill;
+      ctx.beginPath();
+      ctx.moveTo(3, -15);
+      ctx.lineTo(7, -11);
+      ctx.lineTo(7, 11);
+      ctx.lineTo(3, 15);
+      ctx.lineTo(-3, 13);
+      ctx.lineTo(-3, -13);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = art.ink;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.fillStyle = art.shade;
+      for (let i = -1; i <= 1; i += 1) {
+        ctx.beginPath();
+        ctx.arc(2, i * 8, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.fillStyle = art.accent;
+      ctx.globalAlpha *= 0.5;
+      ctx.fillRect(1, -4, 5, 8);
+      ctx.globalAlpha /= 0.5;
+      ctx.restore();
+
+      // A small visor slit peeking over the rim.
+      ctx.fillStyle = art.detail ?? art.accent;
+      ctx.fillRect(-1, -2, 3, 4);
+      ctx.rotate(-bot.facing);
+    } else if (art.silhouette === "cluster") {
+      // The Swarm Cell: an organic knot of pods. Its outline is deliberately
+      // lumpy so it never reads as one of the machined units.
+      const writhe = this.world.elapsed * 1.8 + bot.id;
+      ctx.fillStyle = art.shade;
+      ctx.beginPath();
+      ctx.ellipse(-2, 0, 14, 12, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Pods, each pulsing slightly out of phase.
+      for (let i = 0; i < 5; i += 1) {
+        const angle = (i / 5) * Math.PI * 2 + writhe * 0.3;
+        const radius = 6 + Math.sin(writhe + i) * 1.4;
+        const px = Math.cos(angle) * radius;
+        const py = Math.sin(angle) * radius;
+        ctx.fillStyle = i % 2 === 0 ? bodyFill : plateFill;
+        ctx.beginPath();
+        ctx.ellipse(px, py, 6.4, 5.4, angle, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = art.ink;
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
+
+      // A core that glows warmer as it prepares to spit spores.
+      ctx.fillStyle = art.detail ?? art.accent;
+      ctx.globalAlpha *= 0.35 + charge * 0.6;
+      ctx.beginPath();
+      ctx.arc(0, 0, 4 + charge * 1.6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha /= 0.35 + charge * 0.6;
+
+      // Spores drifting off it.
+      ctx.fillStyle = art.accent;
+      for (let i = 0; i < 4; i += 1) {
+        const angle = writhe * 0.9 + (i * Math.PI) / 2;
+        const radius = 17 + Math.sin(writhe * 1.7 + i) * 2.4;
+        ctx.globalAlpha *= 0.5;
+        ctx.beginPath();
+        ctx.arc(Math.cos(angle) * radius, Math.sin(angle) * radius, 1.8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha /= 0.5;
+      }
+    } else if (art.silhouette === "ram") {
+      // The Ram: angled armour over oversized pistons, all of it pointing
+      // forward. While it charges, the pistons extend.
+      ctx.rotate(bot.facing);
+      const lunge = bot.chargeTime > 0 ? 4 : 0;
+
+      // Piston blocks either side.
+      ctx.fillStyle = art.shade;
+      ctx.fillRect(-12, -11, 10, 7);
+      ctx.fillRect(-12, 4, 10, 7);
+      ctx.fillStyle = art.plate;
+      ctx.fillRect(-13 - lunge * 0.4, -10, 3, 5);
+      ctx.fillRect(-13 - lunge * 0.4, 5, 3, 5);
+
+      // Central block, sloped at the back.
+      ctx.fillStyle = bodyFill;
+      ctx.beginPath();
+      ctx.moveTo(-13, -7);
+      ctx.lineTo(6, -8.5);
+      ctx.lineTo(6, 8.5);
+      ctx.lineTo(-13, 7);
+      ctx.closePath();
+      ctx.fill();
+
+      // Plough: a heavy wedge with ribs, pushed forward as it charges.
+      ctx.fillStyle = plateFill;
+      ctx.beginPath();
+      ctx.moveTo(4 - lunge, -9.5);
+      ctx.lineTo(15 + lunge, -4);
+      ctx.lineTo(17 + lunge, 0);
+      ctx.lineTo(15 + lunge, 4);
+      ctx.lineTo(4 - lunge, 9.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = art.ink;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+      ctx.fillStyle = art.shade;
+      ctx.fillRect(6 - lunge, -6.5, 8 + lunge, 2);
+      ctx.fillRect(6 - lunge, 4.5, 8 + lunge, 2);
+
+      // Impact studs along the leading edge.
+      ctx.fillStyle = art.detail ?? art.accent;
+      ctx.fillRect(14 + lunge, -3, 2.4, 6);
+      ctx.rotate(-bot.facing);
+    } else if (art.silhouette === "splinter") {
+      // The Shard: a tiny faceted splinter with a visible fuse. Small, sharp
+      // and cheap-looking, because that is exactly what it is.
+      ctx.rotate(Math.atan2(bot.velocity.y, bot.velocity.x) || bot.facing);
+      const flicker = 0.5 + 0.5 * Math.sin(this.world.elapsed * 18 + bot.id * 3);
+      ctx.fillStyle = art.shade;
+      ctx.beginPath();
+      ctx.moveTo(10, 0);
+      ctx.lineTo(-3, -6.5);
+      ctx.lineTo(-8, 0);
+      ctx.lineTo(-3, 6.5);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = bodyFill;
+      ctx.beginPath();
+      ctx.moveTo(8, 0);
+      ctx.lineTo(-2, -4.4);
+      ctx.lineTo(-6, 0);
+      ctx.lineTo(-2, 4.4);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = art.ink;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = art.detail ?? art.accent;
+      ctx.globalAlpha *= 0.45 + flicker * 0.55;
+      ctx.beginPath();
+      ctx.arc(-1, 0, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha /= 0.45 + flicker * 0.55;
+      ctx.rotate(-(Math.atan2(bot.velocity.y, bot.velocity.x) || bot.facing));
     } else {
       // The Mirror: a tall faceted prism with slowly orbiting shards.
       const turn = this.world.elapsed * 0.6 + bot.id;

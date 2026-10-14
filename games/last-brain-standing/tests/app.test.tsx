@@ -6,6 +6,7 @@ import App from "../src/App";
 import type { ArenaGame } from "../src/game";
 import { WORLD } from "../src/arena";
 import { installFakeCanvasPrototype, installFrameController, installResizeObserver, pointer, pressKey, type FakeCanvas, type FrameController } from "./helpers/fake-dom";
+import { BOT_KINDS } from "../src/ai";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -280,7 +281,8 @@ describe("React app shell", () => {
     const inbound = Array.from(container.querySelectorAll(".meta-row.inbound"));
     expect(inbound).toHaveLength(1);
     expect(inbound[0].textContent).toContain("HUNTER");
-    expect(container.querySelectorAll(".opponent").length).toBe(3);
+    // One row per profile the game can field, all of them listed.
+    expect(container.querySelectorAll(".opponent").length).toBe(BOT_KINDS.length);
 
     advance(120);
     expect(container.querySelectorAll(".meta-row.inbound")).toHaveLength(0);
@@ -474,8 +476,8 @@ describe("React app shell", () => {
     // The threat dossier names each profile's signature and counts what it has
     // done to this account.
     const dossier = Array.from(container.querySelectorAll(".dossier-list li"));
-    expect(dossier).toHaveLength(3);
-    expect(dossier.map((row) => row.getAttribute("data-bot"))).toEqual(["hunter", "flanker", "mirror"]);
+    expect(dossier).toHaveLength(BOT_KINDS.length);
+    expect(dossier.map((row) => row.getAttribute("data-bot"))).toEqual(BOT_KINDS);
     expect(text(".dossier-list li[data-bot=\"hunter\"]")).toContain("DOUBLE SALVO");
     expect(text(".dossier-list li[data-bot=\"flanker\"]")).toContain("PINCER DISCIPLINE");
     expect(text(".dossier-list li[data-bot=\"mirror\"]")).toContain("COPY OF YOUR OWN WEAPON");
@@ -718,6 +720,10 @@ describe("React app shell", () => {
       diveTime: 0,
 
       diveCooldown: 0,
+      stun: 0,
+      chargeTime: 0,
+      chargeDirection: { x: 0, y: 0 },
+      sprayTime: 0,
       detourTime: 0,
       detourSign: 1,
       grindTime: 0});

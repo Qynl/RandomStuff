@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ArenaGame, type FeedLine, type GameSnapshot, type RunResult } from "../src/game";
+import { emptyKindTotals } from "../src/ai";
 import { WORLD } from "../src/arena";
 import { pinLayout } from "./helpers/layout";
 import { installFakeCanvasPrototype, installFrameController, installResizeObserver, pointer, pressKey, type FakeCanvas, type FrameController } from "./helpers/fake-dom";
@@ -64,6 +65,10 @@ describe("ArenaGame engine shell", () => {
       burstTimer: 0,
       diveTime: 0,
       diveCooldown: 0,
+      stun: 0,
+      chargeTime: 0,
+      chargeDirection: { x: 0, y: 0 },
+      sprayTime: 0,
       detourTime: 0,
       detourSign: 1,
       grindTime: 0
@@ -481,7 +486,7 @@ describe("ArenaGame engine shell", () => {
     // The end screen can name the killer and break down the run.
     expect(results[0].endedBy).toBe("hunter");
     expect(results[0].difficulty).toBe("standard");
-    expect(results[0].killsByKind).toEqual({ hunter: 0, flanker: 0, mirror: 0 });
+    expect(results[0].killsByKind).toEqual(emptyKindTotals());
     expect(results[0].isDifficultyBest).toBe(true);
     expect(results[0].previousBestScore).toBe(0);
     const pending = frames.pending();
@@ -530,6 +535,10 @@ describe("ArenaGame engine shell", () => {
       burstTimer: 0,
       diveTime: 0,
       diveCooldown: 0,
+      stun: 0,
+      chargeTime: 0,
+      chargeDirection: { x: 0, y: 0 },
+      sprayTime: 0,
       detourTime: 0,
       detourSign: 1,
       grindTime: 0
@@ -895,8 +904,8 @@ describe("ArenaGame engine shell", () => {
     expect(results[0].endedBy).toBe("mirror");
 
     let career = game.getCareer();
-    expect(career.killsByKind).toEqual({ hunter: 3, flanker: 1, mirror: 0 });
-    expect(career.deathsByKind).toEqual({ hunter: 0, flanker: 0, mirror: 1 });
+    expect(career.killsByKind).toEqual({ ...emptyKindTotals(), hunter: 3, flanker: 1 });
+    expect(career.deathsByKind).toEqual({ ...emptyKindTotals(), mirror: 1 });
     // The run lands in the recent list, newest first, with its weapon stamped.
     expect(career.recentRuns).toHaveLength(1);
     expect(career.recentRuns[0].seed).toBe(game.getSeedLabel());
@@ -908,8 +917,8 @@ describe("ArenaGame engine shell", () => {
     spawnAndKill(game, "hunter", 2);
     killPlayer(game, "hunter");
     career = game.getCareer();
-    expect(career.killsByKind).toEqual({ hunter: 5, flanker: 1, mirror: 0 });
-    expect(career.deathsByKind).toEqual({ hunter: 1, flanker: 0, mirror: 1 });
+    expect(career.killsByKind).toEqual({ ...emptyKindTotals(), hunter: 5, flanker: 1 });
+    expect(career.deathsByKind).toEqual({ ...emptyKindTotals(), hunter: 1, mirror: 1 });
     expect(career.recentRuns.map((run) => run.seed)).toEqual([game.getSeedLabel(), career.recentRuns[1].seed]);
 
     // And it survives a reload, because the dossier is the account's memory.

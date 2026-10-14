@@ -1,4 +1,4 @@
-import { BOT_PROFILES } from "./ai";
+import { BOT_KINDS, BOT_PROFILES } from "./ai";
 import type { BotKind, RunStats } from "./types";
 
 export interface ScoreBreakdown {
@@ -80,7 +80,7 @@ export interface RunSummaryDetail {
 
 /** "3× HUNTER · 1× MIRROR" - empty when the run ended before any kill. */
 export function describeKillBreakdown(killsByKind: Partial<Record<BotKind, number>>): string {
-  const order: BotKind[] = ["hunter", "flanker", "mirror"];
+  const order = BOT_KINDS;
   return order
     .filter((kind) => (killsByKind[kind] ?? 0) > 0)
     .map((kind) => `${killsByKind[kind]}× ${BOT_PROFILES[kind].name.replace("THE ", "")}`)

@@ -1,4 +1,36 @@
-export type BotKind = "hunter" | "flanker" | "mirror";
+/**
+ * Hostile profiles. Each one is a different answer to "what am I fighting?":
+ * the kind picks the attack, the movement style, the model and the counterplay.
+ * `shard` is never part of a wave - the swarm cell leaves those behind when it
+ * comes apart.
+ */
+export type BotKind =
+  | "hunter"
+  | "flanker"
+  | "mirror"
+  | "sniper"
+  | "pyro"
+  | "mortar"
+  | "shielder"
+  | "splitter"
+  | "charger"
+  | "shard";
+
+/** How a profile hurts you. Resolved by the simulation when a wind-up ends. */
+export type BotAttack = "salvo" | "shot" | "copy" | "beam" | "flame" | "mortar" | "shield" | "split" | "charge" | "kamikaze";
+
+/** How a profile moves. Resolved by {@link chooseBotMovement}. */
+export type BotMovement =
+  | "press"
+  | "orbit"
+  | "predict"
+  | "sniper"
+  | "brawl"
+  | "pod"
+  | "turtle"
+  | "swarm"
+  | "ram"
+  | "kamikaze";
 
 export type DifficultyId = "recruit" | "standard" | "veteran";
 
@@ -13,6 +45,12 @@ export interface Vec2 {
 export interface BotProfile {
   kind: BotKind;
   name: string;
+  /** What it does when its telegraph completes. */
+  attack: BotAttack;
+  /** How it moves while it is not shooting. */
+  movement: BotMovement;
+  /** Two-word label for the HUD, e.g. "FLAME CONE". */
+  attackLabel: string;
   /** One-line tactical identity shown in the side panel. */
   tactic: string;
   /** One-line counterplay hint, surfaced as a tooltip and after a defeat. */
@@ -80,6 +118,29 @@ export interface AgentState {
   detourSign: number;
   /** Seconds this bot has spent failing to move where it wants to go. */
   grindTime: number;
+  /** Seconds left staggered by a failed charge; a stunned hostile is easy prey. */
+  stun: number;
+  /** Seconds left of a committed charge, for profiles that ram. */
+  chargeTime: number;
+  /** Unit direction locked in when the charge started. */
+  chargeDirection: Vec2;
+  /** Seconds left of a continuous attack, for profiles that spray. */
+  sprayTime: number;
+}
+
+/** A lobbed shell: it flies for `flight` seconds and then bursts. */
+export interface Shell {
+  position: Vec2;
+  from: Vec2;
+  target: Vec2;
+  /** Seconds of flight remaining. */
+  flight: number;
+  /** Seconds of flight when it was launched, for the arc. */
+  totalFlight: number;
+  radius: number;
+  damage: number;
+  kind: BotKind;
+  botId: number;
 }
 
 export interface Bullet {
@@ -95,6 +156,8 @@ export interface Bullet {
   travelled: number;
   /** Set once a round has been reported as dodged, so one bullet counts once. */
   dodgeReported?: boolean;
+  /** Flame rounds are drawn as fire and die young; they are not slugs. */
+  flame?: boolean;
 }
 
 export interface Rect {
@@ -144,6 +207,12 @@ export type SimEvent =
   | { type: "bot-fired"; botId: number; kind: BotKind; position: Vec2; direction: Vec2 }
   | { type: "bot-hit"; botId: number; kind: BotKind; position: Vec2; amount: number; health: number; plated?: boolean }
   | { type: "bot-dive"; botId: number; kind: BotKind; position: Vec2; direction: Vec2 }
+  | { type: "bot-blocked"; botId: number; kind: BotKind; position: Vec2 }
+  | { type: "bot-charge"; botId: number; kind: BotKind; from: Vec2; direction: Vec2; distance: number }
+  | { type: "bot-stunned"; botId: number; kind: BotKind; position: Vec2; duration: number }
+  | { type: "bot-split"; botId: number; kind: BotKind; into: BotKind; count: number; position: Vec2 }
+  | { type: "shell-launched"; botId: number; kind: BotKind; from: Vec2; target: Vec2; flight: number; radius: number }
+  | { type: "shell-landed"; kind: BotKind; position: Vec2; radius: number }
   | { type: "arena-pressure"; level: number }
   | { type: "bot-eliminated"; botId: number; kind: BotKind; position: Vec2; heals: number; kills: number; interrupted: boolean }
   | { type: "spawn-warning"; kind: BotKind; position: Vec2; delay: number }

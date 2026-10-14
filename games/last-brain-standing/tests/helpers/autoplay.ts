@@ -1,8 +1,9 @@
 import { normalize } from "../../src/ai";
+import { attackFor } from "../../src/signatures";
 import { pointInObstacle, segmentBlocked, WORLD } from "../../src/arena";
 import { PLAYER_BULLET_SPEED, PLAYER_RADIUS, BOT_RADIUS } from "../../src/constants";
 import { createWorld, emptyInput, stepWorld, type SimInput, type World } from "../../src/sim";
-import type { DifficultyId, RunStats, SimEvent } from "../../src/types";
+import type { DifficultyId, Rect, RunStats, SimEvent } from "../../src/types";
 
 export type PlayStyle = "competent" | "reckless" | "passive";
 
@@ -104,6 +105,15 @@ export function autoplay(options: AutoplayOptions): AutoplayResult {
   while (world.phase === "running" && world.elapsed < maxSeconds) {
     const input = policy.decide(world);
     const bulletsBefore = world.bullets.filter((bullet) => bullet.owner === "bot").map((bullet) => ({ ...bullet.position }));
+    const shellsBefore = world.shells.map((shell) => ({ ...shell.target }));
+    // The shot was created against the world as it stood at the start of the
+    // frame, so the lane is judged against the player's position *before* the
+    // step: a player who dives into cover during the same frame was still shot
+    // at fairly, and the round simply hits the wall.
+    const playerBefore = { ...world.player.position };
+    // A frame may swap the arena layout (a run starting, a wave turning over),
+    // so the "before" check has to remember the obstacles the sim was using.
+    const obstaclesBefore = world.obstacles;
     const botsBefore = world.bots.filter((bot) => bot.alive).map((bot) => ({ id: bot.id, position: { ...bot.position } }));
 
     const frameEvents = stepWorld(world, input, step);
@@ -117,13 +127,40 @@ export function autoplay(options: AutoplayOptions): AutoplayResult {
         if (started === undefined || world.elapsed - started < 0.14) fairness.untelegraphedShots += 1;
         // Use the shooter's pre-step position: a bot may legally fire and then
         // move into cover during the same frame.
-        const shooter = botsBefore.find((entry) => entry.id === event.botId);
-        if (shooter && segmentBlocked(shooter.position, world.player.position, world.obstacles)) fairness.shotsThroughWalls += 1;
+        const shooterBefore = botsBefore.find((entry) => entry.id === event.botId);
+        const shooterAfter = world.bots.find((entry) => entry.id === event.botId);
+        // Only straight-lane attacks are lane-checked. A lobbed shell is *meant*
+        // to clear cover, a shield bash happens at arm's length, and a spray is
+        // checked once when it starts: its later rounds simply burn out on the
+        // wall they hit.
+        const indirect =
+          attackFor(event.kind).shell !== undefined ||
+          attackFor(event.kind).melee !== undefined ||
+          attackFor(event.kind).kamikaze === true ||
+          attackFor(event.kind).spray !== undefined;
+        // The shot is released part-way through the frame, after the player has
+        // moved and before the shooter does. The metric only knows the frame's
+        // endpoints, so it is a violation only if every lane the frame could
+        // have contained was blocked: shooter and player each at both of their
+        // positions. A near-corner graze that happens to be blocked at both
+        // endpoints is not treated as a shot through a wall.
+        const blocked = (from: { x: number; y: number } | undefined, obstacles: Rect[]) =>
+          from !== undefined && segmentBlocked(from, playerBefore, obstacles) && segmentBlocked(from, world.player.position, world.obstacles);
+        const everyLaneBlocked =
+          blocked(shooterBefore?.position, obstaclesBefore) &&
+          (shooterAfter === undefined ||
+            (segmentBlocked(shooterAfter.position, playerBefore, obstaclesBefore) && segmentBlocked(shooterAfter.position, world.player.position, world.obstacles)));
+        if (!indirect && everyLaneBlocked) fairness.shotsThroughWalls += 1;
       }
       if (event.type === "player-hit") {
         const nearestBullet = bulletsBefore.reduce((min, position) => Math.min(min, Math.hypot(position.x - world.player.position.x, position.y - world.player.position.y)), Infinity);
+        // A bulwark's bash and a shard's detonation happen at arm's length, so
+        // proximity is the cause: allow the melee radius, not just body contact.
         const nearestBot = botsBefore.reduce((min, entry) => Math.min(min, Math.hypot(entry.position.x - world.player.position.x, entry.position.y - world.player.position.y)), Infinity);
-        if (nearestBullet > 120 && nearestBot > 60) fairness.unexplainedHits += 1;
+        // A shell in the air over the player's head is a cause too: it is
+        // telegraphed by the marked circle, not by a projectile on screen.
+        const nearestShell = shellsBefore.reduce((min, position) => Math.min(min, Math.hypot(position.x - world.player.position.x, position.y - world.player.position.y)), Infinity);
+        if (nearestBullet > 120 && nearestBot > 100 && nearestShell > 90) fairness.unexplainedHits += 1;
       }
       if (event.type === "bot-spawned") {
         if (Math.hypot(event.position.x - world.player.position.x, event.position.y - world.player.position.y) < 200) fairness.closeSpawns += 1;

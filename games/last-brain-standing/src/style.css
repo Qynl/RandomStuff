@@ -127,6 +127,9 @@ button{font:inherit;color:inherit}
 .opponent{display:flex;align-items:center;gap:9px;padding:11px 0 5px}
 .opponent-symbol{width:26px;height:26px;display:grid;place-items:center;border:1px solid #364255;border-radius:6px;font-size:16px;background:#131c29}
 .hunter-symbol{color:var(--rust)}.flanker-symbol{color:var(--amber)}.mirror-symbol{color:var(--clay)}
+.sniper-symbol{color:#cbb37f}.pyro-symbol{color:#d08a4a}.mortar-symbol{color:#a9926a}.shielder-symbol{color:#8a97a6}
+.splitter-symbol{color:#8fb48c}.charger-symbol{color:#c9744f}.shard-symbol{color:#a9c7a4}
+.opponent-attack{color:var(--ink-dim);letter-spacing:.04em}
 .opponent-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
 .opponent-copy strong{font-size:9px;letter-spacing:.6px}
 .opponent-copy small{font:7px "DM Mono",monospace;color:#768fa8;letter-spacing:.6px}
