@@ -172,7 +172,7 @@ function Painting({ position, rotation = [0,0,0] }) {
   </group>;
 }
 
-function Corridor({ entered, apparition }) {
+function Corridor({ apparitionStage }) {
   const lampA = useRef();
   const lampB = useRef();
   useFrame(({ clock }) => {
@@ -201,7 +201,7 @@ function Corridor({ entered, apparition }) {
       <mesh position={[.22,-.05,.065]}><sphereGeometry args={[.025,8,8]} /><meshStandardMaterial color="#9d8051" metalness={.7} roughness={.3} /></mesh>
     </group>)}
     <mesh position={[0,.002,-8.8]} rotation={[-Math.PI/2,0,0]}><planeGeometry args={[2.5,8.5]} /><meshStandardMaterial color="#29261e" roughness={1} transparent opacity={.55} /></mesh>
-    <group position={[0,0,-10.55]} visible={apparition}>
+    <group position={[0,0,apparitionStage > 1 ? -7.8 : -10.55]} visible={apparitionStage > 0}>
       <mesh position={[0,1.42,0]} castShadow><sphereGeometry args={[.22,16,14]} /><meshStandardMaterial color="#030403" roughness={1} /></mesh>
       <mesh position={[0,.83,0]} rotation={[0,0,-.04]} castShadow><capsuleGeometry args={[.23,.9,5,9]} /><meshStandardMaterial color="#050605" roughness={1} /></mesh>
       <mesh position={[-.19,.18,0]} rotation={[0,0,-.04]}><capsuleGeometry args={[.085,.58,4,7]} /><meshStandardMaterial color="#050605" roughness={1} /></mesh>
@@ -228,7 +228,7 @@ function Room({ onDoor, opened, onUncanny, apparition }) {
     <mesh position={[-2.98,2,-4.45]} receiveShadow><boxGeometry args={[3.24,4.2,.2]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
     <mesh position={[2.98,2,-4.45]} receiveShadow><boxGeometry args={[3.24,4.2,.2]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
     <mesh position={[0,3.78,-4.45]} receiveShadow><boxGeometry args={[2.72,.64,.2]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
-    <Corridor entered={opened} apparition={apparition} />
+    <Corridor apparitionStage={apparitionStage} />
     <mesh position={[-4.55,2,0]} receiveShadow><boxGeometry args={[.2,4.2,9.1]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
     <mesh position={[4.55,2,0]} receiveShadow><boxGeometry args={[.2,4.2,9.1]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
     {/* aged architectural trim and layered shadow lines */}
@@ -277,12 +277,13 @@ function Room({ onDoor, opened, onUncanny, apparition }) {
   </group>;
 }
 
-function CameraRig({ active, opened, onUncanny }) {
+function CameraRig({ active, opened, apparitionStage, onUncanny, onApparitionShift }) {
   const controls = useRef();
   const keys = useRef({});
   const enteredCorridor = useRef(false);
   const lookedAway = useRef(false);
   const triggered = useRef(false);
+  const apparitionSeen = useRef(false);
   useEffect(() => {
     const camera = controls.current?.getObject();
     if (camera) camera.position.set(0, 1.65, 3.25);
@@ -299,14 +300,20 @@ function CameraRig({ active, opened, onUncanny }) {
   useFrame((_, delta) => {
     if (!active || !controls.current?.isLocked) return;
     const camera = controls.current.getObject();
+    const direction = new THREE.Vector3();
+    camera.getWorldDirection(direction);
     if (enteredCorridor.current && !triggered.current) {
-      const direction = new THREE.Vector3();
-      camera.getWorldDirection(direction);
       if (direction.z > .35) lookedAway.current = true;
       if (lookedAway.current && direction.z < -.55) {
         triggered.current = true;
         onUncanny?.();
       }
+    }
+    if (apparitionStage === 1) {
+      const target = new THREE.Vector3(0, 1.05, -10.55).sub(camera.position).normalize();
+      const focus = direction.dot(target);
+      if (focus > .94) apparitionSeen.current = true;
+      if (apparitionSeen.current && focus < .55) onApparitionShift?.();
     }
     const forward = Number(keys.current.KeyW || keys.current.ArrowUp) - Number(keys.current.KeyS || keys.current.ArrowDown);
     const side = Number(keys.current.KeyD || keys.current.ArrowRight) - Number(keys.current.KeyA || keys.current.ArrowLeft);
@@ -329,7 +336,7 @@ function CameraRig({ active, opened, onUncanny }) {
   return <PointerLockControls ref={controls} selector="#enter-room" />;
 }
 
-function Scene({ opened, setOpened, onUncanny, apparition }) {
+function Scene({ opened, setOpened, onUncanny, apparitionStage, onApparitionShift }) {
   const [started, setStarted] = useState(false);
   useEffect(() => {
     const onLock = () => { setStarted(document.pointerLockElement !== null); };
@@ -350,7 +357,7 @@ function Scene({ opened, setOpened, onUncanny, apparition }) {
     <ambientLight intensity={0.13} color="#b9c0ad" />
     <directionalLight position={[-3,4,2]} color="#c6b99a" intensity={0.18} />
     <hemisphereLight args={['#8e9a88','#17130f',0.22]} />
-    <Room onDoor={() => setOpened(v => !v)} opened={opened} onUncanny={onUncanny} apparition={apparition} />
+    <Room onDoor={() => setOpened(v => !v)} opened={opened} onUncanny={onUncanny} apparition={apparitionStage > 0} />
     <Environment preset="warehouse" environmentIntensity={0.12} />
     <ContactShadows position={[0,.005,0]} opacity={.45} scale={12} blur={2.6} far={4} resolution={256} color="#000000" />
     <Sparkles count={50} scale={[8,3.5,8]} size={1.2} speed={.12} opacity={.24} color="#d6c9a9" />
@@ -360,7 +367,7 @@ function Scene({ opened, setOpened, onUncanny, apparition }) {
       <Noise opacity={.075} />
       <Vignette eskil={false} offset={.22} darkness={.86} />
     </EffectComposer>
-    <CameraRig active={started} opened={opened} onUncanny={onUncanny} />
+    <CameraRig active={started} opened={opened} apparitionStage={apparitionStage} onUncanny={onUncanny} onApparitionShift={onApparitionShift} />
     {!started && <Html fullscreen>
       <div className="start-screen">
         <div className="start-grid" />
@@ -381,7 +388,7 @@ function Scene({ opened, setOpened, onUncanny, apparition }) {
         <div className="hud-top"><span className="hud-mark">T<span>.</span>D</span><span className="hud-location">ROOM 001 <i>/</i> THE WAITING ROOM</span><span className="hud-record"><span/> REC</span></div>
         <div className="crosshair"><span/><span/></div>
         <div className="hud-bottom"><div><span className="hud-label">OBJECTIVE</span><span className="hud-objective">Find a way out.</span></div><div className="controls-note"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> MOVE <span className="note-divider">/</span> <kbd>MOUSE</kbd> LOOK <span className="note-divider">/</span> <kbd>E</kbd> {opened ? 'CLOSE DOOR' : 'INTERACT'}</div></div>
-        <div className="center-prompt">{apparition ? 'IT WAS NOT THERE BEFORE' : opened ? 'THE DARKNESS IS WAITING' : 'SOMETHING IS ON THE OTHER SIDE'}</div>
+        <div className="center-prompt">{apparitionStage > 1 ? 'IT IS CLOSER NOW' : apparitionStage === 1 ? 'IT WAS NOT THERE BEFORE' : opened ? 'THE DARKNESS IS WAITING' : 'SOMETHING IS ON THE OTHER SIDE'}</div>
       </div>
     </Html>}
   </>;
@@ -389,7 +396,7 @@ function Scene({ opened, setOpened, onUncanny, apparition }) {
 
 export default function App() {
   const [opened, setOpened] = useState(false);
-  const [apparition, setApparition] = useState(false);
+  const [apparitionStage, setApparitionStage] = useState(0);
   const [soundOn, setSoundOn] = useState(false);
   const audioRef = useRef(null);
   const toggleSound = async () => {
@@ -410,7 +417,7 @@ export default function App() {
   useEffect(() => () => { if (audioRef.current) audioRef.current.ctx.close(); }, []);
   return <main className="experience">
     <Canvas shadows dpr={[1,1.6]} camera={{ position:[0,1.65,3.25], fov:62, near:.05, far:40 }} gl={{ antialias:true, alpha:false, powerPreference:'high-performance' }}>
-      <Suspense fallback={null}><Scene opened={opened} setOpened={setOpened} apparition={apparition} onUncanny={() => setApparition(true)} /></Suspense>
+      <Suspense fallback={null}><Scene opened={opened} setOpened={setOpened} apparitionStage={apparitionStage} onUncanny={() => setApparitionStage(1)} onApparitionShift={() => setApparitionStage(2)} /></Suspense>
     </Canvas>
     <div className="brand-corner"><span className="brand-icon">T<span>.</span>D</span><span className="brand-caption">AN INTERACTIVE HORROR EXPERIENCE</span></div>
     <button className={'sound-toggle '+(soundOn?'is-on':'')} onClick={toggleSound} aria-label="Toggle ambient sound"><span className="sound-bars"><i/><i/><i/><i/></span><span>{soundOn?'SOUND ON':'SOUND OFF'}</span></button>
