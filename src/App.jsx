@@ -209,10 +209,34 @@ function Room({ onDoor, opened }) {
 
 function CameraRig({ active }) {
   const controls = useRef();
+  const keys = useRef({});
   useEffect(() => {
     const camera = controls.current?.getObject();
     if (camera) camera.position.set(0, 1.65, 3.25);
-  }, [active]);
+  }, []);
+  useEffect(() => {
+    const down = (e) => { if (['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) keys.current[e.code] = true; };
+    const up = (e) => { keys.current[e.code] = false; };
+    const clear = () => { keys.current = {}; };
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    window.addEventListener('blur', clear);
+    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', clear); };
+  }, []);
+  useFrame((_, delta) => {
+    if (!active || !controls.current?.isLocked) return;
+    const camera = controls.current.getObject();
+    const forward = Number(keys.current.KeyW || keys.current.ArrowUp) - Number(keys.current.KeyS || keys.current.ArrowDown);
+    const side = Number(keys.current.KeyD || keys.current.ArrowRight) - Number(keys.current.KeyA || keys.current.ArrowLeft);
+    if (!forward && !side) return;
+    const speed = 2.15 * Math.min(delta, .04);
+    const direction = new THREE.Vector3(side, 0, -forward).normalize().applyQuaternion(camera.quaternion);
+    direction.y = 0;
+    camera.position.addScaledVector(direction.normalize(), speed);
+    camera.position.x = THREE.MathUtils.clamp(camera.position.x, -3.8, 3.8);
+    camera.position.z = THREE.MathUtils.clamp(camera.position.z, -3.8, 3.8);
+    camera.position.y = 1.65;
+  });
   return <PointerLockControls ref={controls} selector="#enter-room" />;
 }
 
