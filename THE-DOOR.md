@@ -24,7 +24,7 @@ npm run dev
 ## Controls
 - Click **ENTER ROOM** to enter the scene
 - Mouse to look around
-- WASD movement is planned for the next visual-interaction pass; this first pass establishes the room, camera, and interaction surfaces
+- Pointer-lock first-person camera with WASD/arrow-key movement and room bounds
 - Click the door or press E to open/close it
 
 ## Scope
