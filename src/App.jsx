@@ -75,6 +75,13 @@ function WallPanel({ position, rotation = [0,0,0], width = 1, height = 1, color 
   </mesh>;
 }
 
+function BrassHinge({ position }) {
+  return <group position={position}>
+    <mesh castShadow><boxGeometry args={[.09,.32,.045]} /><meshStandardMaterial color="#66543a" metalness={.82} roughness={.31} /></mesh>
+    {[-.11,0,.11].map(y => <mesh key={y} position={[0,y,.026]}><sphereGeometry args={[.018,8,8]} /><meshStandardMaterial color="#c1a16a" metalness={.85} roughness={.25} /></mesh>)}
+  </group>;
+}
+
 function Door({ textures, onInteract, opened }) {
   const door = useRef();
   const knob = useRef();
@@ -110,6 +117,8 @@ function Door({ textures, onInteract, opened }) {
         <boxGeometry args={[1.82, 3.02, .12]} />
         <meshStandardMaterial map={textures.wood} color={hover ? '#8a6a4a' : '#fff'} roughness={.53} metalness={.04} />
       </mesh>
+      {[.35, 1.52, 2.7].map((y) => <BrassHinge key={y} position={[.13,y,.09]} />)}
+      <mesh position={[1.55, 1.35, .09]}><boxGeometry args={[.15,.34,.025]} /><meshStandardMaterial color="#6e5738" metalness={.78} roughness={.28} /></mesh>
       {[.58, 1.7, 2.48].map((y, i) => <mesh key={y} position={[.92, y, .067]} castShadow>
         <boxGeometry args={[1.56, i === 1 ? .68 : .36, .035]} />
         <meshStandardMaterial color="#241a14" roughness={.55} />
@@ -170,6 +179,11 @@ function Room({ onDoor, opened }) {
     <mesh position={[0,2,4.45]} receiveShadow><boxGeometry args={[9.2,4.2,.2]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
     <mesh position={[-4.55,2,0]} receiveShadow><boxGeometry args={[.2,4.2,9.1]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
     <mesh position={[4.55,2,0]} receiveShadow><boxGeometry args={[.2,4.2,9.1]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
+    {/* aged architectural trim and layered shadow lines */}
+    {[-1,1].map(side => <group key={'trim'+side} position={[side*4.37,0,0]}>
+      <mesh position={[0,2.05,0]} castShadow><boxGeometry args={[.12,4.08,9.02]} /><meshStandardMaterial color="#24231e" roughness={.84} /></mesh>
+      <mesh position={[-side*.068,2.05,0]}><boxGeometry args={[.035,3.92,8.82]} /><meshStandardMaterial color="#4a4334" roughness={.82} /></mesh>
+    </group>)}
     {/* dark panelled back wall */}
     {[-3.95,-2.9,-1.85,-.9,.9,1.85,2.9,3.95].map(x => <WallPanel key={x} position={[x,2,-4.32]} width={.035} height={3.9} color="#252a25" />)}
     {[.22,3.72].map(y => <mesh key={y} position={[0,y,-4.31]}><boxGeometry args={[9,.045,.08]} /><meshStandardMaterial color="#282a23" roughness={.8} /></mesh>)}
@@ -181,6 +195,10 @@ function Room({ onDoor, opened }) {
     <Sconce position={[1.7,2.45,-4.12]} />
     <Painting position={[-3.25,2.15,-4.3]} />
     <Painting position={[3.25,2.15,-4.3]} />
+    {/* ceiling beams catch only a little of the warm practical light */}
+    {[-3,-1.5,0,1.5,3].map(x => <mesh key={'beam'+x} position={[x,4.02,0]} castShadow>
+      <boxGeometry args={[.12,.13,8.85]} /><meshStandardMaterial color="#211e18" roughness={.88} />
+    </mesh>)}
     {/* foreground side table */}
     <group position={[-2.8,0,-.6]}>
       <mesh position={[0,.76,0]} castShadow receiveShadow><boxGeometry args={[1.1,.12,.72]} /><meshStandardMaterial map={textures.wood} roughness={.65} /></mesh>
@@ -258,8 +276,9 @@ function Scene({ opened, setOpened }) {
   }, [started, setOpened]);
   return <>
     <color attach="background" args={['#080a09']} />
-    <fog attach="fog" args={['#101411', 5.5, 15]} />
-    <ambientLight intensity={0.18} color="#b9c0ad" />
+    <fog attach="fog" args={['#101411', 5.1, 13.5]} />
+    <ambientLight intensity={0.13} color="#b9c0ad" />
+    <directionalLight position={[-3,4,2]} color="#c6b99a" intensity={0.18} />
     <hemisphereLight args={['#8e9a88','#17130f',0.22]} />
     <Room onDoor={() => setOpened(v => !v)} opened={opened} />
     <Environment preset="warehouse" environmentIntensity={0.12} />
