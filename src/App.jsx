@@ -299,6 +299,15 @@ function CameraRig({ active, opened, onUncanny }) {
   useFrame((_, delta) => {
     if (!active || !controls.current?.isLocked) return;
     const camera = controls.current.getObject();
+    if (enteredCorridor.current && !triggered.current) {
+      const direction = new THREE.Vector3();
+      camera.getWorldDirection(direction);
+      if (direction.z > .35) lookedAway.current = true;
+      if (lookedAway.current && direction.z < -.55) {
+        triggered.current = true;
+        onUncanny?.();
+      }
+    }
     const forward = Number(keys.current.KeyW || keys.current.ArrowUp) - Number(keys.current.KeyS || keys.current.ArrowDown);
     const side = Number(keys.current.KeyD || keys.current.ArrowRight) - Number(keys.current.KeyA || keys.current.ArrowLeft);
     if (!forward && !side) return;
@@ -315,15 +324,6 @@ function CameraRig({ active, opened, onUncanny }) {
     } else {
       camera.position.x = THREE.MathUtils.clamp(camera.position.x, -3.8, 3.8);
       camera.position.z = THREE.MathUtils.clamp(camera.position.z, -4.15, 3.8);
-    }
-    if (enteredCorridor.current && !triggered.current) {
-      const direction = new THREE.Vector3();
-      camera.getWorldDirection(direction);
-      if (direction.z > .35) lookedAway.current = true;
-      if (lookedAway.current && direction.z < -.55) {
-        triggered.current = true;
-        onUncanny?.();
-      }
     }
   });
   return <PointerLockControls ref={controls} selector="#enter-room" />;
