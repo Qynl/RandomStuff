@@ -20,6 +20,7 @@ npm run dev
 - Minimal title screen and in-game HUD
 - Pointer-lock first-person controls, a traversable corridor beyond the door, and a door interaction (click the door or press E)
 - A two-beat uncanny sequence: after entering the corridor, look back toward the room and down the corridor to reveal a distant silhouette; focus on it, then look away and it relocates closer while unseen
+- Corridor practical lights respond to the apparition with uneven flicker and brief near-blackouts; the silhouette subtly sways
 - Toggleable low-frequency ambient drone generated with Web Audio
 
 ## Controls
