@@ -93,8 +93,16 @@ function Door({ textures, onInteract, opened }) {
     if (knob.current) knob.current.rotation.y = Math.sin(state.clock.elapsedTime * 1.3) * .025;
   });
   return <group position={[0, 0, -3.82]}>
-    <mesh position={[0, 1.56, -.04]} castShadow>
-      <boxGeometry args={[1.95, 3.12, .2]} />
+    <mesh position={[-.99, 1.56, -.035]} castShadow>
+      <boxGeometry args={[.08, 3.12, .16]} />
+      <meshStandardMaterial color="#151815" roughness={.9} />
+    </mesh>
+    <mesh position={[.99, 1.56, -.035]} castShadow>
+      <boxGeometry args={[.08, 3.12, .16]} />
+      <meshStandardMaterial color="#151815" roughness={.9} />
+    </mesh>
+    <mesh position={[0, 3.1, -.035]} castShadow>
+      <boxGeometry args={[2.02, .08, .16]} />
       <meshStandardMaterial color="#151815" roughness={.9} />
     </mesh>
     <mesh position={[-1.04, 1.57, 0]} castShadow>
@@ -200,7 +208,6 @@ function Corridor({ entered, apparition }) {
       <mesh position={[.18,.18,.015]} rotation={[0,0,.03]}><capsuleGeometry args={[.085,.58,4,7]} /><meshStandardMaterial color="#050605" roughness={1} /></mesh>
       <pointLight position={[0,1.25,-.12]} color="#777b68" intensity={.08} distance={1.2} />
     </group>
-    <fog attach="fog" args={["#0c0f0c", 2.5, 10.7]} />
   </group>;
 }
 
