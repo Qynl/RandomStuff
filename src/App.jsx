@@ -316,14 +316,14 @@ function CameraRig({ active, opened, onUncanny }) {
     direction.y = 0;
     camera.position.addScaledVector(direction.normalize(), speed);
     camera.position.y = 1.65;
-    if (camera.position.z < -4.15 && !opened) camera.position.z = -4.15;
-    if (camera.position.z < -4.05) {
+    if (!opened && !enteredCorridor.current) camera.position.z = Math.max(camera.position.z, -3.25);
+    if (camera.position.z < -4.05 && (opened || enteredCorridor.current)) {
       camera.position.x = THREE.MathUtils.clamp(camera.position.x, -1.02, 1.02);
       camera.position.z = Math.max(camera.position.z, -12.75);
       enteredCorridor.current = true;
     } else {
       camera.position.x = THREE.MathUtils.clamp(camera.position.x, -3.8, 3.8);
-      camera.position.z = THREE.MathUtils.clamp(camera.position.z, -4.15, 3.8);
+      camera.position.z = THREE.MathUtils.clamp(camera.position.z, -3.25, 3.8);
     }
   });
   return <PointerLockControls ref={controls} selector="#enter-room" />;
