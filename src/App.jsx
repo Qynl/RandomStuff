@@ -164,7 +164,47 @@ function Painting({ position, rotation = [0,0,0] }) {
   </group>;
 }
 
-function Room({ onDoor, opened }) {
+function Corridor({ entered, apparition }) {
+  const lampA = useRef();
+  const lampB = useRef();
+  useFrame(({ clock }) => {
+    const t = clock.elapsedTime;
+    if (lampA.current) lampA.current.intensity = 1.05 + Math.sin(t * 4.7) * .08 + (Math.sin(t * 13) > .985 ? -.5 : 0);
+    if (lampB.current) lampB.current.intensity = .62 + Math.sin(t * 3.1 + 1.7) * .05;
+  });
+  return <group>
+    <mesh position={[0,-.16,-8.9]} receiveShadow><boxGeometry args={[2.85,.22,9.3]} /><meshStandardMaterial color="#171814" roughness={.98} /></mesh>
+    <mesh position={[0,3.72,-8.9]} receiveShadow><boxGeometry args={[2.85,.16,9.3]} /><meshStandardMaterial color="#11130f" roughness={1} /></mesh>
+    {[-1.39,1.39].map((x, i) => <group key={x}>
+      <mesh position={[x,1.8,-8.9]} receiveShadow castShadow><boxGeometry args={[.12,3.7,9.3]} /><meshStandardMaterial color={i ? "#282920" : "#20221c"} roughness={.96} /></mesh>
+      {[-6.2,-8.5,-10.8].map((z,j) => <mesh key={z} position={[x + (i ? -.07 : .07),1.8,z]}><boxGeometry args={[.025,3.3,.035]} /><meshStandardMaterial color="#494435" roughness={.9} /></mesh>)}
+    </group>)}
+    <mesh position={[0,1.8,-13.48]} receiveShadow><boxGeometry args={[2.85,3.7,.14]} /><meshStandardMaterial color="#171a15" roughness={1} /></mesh>
+    <mesh position={[0,1.8,-13.39]}><boxGeometry args={[.8,1.45,.035]} /><meshStandardMaterial color="#24251d" roughness={1} /></mesh>
+    <mesh position={[0,1.8,-13.36]}><boxGeometry args={[.57,1.16,.025]} /><meshStandardMaterial color="#0c0e0b" roughness={1} /></mesh>
+    {[-6.2,-9.9].map((z,i) => <group key={z} position={[i ? .93 : -.93,2.48,z]}>
+      <mesh castShadow><boxGeometry args={[.18,.3,.1]} /><meshStandardMaterial color="#393326" metalness={.38} roughness={.6} /></mesh>
+      <mesh position={[0,.04,.065]}><sphereGeometry args={[.07,12,10]} /><meshStandardMaterial color="#d3ad72" emissive="#b17a3c" emissiveIntensity={1.1} /></mesh>
+      <pointLight ref={i ? lampB : lampA} position={[0,0,.12]} color="#d9ad70" intensity={1} distance={3.6} decay={2} />
+    </group>)}
+    {[-5.8,-8.4,-11].map((z,i) => <group key={z} position={[i ? 1.325 : -1.325,1.72,z]} rotation={[0,i ? -Math.PI/2 : Math.PI/2,0]}>
+      <mesh castShadow><boxGeometry args={[.76,1.6,.07]} /><meshStandardMaterial color="#30271d" roughness={.88} /></mesh>
+      <mesh position={[0,0,.045]}><boxGeometry args={[.6,1.4,.025]} /><meshStandardMaterial color="#1c1c17" roughness={1} /></mesh>
+      <mesh position={[.22,-.05,.065]}><sphereGeometry args={[.025,8,8]} /><meshStandardMaterial color="#9d8051" metalness={.7} roughness={.3} /></mesh>
+    </group>)}
+    <mesh position={[0,.002,-8.8]} rotation={[-Math.PI/2,0,0]}><planeGeometry args={[2.5,8.5]} /><meshStandardMaterial color="#29261e" roughness={1} transparent opacity={.55} /></mesh>
+    <group position={[0,0,-10.55]} visible={apparition}>
+      <mesh position={[0,1.42,0]} castShadow><sphereGeometry args={[.22,16,14]} /><meshStandardMaterial color="#030403" roughness={1} /></mesh>
+      <mesh position={[0,.83,0]} rotation={[0,0,-.04]} castShadow><capsuleGeometry args={[.23,.9,5,9]} /><meshStandardMaterial color="#050605" roughness={1} /></mesh>
+      <mesh position={[-.19,.18,0]} rotation={[0,0,-.04]}><capsuleGeometry args={[.085,.58,4,7]} /><meshStandardMaterial color="#050605" roughness={1} /></mesh>
+      <mesh position={[.18,.18,.015]} rotation={[0,0,.03]}><capsuleGeometry args={[.085,.58,4,7]} /><meshStandardMaterial color="#050605" roughness={1} /></mesh>
+      <pointLight position={[0,1.25,-.12]} color="#777b68" intensity={.08} distance={1.2} />
+    </group>
+    <fog attach="fog" args={["#0c0f0c", 2.5, 10.7]} />
+  </group>;
+}
+
+function Room({ onDoor, opened, onUncanny, apparition }) {
   const textures = ProceduralTextures();
   return <group>
     {/* room shell */}
@@ -177,6 +217,11 @@ function Room({ onDoor, opened }) {
       <meshStandardMaterial color="#191c19" roughness={1} />
     </mesh>
     <mesh position={[0,2,4.45]} receiveShadow><boxGeometry args={[9.2,4.2,.2]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
+    {/* The rear wall is built around a real opening, so the door reveals depth. */}
+    <mesh position={[-2.98,2,-4.45]} receiveShadow><boxGeometry args={[3.24,4.2,.2]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
+    <mesh position={[2.98,2,-4.45]} receiveShadow><boxGeometry args={[3.24,4.2,.2]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
+    <mesh position={[0,3.78,-4.45]} receiveShadow><boxGeometry args={[2.72,.64,.2]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
+    <Corridor entered={opened} apparition={apparition} />
     <mesh position={[-4.55,2,0]} receiveShadow><boxGeometry args={[.2,4.2,9.1]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
     <mesh position={[4.55,2,0]} receiveShadow><boxGeometry args={[.2,4.2,9.1]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
     {/* aged architectural trim and layered shadow lines */}
@@ -185,7 +230,7 @@ function Room({ onDoor, opened }) {
       <mesh position={[-side*.068,2.05,0]}><boxGeometry args={[.035,3.92,8.82]} /><meshStandardMaterial color="#4a4334" roughness={.82} /></mesh>
     </group>)}
     {/* dark panelled back wall */}
-    {[-3.95,-2.9,-1.85,-.9,.9,1.85,2.9,3.95].map(x => <WallPanel key={x} position={[x,2,-4.32]} width={.035} height={3.9} color="#252a25" />)}
+    {[-3.95,-2.9,-1.85,-.9,.9,1.85,2.9,3.95].filter(x => Math.abs(x) > 2).map(x => <WallPanel key={x} position={[x,2,-4.32]} width={.035} height={3.9} color="#252a25" />)}
     {[.22,3.72].map(y => <mesh key={y} position={[0,y,-4.31]}><boxGeometry args={[9,.045,.08]} /><meshStandardMaterial color="#282a23" roughness={.8} /></mesh>)}
     {/* skirting */}
     {[-1,1].map(side => <mesh key={side} position={[side*4.42,.12,0]}><boxGeometry args={[.08,.23,8.8]} /><meshStandardMaterial color="#211e18" roughness={.8} /></mesh>)}
@@ -225,9 +270,12 @@ function Room({ onDoor, opened }) {
   </group>;
 }
 
-function CameraRig({ active }) {
+function CameraRig({ active, opened, onUncanny }) {
   const controls = useRef();
   const keys = useRef({});
+  const enteredCorridor = useRef(false);
+  const lookedAway = useRef(false);
+  const triggered = useRef(false);
   useEffect(() => {
     const camera = controls.current?.getObject();
     if (camera) camera.position.set(0, 1.65, 3.25);
@@ -251,16 +299,31 @@ function CameraRig({ active }) {
     const direction = new THREE.Vector3(side, 0, -forward).normalize().applyQuaternion(camera.quaternion);
     direction.y = 0;
     camera.position.addScaledVector(direction.normalize(), speed);
-    camera.position.x = THREE.MathUtils.clamp(camera.position.x, -3.8, 3.8);
-    camera.position.z = THREE.MathUtils.clamp(camera.position.z, -3.8, 3.8);
     camera.position.y = 1.65;
+    if (camera.position.z < -4.15 && !opened) camera.position.z = -4.15;
+    if (camera.position.z < -4.05) {
+      camera.position.x = THREE.MathUtils.clamp(camera.position.x, -1.02, 1.02);
+      camera.position.z = Math.max(camera.position.z, -12.75);
+      enteredCorridor.current = true;
+    } else {
+      camera.position.x = THREE.MathUtils.clamp(camera.position.x, -3.8, 3.8);
+      camera.position.z = THREE.MathUtils.clamp(camera.position.z, -4.15, 3.8);
+    }
+    if (enteredCorridor.current && !triggered.current) {
+      const direction = new THREE.Vector3();
+      camera.getWorldDirection(direction);
+      if (direction.z > .35) lookedAway.current = true;
+      if (lookedAway.current && direction.z < -.55) {
+        triggered.current = true;
+        onUncanny?.();
+      }
+    }
   });
   return <PointerLockControls ref={controls} selector="#enter-room" />;
 }
 
-function Scene({ opened, setOpened }) {
+function Scene({ opened, setOpened, onUncanny, apparition }) {
   const [started, setStarted] = useState(false);
-  const [hint, setHint] = useState(false);
   useEffect(() => {
     const onLock = () => { setStarted(document.pointerLockElement !== null); };
     document.addEventListener('pointerlockchange', onLock);
@@ -280,7 +343,7 @@ function Scene({ opened, setOpened }) {
     <ambientLight intensity={0.13} color="#b9c0ad" />
     <directionalLight position={[-3,4,2]} color="#c6b99a" intensity={0.18} />
     <hemisphereLight args={['#8e9a88','#17130f',0.22]} />
-    <Room onDoor={() => setOpened(v => !v)} opened={opened} />
+    <Room onDoor={() => setOpened(v => !v)} opened={opened} onUncanny={onUncanny} apparition={apparition} />
     <Environment preset="warehouse" environmentIntensity={0.12} />
     <ContactShadows position={[0,.005,0]} opacity={.45} scale={12} blur={2.6} far={4} resolution={256} color="#000000" />
     <Sparkles count={50} scale={[8,3.5,8]} size={1.2} speed={.12} opacity={.24} color="#d6c9a9" />
@@ -290,7 +353,7 @@ function Scene({ opened, setOpened }) {
       <Noise opacity={.075} />
       <Vignette eskil={false} offset={.22} darkness={.86} />
     </EffectComposer>
-    <CameraRig active={started} />
+    <CameraRig active={started} opened={opened} onUncanny={onUncanny} />
     {!started && <Html fullscreen>
       <div className="start-screen">
         <div className="start-grid" />
@@ -311,7 +374,7 @@ function Scene({ opened, setOpened }) {
         <div className="hud-top"><span className="hud-mark">T<span>.</span>D</span><span className="hud-location">ROOM 001 <i>/</i> THE WAITING ROOM</span><span className="hud-record"><span/> REC</span></div>
         <div className="crosshair"><span/><span/></div>
         <div className="hud-bottom"><div><span className="hud-label">OBJECTIVE</span><span className="hud-objective">Find a way out.</span></div><div className="controls-note"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> MOVE <span className="note-divider">/</span> <kbd>MOUSE</kbd> LOOK <span className="note-divider">/</span> <kbd>E</kbd> {opened ? 'CLOSE DOOR' : 'INTERACT'}</div></div>
-        <div className="center-prompt">{opened ? 'THE DARKNESS IS WAITING' : 'SOMETHING IS ON THE OTHER SIDE'}</div>
+        <div className="center-prompt">{apparition ? 'IT WAS NOT THERE BEFORE' : opened ? 'THE DARKNESS IS WAITING' : 'SOMETHING IS ON THE OTHER SIDE'}</div>
       </div>
     </Html>}
   </>;
@@ -319,6 +382,7 @@ function Scene({ opened, setOpened }) {
 
 export default function App() {
   const [opened, setOpened] = useState(false);
+  const [apparition, setApparition] = useState(false);
   const [soundOn, setSoundOn] = useState(false);
   const audioRef = useRef(null);
   const toggleSound = async () => {
@@ -339,7 +403,7 @@ export default function App() {
   useEffect(() => () => { if (audioRef.current) audioRef.current.ctx.close(); }, []);
   return <main className="experience">
     <Canvas shadows dpr={[1,1.6]} camera={{ position:[0,1.65,3.25], fov:62, near:.05, far:40 }} gl={{ antialias:true, alpha:false, powerPreference:'high-performance' }}>
-      <Suspense fallback={null}><Scene opened={opened} setOpened={setOpened} /></Suspense>
+      <Suspense fallback={null}><Scene opened={opened} setOpened={setOpened} apparition={apparition} onUncanny={() => setApparition(true)} /></Suspense>
     </Canvas>
     <div className="brand-corner"><span className="brand-icon">T<span>.</span>D</span><span className="brand-caption">AN INTERACTIVE HORROR EXPERIENCE</span></div>
     <button className={'sound-toggle '+(soundOn?'is-on':'')} onClick={toggleSound} aria-label="Toggle ambient sound"><span className="sound-bars"><i/><i/><i/><i/></span><span>{soundOn?'SOUND ON':'SOUND OFF'}</span></button>
