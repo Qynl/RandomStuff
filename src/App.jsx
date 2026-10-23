@@ -427,6 +427,18 @@ export default function App() {
     else await audioRef.current.ctx.suspend();
     setSoundOn(next);
   };
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || audio.ctx.state === 'closed') return;
+    const now = audio.ctx.currentTime;
+    // The room's low drone subtly detunes as the apparition advances.
+    const lowTarget = [48, 49.2, 51.5][apparitionStage] ?? 51.5;
+    const humTarget = [60.4, 62.1, 64.8][apparitionStage] ?? 64.8;
+    const gainTarget = [0.022, 0.023, 0.025][apparitionStage] ?? 0.025;
+    audio.low.frequency.setTargetAtTime(lowTarget, now, 1.8);
+    audio.hum.frequency.setTargetAtTime(humTarget, now, 1.4);
+    audio.master.gain.setTargetAtTime(gainTarget, now, 2.2);
+  }, [apparitionStage]);
   useEffect(() => () => { if (audioRef.current) audioRef.current.ctx.close(); }, []);
   return <main className="experience">
     <Canvas shadows dpr={[1,1.6]} camera={{ position:[0,1.65,3.25], fov:62, near:.05, far:40 }} gl={{ antialias:true, alpha:false, powerPreference:'high-performance' }}>
