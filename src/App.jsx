@@ -172,13 +172,26 @@ function Painting({ position, rotation = [0,0,0] }) {
   </group>;
 }
 
-function Corridor({ apparitionStage }) {
+function Corridor({ apparitionStage = 0 }) {
   const lampA = useRef();
   const lampB = useRef();
+  const bulbA = useRef();
+  const bulbB = useRef();
+  const figure = useRef();
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
-    if (lampA.current) lampA.current.intensity = 1.05 + Math.sin(t * 4.7) * .08 + (Math.sin(t * 13) > .985 ? -.5 : 0);
-    if (lampB.current) lampB.current.intensity = .62 + Math.sin(t * 3.1 + 1.7) * .05;
+    const pulseA = Math.sin(t * 4.7) * .08 + (Math.sin(t * 13) > .985 ? -.5 : 0);
+    const disturbance = apparitionStage > 0 ? Math.max(0, Math.sin(t * (apparitionStage > 1 ? 8.5 : 5.4))) : 0;
+    const blackoutA = apparitionStage > 0 && Math.sin(t * 2.1) > .94 ? .88 : 0;
+    const blackoutB = apparitionStage > 1 && Math.sin(t * 3.7 + 1.2) > .82 ? .92 : 0;
+    if (lampA.current) lampA.current.intensity = Math.max(.06, 1.05 + pulseA - disturbance * (apparitionStage > 1 ? .42 : .2) - blackoutA);
+    if (lampB.current) lampB.current.intensity = Math.max(.025, .62 + Math.sin(t * 3.1 + 1.7) * .05 - disturbance * .18 - blackoutB);
+    if (bulbA.current) bulbA.current.emissiveIntensity = Math.max(.08, 1.1 - disturbance * .65 - blackoutA);
+    if (bulbB.current) bulbB.current.emissiveIntensity = Math.max(.04, 1.1 - disturbance * .5 - blackoutB);
+    if (figure.current && apparitionStage > 0) {
+      figure.current.rotation.z = Math.sin(t * 1.15) * .018;
+      figure.current.position.x = apparitionStage > 1 ? Math.sin(t * .7) * .035 : 0;
+    }
   });
   return <group>
     <mesh position={[0,-.16,-8.9]} receiveShadow><boxGeometry args={[2.85,.22,9.3]} /><meshStandardMaterial color="#171814" roughness={.98} /></mesh>
@@ -192,7 +205,7 @@ function Corridor({ apparitionStage }) {
     <mesh position={[0,1.8,-13.36]}><boxGeometry args={[.57,1.16,.025]} /><meshStandardMaterial color="#0c0e0b" roughness={1} /></mesh>
     {[-6.2,-9.9].map((z,i) => <group key={z} position={[i ? .93 : -.93,2.48,z]}>
       <mesh castShadow><boxGeometry args={[.18,.3,.1]} /><meshStandardMaterial color="#393326" metalness={.38} roughness={.6} /></mesh>
-      <mesh position={[0,.04,.065]}><sphereGeometry args={[.07,12,10]} /><meshStandardMaterial color="#d3ad72" emissive="#b17a3c" emissiveIntensity={1.1} /></mesh>
+      <mesh position={[0,.04,.065]}><sphereGeometry args={[.07,12,10]} /><meshStandardMaterial ref={i ? bulbB : bulbA} color="#d3ad72" emissive="#b17a3c" emissiveIntensity={1.1} /></mesh>
       <pointLight ref={i ? lampB : lampA} position={[0,0,.12]} color="#d9ad70" intensity={1} distance={3.6} decay={2} />
     </group>)}
     {[-5.8,-8.4,-11].map((z,i) => <group key={z} position={[i ? 1.325 : -1.325,1.72,z]} rotation={[0,i ? -Math.PI/2 : Math.PI/2,0]}>
@@ -201,7 +214,7 @@ function Corridor({ apparitionStage }) {
       <mesh position={[.22,-.05,.065]}><sphereGeometry args={[.025,8,8]} /><meshStandardMaterial color="#9d8051" metalness={.7} roughness={.3} /></mesh>
     </group>)}
     <mesh position={[0,.002,-8.8]} rotation={[-Math.PI/2,0,0]}><planeGeometry args={[2.5,8.5]} /><meshStandardMaterial color="#29261e" roughness={1} transparent opacity={.55} /></mesh>
-    <group position={[0,0,apparitionStage > 1 ? -7.8 : -10.55]} visible={apparitionStage > 0}>
+    <group ref={figure} position={[0,0,apparitionStage > 1 ? -7.8 : -10.55]} visible={apparitionStage > 0}>
       <mesh position={[0,1.42,0]} castShadow><sphereGeometry args={[.22,16,14]} /><meshStandardMaterial color="#030403" roughness={1} /></mesh>
       <mesh position={[0,.83,0]} rotation={[0,0,-.04]} castShadow><capsuleGeometry args={[.23,.9,5,9]} /><meshStandardMaterial color="#050605" roughness={1} /></mesh>
       <mesh position={[-.19,.18,0]} rotation={[0,0,-.04]}><capsuleGeometry args={[.085,.58,4,7]} /><meshStandardMaterial color="#050605" roughness={1} /></mesh>
@@ -211,7 +224,7 @@ function Corridor({ apparitionStage }) {
   </group>;
 }
 
-function Room({ onDoor, opened, onUncanny, apparition }) {
+function Room({ onDoor, opened, onUncanny, apparitionStage = 0 }) {
   const textures = ProceduralTextures();
   return <group>
     {/* room shell */}
@@ -357,7 +370,7 @@ function Scene({ opened, setOpened, onUncanny, apparitionStage, onApparitionShif
     <ambientLight intensity={0.13} color="#b9c0ad" />
     <directionalLight position={[-3,4,2]} color="#c6b99a" intensity={0.18} />
     <hemisphereLight args={['#8e9a88','#17130f',0.22]} />
-    <Room onDoor={() => setOpened(v => !v)} opened={opened} onUncanny={onUncanny} apparition={apparitionStage > 0} />
+    <Room onDoor={() => setOpened(v => !v)} opened={opened} onUncanny={onUncanny} apparitionStage={apparitionStage} />
     <Environment preset="warehouse" environmentIntensity={0.12} />
     <ContactShadows position={[0,.005,0]} opacity={.45} scale={12} blur={2.6} far={4} resolution={256} color="#000000" />
     <Sparkles count={50} scale={[8,3.5,8]} size={1.2} speed={.12} opacity={.24} color="#d6c9a9" />
