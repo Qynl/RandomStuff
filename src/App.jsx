@@ -172,7 +172,7 @@ function Painting({ position, rotation = [0,0,0] }) {
   </group>;
 }
 
-function Corridor({ apparitionStage = 0, gazePressure = 0 }) {
+function Corridor({ apparitionStage = 0, gazePressure = 0, apparitionVisible = false }) {
   const lampA = useRef();
   const lampB = useRef();
   const bulbA = useRef();
@@ -215,7 +215,7 @@ function Corridor({ apparitionStage = 0, gazePressure = 0 }) {
       <mesh position={[.22,-.05,.065]}><sphereGeometry args={[.025,8,8]} /><meshStandardMaterial color="#9d8051" metalness={.7} roughness={.3} /></mesh>
     </group>)}
     <mesh position={[0,.002,-8.8]} rotation={[-Math.PI/2,0,0]}><planeGeometry args={[2.5,8.5]} /><meshStandardMaterial color="#29261e" roughness={1} transparent opacity={.55} /></mesh>
-    <group ref={figure} position={[0,0,apparitionStage > 1 ? -7.8 : -10.55]} visible={apparitionStage > 0}>
+    <group ref={figure} position={[0,0,apparitionStage > 1 ? -7.8 : -10.55]} visible={apparitionStage > 0 && apparitionVisible}>
       <mesh position={[0,1.42,0]} castShadow><sphereGeometry args={[.22,16,14]} /><meshStandardMaterial color="#030403" roughness={1} /></mesh>
       <mesh position={[0,.83,0]} rotation={[0,0,-.04]} castShadow><capsuleGeometry args={[.23,.9,5,9]} /><meshStandardMaterial color="#050605" roughness={1} /></mesh>
       <mesh position={[-.19,.18,0]} rotation={[0,0,-.04]}><capsuleGeometry args={[.085,.58,4,7]} /><meshStandardMaterial color="#050605" roughness={1} /></mesh>
@@ -225,7 +225,7 @@ function Corridor({ apparitionStage = 0, gazePressure = 0 }) {
   </group>;
 }
 
-function Room({ onDoor, opened, onUncanny, apparitionStage = 0, gazePressure = 0 }) {
+function Room({ onDoor, opened, onUncanny, apparitionStage = 0, gazePressure = 0, apparitionVisible = false }) {
   const textures = ProceduralTextures();
   return <group>
     {/* room shell */}
@@ -242,7 +242,7 @@ function Room({ onDoor, opened, onUncanny, apparitionStage = 0, gazePressure = 0
     <mesh position={[-2.98,2,-4.45]} receiveShadow><boxGeometry args={[3.24,4.2,.2]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
     <mesh position={[2.98,2,-4.45]} receiveShadow><boxGeometry args={[3.24,4.2,.2]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
     <mesh position={[0,3.78,-4.45]} receiveShadow><boxGeometry args={[2.72,.64,.2]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
-    <Corridor apparitionStage={apparitionStage} gazePressure={gazePressure} />
+    <Corridor apparitionStage={apparitionStage} gazePressure={gazePressure} apparitionVisible={apparitionVisible} />
     <mesh position={[-4.55,2,0]} receiveShadow><boxGeometry args={[.2,4.2,9.1]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
     <mesh position={[4.55,2,0]} receiveShadow><boxGeometry args={[.2,4.2,9.1]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
     {/* aged architectural trim and layered shadow lines */}
@@ -291,7 +291,7 @@ function Room({ onDoor, opened, onUncanny, apparitionStage = 0, gazePressure = 0
   </group>;
 }
 
-function CameraRig({ active, opened, apparitionStage, onUncanny, onApparitionShift, onGazePressure }) {
+function CameraRig({ active, opened, apparitionStage, apparitionVisible, onUncanny, onApparitionShift, onGazePressure, onApparitionVisibility }) {
   const controls = useRef();
   const keys = useRef({});
   const enteredCorridor = useRef(false);
@@ -300,6 +300,9 @@ function CameraRig({ active, opened, apparitionStage, onUncanny, onApparitionShi
   const apparitionSeen = useRef(false);
   const stareTime = useRef(0);
   const gazeLevel = useRef(0);
+  const shiftTriggered = useRef(false);
+  const hiddenRevealTime = useRef(0);
+  const revealDelay = useRef(.35 + Math.random() * .85);
   useEffect(() => {
     const camera = controls.current?.getObject();
     if (camera) camera.position.set(0, 1.65, 3.25);
@@ -325,9 +328,25 @@ function CameraRig({ active, opened, apparitionStage, onUncanny, onApparitionShi
         onUncanny?.();
       }
     }
-    if (apparitionStage === 1) {
-      const target = new THREE.Vector3(0, 1.05, -10.55).sub(camera.position).normalize();
+    if (apparitionStage > 0) {
+      const targetPosition = new THREE.Vector3(0, 1.05, apparitionStage > 1 ? -7.8 : -10.55);
+      const target = targetPosition.sub(camera.position).normalize();
       const focus = direction.dot(target);
+      if (apparitionStage > 1) {
+        if (focus < .3 && apparitionVisible) {
+          onApparitionVisibility?.(false);
+          hiddenRevealTime.current = 0;
+        } else if (focus > .78 && !apparitionVisible) {
+          hiddenRevealTime.current += delta;
+          if (hiddenRevealTime.current >= revealDelay.current) {
+            onApparitionVisibility?.(true);
+            hiddenRevealTime.current = 0;
+            revealDelay.current = .35 + Math.random() * 1.1;
+          }
+        } else if (focus <= .78) {
+          hiddenRevealTime.current = 0;
+        }
+      }
       if (focus > .94) {
         apparitionSeen.current = true;
         stareTime.current += delta;
@@ -343,7 +362,10 @@ function CameraRig({ active, opened, apparitionStage, onUncanny, onApparitionShi
           onGazePressure?.(0);
         }
       }
-      if (apparitionSeen.current && focus < .55) onApparitionShift?.();
+      if (apparitionStage === 1 && apparitionSeen.current && focus < .55 && !shiftTriggered.current) {
+        shiftTriggered.current = true;
+        onApparitionShift?.();
+      }
     }
     const forward = Number(keys.current.KeyW || keys.current.ArrowUp) - Number(keys.current.KeyS || keys.current.ArrowDown);
     const side = Number(keys.current.KeyD || keys.current.ArrowRight) - Number(keys.current.KeyA || keys.current.ArrowLeft);
@@ -366,7 +388,7 @@ function CameraRig({ active, opened, apparitionStage, onUncanny, onApparitionShi
   return <PointerLockControls ref={controls} selector="#enter-room" />;
 }
 
-function Scene({ opened, setOpened, onUncanny, apparitionStage, onApparitionShift, gazePressure, onGazePressure }) {
+function Scene({ opened, setOpened, onUncanny, apparitionStage, apparitionVisible, onApparitionVisibility, onApparitionShift, gazePressure, onGazePressure }) {
   const [started, setStarted] = useState(false);
   useEffect(() => {
     const onLock = () => { setStarted(document.pointerLockElement !== null); };
@@ -387,7 +409,7 @@ function Scene({ opened, setOpened, onUncanny, apparitionStage, onApparitionShif
     <ambientLight intensity={0.13} color="#b9c0ad" />
     <directionalLight position={[-3,4,2]} color="#c6b99a" intensity={0.18} />
     <hemisphereLight args={['#8e9a88','#17130f',0.22]} />
-    <Room onDoor={() => setOpened(v => !v)} opened={opened} onUncanny={onUncanny} apparitionStage={apparitionStage} gazePressure={gazePressure} />
+    <Room onDoor={() => setOpened(v => !v)} opened={opened} onUncanny={onUncanny} apparitionStage={apparitionStage} gazePressure={gazePressure} apparitionVisible={apparitionVisible} />
     <Environment preset="warehouse" environmentIntensity={0.12} />
     <ContactShadows position={[0,.005,0]} opacity={.45} scale={12} blur={2.6} far={4} resolution={256} color="#000000" />
     <Sparkles count={50} scale={[8,3.5,8]} size={1.2} speed={.12} opacity={.24} color="#d6c9a9" />
@@ -397,7 +419,7 @@ function Scene({ opened, setOpened, onUncanny, apparitionStage, onApparitionShif
       <Noise opacity={.075} />
       <Vignette eskil={false} offset={.22} darkness={.86} />
     </EffectComposer>
-    <CameraRig active={started} opened={opened} apparitionStage={apparitionStage} onUncanny={onUncanny} onApparitionShift={onApparitionShift} onGazePressure={onGazePressure} />
+    <CameraRig active={started} opened={opened} apparitionStage={apparitionStage} apparitionVisible={apparitionVisible} onUncanny={onUncanny} onApparitionShift={onApparitionShift} onGazePressure={onGazePressure} onApparitionVisibility={onApparitionVisibility} />
     {!started && <Html fullscreen>
       <div className="start-screen">
         <div className="start-grid" />
@@ -428,6 +450,7 @@ export default function App() {
   const [opened, setOpened] = useState(false);
   const [apparitionStage, setApparitionStage] = useState(0);
   const [gazePressure, setGazePressure] = useState(0);
+  const [apparitionVisible, setApparitionVisible] = useState(false);
   const [soundOn, setSoundOn] = useState(false);
   const audioRef = useRef(null);
   const toggleSound = async () => {
@@ -460,7 +483,7 @@ export default function App() {
   useEffect(() => () => { if (audioRef.current) audioRef.current.ctx.close(); }, []);
   return <main className="experience">
     <Canvas shadows dpr={[1,1.6]} camera={{ position:[0,1.65,3.25], fov:62, near:.05, far:40 }} gl={{ antialias:true, alpha:false, powerPreference:'high-performance' }}>
-      <Suspense fallback={null}><Scene opened={opened} setOpened={setOpened} apparitionStage={apparitionStage} gazePressure={gazePressure} onGazePressure={setGazePressure} onUncanny={() => setApparitionStage(1)} onApparitionShift={() => setApparitionStage(2)} /></Suspense>
+      <Suspense fallback={null}><Scene opened={opened} setOpened={setOpened} apparitionStage={apparitionStage} apparitionVisible={apparitionVisible} onApparitionVisibility={setApparitionVisible} gazePressure={gazePressure} onGazePressure={setGazePressure} onUncanny={() => { setApparitionStage(1); setApparitionVisible(true); }} onApparitionShift={() => { setApparitionStage(2); setApparitionVisible(false); }} /></Suspense>
     </Canvas>
     <div className="brand-corner"><span className="brand-icon">T<span>.</span>D</span><span className="brand-caption">AN INTERACTIVE HORROR EXPERIENCE</span></div>
     <button className={'sound-toggle '+(soundOn?'is-on':'')} onClick={toggleSound} aria-label="Toggle ambient sound"><span className="sound-bars"><i/><i/><i/><i/></span><span>{soundOn?'SOUND ON':'SOUND OFF'}</span></button>
