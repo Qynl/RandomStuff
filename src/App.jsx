@@ -35,6 +35,12 @@ function canUsePointerLock() {
   return typeof Element !== 'undefined' && typeof Element.prototype.requestPointerLock === 'function';
 }
 
+/** A phone or a tablet: no mouse anywhere, so no keyboard worth speaking of. */
+function isTouchOnly() {
+  if (typeof window === 'undefined' || !window.matchMedia) return false;
+  return window.matchMedia('(pointer: coarse)').matches && !window.matchMedia('(any-pointer: fine)').matches;
+}
+
 /* --------------------------------------------------------------------- HUD */
 
 function Hud({ room, index, nearDoor, doorOpen, stalking, freeLook }) {
@@ -98,7 +104,7 @@ function Hud({ room, index, nearDoor, doorOpen, stalking, freeLook }) {
 
 /* ------------------------------------------------------------ title screen */
 
-function TitleScreen({ paused, canLock, soundOn, onEnter, onToggleSound, room, elapsed }) {
+function TitleScreen({ paused, canLock, touchOnly, soundOn, onEnter, onToggleSound, room, elapsed }) {
   // The button is always here. Pointer lock is offered, never required: if the
   // browser will not hold a lock, the rooms open anyway and you turn by
   // dragging. Hiding the way in behind a capability check just looks broken.
@@ -136,13 +142,13 @@ function TitleScreen({ paused, canLock, soundOn, onEnter, onToggleSound, room, e
             </>
           )}
         </p>
-        {canLock ? null : (
+        {!canLock || touchOnly ? (
           <div className="device-note">
-            THIS BROWSER WILL NOT HOLD YOUR CURSOR.
+            {canLock ? 'BEST PLAYED ON A DESKTOP.' : 'THIS BROWSER WILL NOT HOLD YOUR CURSOR.'}
             <br />
-            DRAG TO LOOK. WALK WITH WASD OR THE ARROW KEYS.
+            {touchOnly ? 'DRAG TO LOOK. WALKING NEEDS A KEYBOARD.' : 'DRAG TO LOOK. WALK WITH WASD OR THE ARROW KEYS.'}
           </div>
-        )}
+        ) : null}
         <button id="enter-room" className="enter-button" onClick={onEnter}>
           <span>{paused ? 'KEEP GOING' : 'OPEN THE FIRST DOOR'}</span>
           <span className="button-arrow">↗</span>
@@ -258,6 +264,7 @@ export default function App() {
   const pendingLock = useRef(false);
   const playerRef = useRef(new THREE.Vector3());
   const canLock = useRef(canUsePointerLock());
+  const touchOnly = useRef(isTouchOnly());
   const [freeLook, setFreeLook] = useState(false);
   const freeLookRef = useRef(false);
   const lockFallback = useRef(0);
@@ -805,6 +812,7 @@ export default function App() {
         <TitleScreen
           paused={startedAt.current !== null}
           canLock={canLock.current}
+          touchOnly={touchOnly.current}
           soundOn={soundOn}
           onEnter={enter}
           onToggleSound={toggle}
