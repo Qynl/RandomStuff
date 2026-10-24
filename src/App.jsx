@@ -1,493 +1,767 @@
-import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import { ContactShadows, Environment, Float, Html, PointerLockControls, Sparkles, Text, useTexture } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette, Noise, ChromaticAberration } from '@react-three/postprocessing';
+/* THE DOOR — a run of rooms.
+ *
+ * Twenty-one rooms are generated from one seed and stacked along -Z, drawn from
+ * two dozen kinds of room. You open a door, walk into whatever is behind it, and
+ * the building keeps going. Every door leads somewhere; none lead back.
+ */
+import React, { useCallback, useEffect, useMemo, useRef, useState, Suspense } from 'react';
+import { Canvas } from '@react-three/fiber';
 import * as THREE from 'three';
+import Scene from './components/Scene.jsx';
+import { useTextures } from './lib/textures.js';
+import { useAudio } from './lib/audio.js';
+import { buildChain, EXIT_INDEX, ROOM_TOTAL, startPosition } from './lib/rooms.js';
 
-const C = {
-  wall: '#343936', wallDark: '#202522', wood: '#392820', woodLight: '#5b4030',
-  brass: '#a88a58', green: '#a6ad91', lamp: '#e7c99a', black: '#080a09'
-};
+/* ------------------------------------------------------------------- utils */
 
-function ProceduralTextures() {
-  const maps = useMemo(() => {
-    const make = (kind, base, accent, count = 1800) => {
-      const canvas = document.createElement('canvas');
-      canvas.width = canvas.height = 512;
-      const ctx = canvas.getContext('2d');
-      ctx.fillStyle = base; ctx.fillRect(0, 0, 512, 512);
-      for (let i = 0; i < count; i++) {
-        const x = Math.random() * 512, y = Math.random() * 512;
-        ctx.globalAlpha = Math.random() * (kind === 'wall' ? .1 : .18);
-        ctx.fillStyle = Math.random() > .5 ? accent : '#050505';
-        if (kind === 'wood') {
-          ctx.fillRect(x, y, 1 + Math.random() * 3, 8 + Math.random() * 90);
-        } else {
-          ctx.beginPath(); ctx.arc(x, y, Math.random() * 2.1, 0, Math.PI * 2); ctx.fill();
-        }
-      }
-      if (kind === 'wall') {
-        ctx.globalAlpha = .16; ctx.strokeStyle = '#080a08'; ctx.lineWidth = 2;
-        for (let y = 0; y < 512; y += 64) {
-          ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(512, y); ctx.stroke();
-        }
-      }
-      ctx.globalAlpha = 1;
-      const texture = new THREE.CanvasTexture(canvas);
-      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-      texture.colorSpace = THREE.SRGBColorSpace;
-      texture.anisotropy = 4;
-      return texture;
+function formatTime(seconds) {
+  const total = Math.max(0, Math.floor(seconds));
+  const minutes = String(Math.floor(total / 60)).padStart(2, '0');
+  const rest = String(total % 60).padStart(2, '0');
+  return `${minutes}:${rest}`;
+}
+
+function roomNumber(index) {
+  return String(index + 1).padStart(2, '0');
+}
+
+function canUsePointerLock() {
+  if (typeof document === 'undefined') return false;
+  if (!('pointerLockElement' in document)) return false;
+  return !window.matchMedia('(pointer: coarse)').matches;
+}
+
+/* --------------------------------------------------------------------- HUD */
+
+function Hud({ room, index, nearDoor, doorOpen, stalking }) {
+  const objective =
+    index >= EXIT_INDEX
+      ? 'Whatever is behind that door, go through it.'
+      : stalking
+        ? 'Do not let it reach you. Get to the door.'
+        : nearDoor
+          ? doorOpen ? 'Go on, then.' : 'Open it.'
+          : 'Find the next door.';
+
+  return (
+    <div className="hud">
+      <div className="hud-top">
+        <span className="hud-mark">
+          T<span>.</span>D
+        </span>
+        <span className="hud-location">
+          ROOM {roomNumber(index)} <i>/</i> {room.label}
+        </span>
+        <span className="hud-record">
+          <span /> REC
+        </span>
+      </div>
+
+      <div className="crosshair">
+        <span />
+        <span />
+      </div>
+
+      <div className="hud-side">
+        <span className="hud-label">DEPTH</span>
+        <span className="hud-depth">
+          {roomNumber(index)}<em>/{roomNumber(ROOM_TOTAL - 1)}</em>
+        </span>
+      </div>
+
+      <div className="hud-bottom">
+        <div>
+          <span className="hud-label">OBJECTIVE</span>
+          <span className="hud-objective">{objective}</span>
+        </div>
+        <div className="controls-note">
+          <kbd>W</kbd>
+          <kbd>A</kbd>
+          <kbd>S</kbd>
+          <kbd>D</kbd> MOVE <span className="note-divider">/</span> <kbd>MOUSE</kbd> LOOK{' '}
+          <span className="note-divider">/</span> <kbd>E</kbd> DOOR <span className="note-divider">/</span> <kbd>M</kbd> SOUND
+        </div>
+      </div>
+
+      {nearDoor && (
+        <div className={`center-prompt${doorOpen ? ' is-open' : ''}`}>
+          <kbd>E</kbd> {doorOpen ? 'CLOSE THE DOOR' : 'OPEN THE DOOR'}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------ title screen */
+
+function TitleScreen({ paused, canLock, soundOn, onEnter, onToggleSound, room, elapsed }) {
+  return (
+    <div className="start-screen">
+      <div className="start-grid" />
+      <div className="start-top">
+        <span>
+          <span className="status-dot" /> {paused ? 'PAUSED' : 'A SHORT HORROR PIECE'} <span className="top-divider">/</span> BUILD 002
+        </span>
+        <span>{paused ? `${room.label} — ROOM ${roomNumber(room.index)}` : `${ROOM_TOTAL - 1} ROOMS`}</span>
+      </div>
+
+      <div className="start-center">
+        <div className="eyebrow">{paused ? 'THE BUILDING IS WAITING' : "SOMEWHERE YOU SHOULDN'T BE"}</div>
+        <h1>
+          THE<span> </span>DOOR<span className="title-period">.</span>
+        </h1>
+        <div className="title-rule">
+          <span />
+        </div>
+        <p className="subtitle">
+          {paused ? (
+            <>
+              You are {roomNumber(room.index)} rooms in.
+              <br />
+              {formatTime(elapsed)} spent finding out what is behind them.
+            </>
+          ) : (
+            <>
+              There is a door in every room.
+              <br />
+              None of them lead back the way you came.
+            </>
+          )}
+        </p>
+        {canLock ? (
+          <button id="enter-room" className="enter-button" onClick={onEnter}>
+            <span>{paused ? 'KEEP GOING' : 'OPEN THE FIRST DOOR'}</span>
+            <span className="button-arrow">↗</span>
+          </button>
+        ) : (
+          <div className="device-note">
+            THIS EXPERIENCE NEEDS A MOUSE, A KEYBOARD AND A BROWSER WITH POINTER LOCK.
+            <br />
+            OPEN IT ON A DESKTOP AND THE DOOR WILL OPEN FOR YOU.
+          </div>
+        )}
+        <div className="microcopy">
+          {canLock ? 'HEADPHONES RECOMMENDED' : 'DESKTOP ONLY'} <span>·</span> {soundOn ? 'SOUND ON' : 'SOUND OFF'}
+          {canLock ? (
+            <>
+              {' '}
+              <span>·</span>{' '}
+              <button className="microcopy-link" onClick={onToggleSound}>
+                {soundOn ? 'MUTE' : 'ENABLE SOUND'}
+              </button>
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="start-bottom">
+        <span>{paused ? 'PRESS ESC TO RESUME FROM THE ROOM' : `${ROOM_TOTAL - 1} ROOMS — ONE OF THEM IS THE WAY OUT`}</span>
+        <span>YOU ARE NOT EXPECTED</span>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------- end screen */
+
+function EndScreen({ cause, index, elapsed, onRestart }) {
+  const escaped = cause === 'escape';
+  return (
+    <div className={`end-screen${escaped ? ' is-escape' : ''}`}>
+      <div className="end-inner">
+        <div className="eyebrow">
+          {escaped ? 'THE END OF THE HALL' : `ROOM ${roomNumber(index)} — IT FOUND YOU`}
+        </div>
+        <h2>
+          {escaped ? (
+            <>
+              YOU LEFT
+              <br />
+              THE DOOR<span className="title-period">.</span>
+            </>
+          ) : (
+            <>
+              YOU DID NOT
+              <br />
+              GET THROUGH<span className="title-period">.</span>
+            </>
+          )}
+        </h2>
+        <div className="title-rule">
+          <span />
+        </div>
+        <p className="subtitle">
+          {escaped ? (
+            <>
+              {ROOM_TOTAL - 1} doors. Then air, and the sound of something
+              <br />
+              closing quietly behind you.
+            </>
+          ) : (
+            <>
+              It did not make a sound until it was close enough
+              <br />
+              that the sound did not matter.
+            </>
+          )}
+        </p>
+        <button className="enter-button" onClick={onRestart}>
+          <span>{escaped ? 'GO BACK IN' : 'TRY AGAIN'}</span>
+          <span className="button-arrow">↗</span>
+        </button>
+        <div className="end-meta">
+          {escaped ? `${ROOM_TOTAL} ROOMS` : `${roomNumber(index)} ROOMS`} <span>·</span> {formatTime(elapsed)} IN THE
+          BUILDING <span>·</span> {escaped ? 'STILL WAITING' : 'STILL HUNGRY'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------------- app */
+
+export default function App() {
+  const [runSeed, setRunSeed] = useState(() => (Math.random() * 1e9) | 0);
+  const chain = useMemo(() => buildChain(runSeed), [runSeed]);
+  const spawn = useMemo(() => startPosition(chain), [chain]);
+
+  const [roomIndex, setRoomIndex] = useState(0);
+  const [doorOpen, setDoorOpen] = useState(false);
+  const [phase, setPhase] = useState('title');
+  const [locked, setLocked] = useState(false);
+  const [power, setPower] = useState(1);
+  const [apparition, setApparition] = useState(null);
+  const [nearDoor, setNearDoor] = useState(false);
+  const [runId, setRunId] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
+  const [cause, setCause] = useState('escape');
+  const [stalkerSpeed, setStalkerSpeed] = useState(1.1);
+  const [calm, setCalm] = useState(false);
+  const lastEvent = useRef('');
+  const extraTimers = useRef(new Set());
+  const doorRef = useRef(false);
+  const figureSeq = useRef(0);
+
+  const tex = useTextures();
+  const { soundOn, toggle, autoStart, cue, setTension } = useAudio();
+
+  const room = chain[roomIndex];
+  const next = chain[roomIndex + 1];
+
+  const lockRef = useRef(null);
+  const interactRef = useRef(false);
+  const nearRef = useRef(false);
+  const dreadRef = useRef({ stalker: false });
+  const startedAt = useRef(null);
+  const pendingLock = useRef(false);
+  const playerRef = useRef(new THREE.Vector3());
+  const canLock = useRef(canUsePointerLock());
+
+  /* --- pointer lock ---------------------------------------------------- */
+  useEffect(() => {
+    const onChange = () => {
+      const isLocked = Boolean(document.pointerLockElement);
+      setLocked(isLocked);
+      setPhase((current) => {
+        if (current === 'ending' || current === 'end' || current === 'dead') return current;
+        return isLocked ? 'play' : 'title';
+      });
     };
-    const wall = make('wall', '#444740', '#b0ad94');
-    wall.repeat.set(2, 1.4);
-    const wood = make('wood', '#39271e', '#a27a51');
-    wood.repeat.set(1, 1);
-    const floor = make('floor', '#302c25', '#827764');
-    floor.repeat.set(4, 4);
-    return { wall, wood, floor };
+    document.addEventListener('pointerlockchange', onChange);
+    return () => document.removeEventListener('pointerlockchange', onChange);
   }, []);
-  return maps;
-}
 
-function Dust() {
-  const ref = useRef();
-  const positions = useMemo(() => {
-    const p = new Float32Array(450 * 3);
-    for (let i = 0; i < 450; i++) {
-      p[i * 3] = (Math.random() - .5) * 9;
-      p[i * 3 + 1] = Math.random() * 4.8;
-      p[i * 3 + 2] = (Math.random() - .5) * 9;
-    }
-    return p;
-  }, []);
-  useFrame((_, delta) => { if (ref.current) ref.current.rotation.y += delta * .008; });
-  return <points ref={ref} position={[0, 0, 0]}>
-    <bufferGeometry><bufferAttribute attach="attributes-position" args={[positions, 3]} /></bufferGeometry>
-    <pointsMaterial color="#e4d7b8" size={0.018} transparent opacity={0.42} sizeAttenuation depthWrite={false} />
-  </points>;
-}
-
-function WallPanel({ position, rotation = [0,0,0], width = 1, height = 1, color = C.wallDark }) {
-  return <mesh position={position} rotation={rotation} castShadow receiveShadow>
-    <boxGeometry args={[width, height, .11]} />
-    <meshStandardMaterial color={color} roughness={.94} />
-  </mesh>;
-}
-
-function BrassHinge({ position }) {
-  return <group position={position}>
-    <mesh castShadow><boxGeometry args={[.09,.32,.045]} /><meshStandardMaterial color="#66543a" metalness={.82} roughness={.31} /></mesh>
-    {[-.11,0,.11].map(y => <mesh key={y} position={[0,y,.026]}><sphereGeometry args={[.018,8,8]} /><meshStandardMaterial color="#c1a16a" metalness={.85} roughness={.25} /></mesh>)}
-  </group>;
-}
-
-function Door({ textures, onInteract, opened }) {
-  const door = useRef();
-  const knob = useRef();
-  const [hover, setHover] = useState(false);
-  useFrame((state, delta) => {
-    if (!door.current) return;
-    const target = opened ? -1.02 : 0;
-    door.current.rotation.y = THREE.MathUtils.damp(door.current.rotation.y, target, 2.4, delta);
-    if (knob.current) knob.current.rotation.y = Math.sin(state.clock.elapsedTime * 1.3) * .025;
-  });
-  return <group position={[0, 0, -3.82]}>
-    <mesh position={[-.99, 1.56, -.035]} castShadow>
-      <boxGeometry args={[.08, 3.12, .16]} />
-      <meshStandardMaterial color="#151815" roughness={.9} />
-    </mesh>
-    <mesh position={[.99, 1.56, -.035]} castShadow>
-      <boxGeometry args={[.08, 3.12, .16]} />
-      <meshStandardMaterial color="#151815" roughness={.9} />
-    </mesh>
-    <mesh position={[0, 3.1, -.035]} castShadow>
-      <boxGeometry args={[2.02, .08, .16]} />
-      <meshStandardMaterial color="#151815" roughness={.9} />
-    </mesh>
-    <mesh position={[-1.04, 1.57, 0]} castShadow>
-      <boxGeometry args={[.12, 3.3, .32]} />
-      <meshStandardMaterial color="#33271e" roughness={.78} />
-    </mesh>
-    <mesh position={[1.04, 1.57, 0]} castShadow>
-      <boxGeometry args={[.12, 3.3, .32]} />
-      <meshStandardMaterial color="#33271e" roughness={.78} />
-    </mesh>
-    <mesh position={[0, 3.2, 0]} castShadow>
-      <boxGeometry args={[2.2, .13, .32]} />
-      <meshStandardMaterial color="#33271e" roughness={.78} />
-    </mesh>
-    <group ref={door} position={[-.92, 0, .08]}>
-      <mesh position={[.92, 1.53, 0]} castShadow receiveShadow
-        onPointerOver={(e) => { e.stopPropagation(); setHover(true); document.body.style.cursor = 'pointer'; }}
-        onPointerOut={() => { setHover(false); document.body.style.cursor = 'auto'; }}
-        onClick={(e) => { e.stopPropagation(); onInteract(); }}>
-        <boxGeometry args={[1.82, 3.02, .12]} />
-        <meshStandardMaterial map={textures.wood} color={hover ? '#8a6a4a' : '#fff'} roughness={.53} metalness={.04} />
-      </mesh>
-      {[.35, 1.52, 2.7].map((y) => <BrassHinge key={y} position={[.13,y,.09]} />)}
-      <mesh position={[1.55, 1.35, .09]}><boxGeometry args={[.15,.34,.025]} /><meshStandardMaterial color="#6e5738" metalness={.78} roughness={.28} /></mesh>
-      {[.58, 1.7, 2.48].map((y, i) => <mesh key={y} position={[.92, y, .067]} castShadow>
-        <boxGeometry args={[1.56, i === 1 ? .68 : .36, .035]} />
-        <meshStandardMaterial color="#241a14" roughness={.55} />
-      </mesh>)}
-      {[.58, 1.7, 2.48].map((y, i) => <mesh key={'in'+y} position={[.92, y, .09]}>
-        <boxGeometry args={[1.43, i === 1 ? .55 : .24, .018]} />
-        <meshStandardMaterial color="#3c2a1f" roughness={.62} />
-      </mesh>)}
-      <group ref={knob} position={[1.57, 1.35, .12]}>
-        <mesh castShadow><sphereGeometry args={[.075, 20, 16]} /><meshStandardMaterial color={C.brass} metalness={.78} roughness={.23} /></mesh>
-        <mesh position={[-.08, 0, 0]} rotation={[0,0,Math.PI/2]}><cylinderGeometry args={[.025,.025,.13,12]} /><meshStandardMaterial color={C.brass} metalness={.8} roughness={.22} /></mesh>
-      </group>
-      <mesh position={[.18, 1.52, .079]}><boxGeometry args={[.035, 2.8, .018]} /><meshStandardMaterial color="#92704b" metalness={.3} roughness={.5} /></mesh>
-    </group>
-    <pointLight position={[0, 2.1, -.18]} color="#ad8154" intensity={opened ? 2.7 : .55} distance={3.8} decay={2} />
-  </group>;
-}
-
-function Sconce({ position, flicker = 0 }) {
-  const light = useRef();
-  const [seed] = useState(() => Math.random() * 10);
-  useFrame(({ clock }) => {
-    if (light.current) {
-      const t = clock.elapsedTime + seed;
-      light.current.intensity = 2.1 + Math.sin(t * 5.1) * .11 + (Math.sin(t * 17) > .97 ? -.65 : 0);
-    }
-  });
-  return <group position={position}>
-    <mesh position={[0, -.16, 0]} castShadow><boxGeometry args={[.24, .42, .12]} /><meshStandardMaterial color="#29251e" metalness={.5} roughness={.45} /></mesh>
-    <mesh position={[0, .04, -.015]}><cylinderGeometry args={[.105, .14, .24, 16, 1, true]} /><meshStandardMaterial color="#d0b98e" emissive="#a16c35" emissiveIntensity={1.8} transparent opacity={.72} side={THREE.DoubleSide} /></mesh>
-    <pointLight ref={light} position={[0, .02, .15]} color="#ffc982" intensity={2.1} distance={4.8} decay={2} castShadow />
-  </group>;
-}
-
-function Painting({ position, rotation = [0,0,0] }) {
-  return <group position={position} rotation={rotation}>
-    <mesh castShadow><boxGeometry args={[.92, 1.2, .09]} /><meshStandardMaterial color="#191a16" roughness={.85} /></mesh>
-    <mesh position={[0,0,.052]}><boxGeometry args={[.78, 1.04, .025]} /><meshStandardMaterial color="#796f5b" roughness={1} /></mesh>
-    <mesh position={[0,0,.07]}><planeGeometry args={[.68,.92]} /><meshStandardMaterial color="#242c27" roughness={1} /></mesh>
-    <mesh position={[0,-.12,.085]}><circleGeometry args={[.17,32]} /><meshStandardMaterial color="#111612" roughness={1} /></mesh>
-    <mesh position={[0,.17,.09]}><circleGeometry args={[.105,32]} /><meshStandardMaterial color="#171c17" roughness={1} /></mesh>
-    <mesh position={[0,.03,.091]}><boxGeometry args={[.12,.28,.015]} /><meshStandardMaterial color="#171c17" roughness={1} /></mesh>
-  </group>;
-}
-
-function Corridor({ apparitionStage = 0, gazePressure = 0, apparitionVisible = false }) {
-  const lampA = useRef();
-  const lampB = useRef();
-  const bulbA = useRef();
-  const bulbB = useRef();
-  const figure = useRef();
-  useFrame(({ clock }) => {
-    const t = clock.elapsedTime;
-    const pulseA = Math.sin(t * 4.7) * .08 + (Math.sin(t * 13) > .985 ? -.5 : 0);
-    const disturbance = apparitionStage > 0 ? Math.max(0, Math.sin(t * (apparitionStage > 1 ? 8.5 : 5.4))) : 0;
-    const gazeDisturbance = gazePressure > 0 ? Math.max(0, Math.sin(t * (gazePressure > 1 ? 11.5 : 7.2))) : 0;
-    const blackoutA = apparitionStage > 0 && Math.sin(t * 2.1) > .94 ? .88 : 0;
-    const blackoutB = apparitionStage > 1 && Math.sin(t * 3.7 + 1.2) > .82 ? .92 : 0;
-    if (lampA.current) lampA.current.intensity = Math.max(.025, 1.05 + pulseA - disturbance * (apparitionStage > 1 ? .42 : .2) - gazeDisturbance * (gazePressure > 1 ? .62 : .3) - blackoutA);
-    if (lampB.current) lampB.current.intensity = Math.max(.015, .62 + Math.sin(t * 3.1 + 1.7) * .05 - disturbance * .18 - gazeDisturbance * (gazePressure > 1 ? .36 : .14) - blackoutB);
-    if (bulbA.current) bulbA.current.emissiveIntensity = Math.max(.04, 1.1 - disturbance * .65 - gazeDisturbance * .72 - blackoutA);
-    if (bulbB.current) bulbB.current.emissiveIntensity = Math.max(.025, 1.1 - disturbance * .5 - gazeDisturbance * .55 - blackoutB);
-    if (figure.current && apparitionStage > 0) {
-      figure.current.rotation.z = Math.sin(t * (gazePressure > 1 ? 2.4 : 1.15)) * (gazePressure > 1 ? .04 : .018);
-      figure.current.position.x = apparitionStage > 1 ? Math.sin(t * .7) * .035 : 0;
-    }
-  });
-  return <group>
-    <mesh position={[0,-.16,-8.9]} receiveShadow><boxGeometry args={[2.85,.22,9.3]} /><meshStandardMaterial color="#171814" roughness={.98} /></mesh>
-    <mesh position={[0,3.72,-8.9]} receiveShadow><boxGeometry args={[2.85,.16,9.3]} /><meshStandardMaterial color="#11130f" roughness={1} /></mesh>
-    {[-1.39,1.39].map((x, i) => <group key={x}>
-      <mesh position={[x,1.8,-8.9]} receiveShadow castShadow><boxGeometry args={[.12,3.7,9.3]} /><meshStandardMaterial color={i ? "#282920" : "#20221c"} roughness={.96} /></mesh>
-      {[-6.2,-8.5,-10.8].map((z,j) => <mesh key={z} position={[x + (i ? -.07 : .07),1.8,z]}><boxGeometry args={[.025,3.3,.035]} /><meshStandardMaterial color="#494435" roughness={.9} /></mesh>)}
-    </group>)}
-    <mesh position={[0,1.8,-13.48]} receiveShadow><boxGeometry args={[2.85,3.7,.14]} /><meshStandardMaterial color="#171a15" roughness={1} /></mesh>
-    <mesh position={[0,1.8,-13.39]}><boxGeometry args={[.8,1.45,.035]} /><meshStandardMaterial color="#24251d" roughness={1} /></mesh>
-    <mesh position={[0,1.8,-13.36]}><boxGeometry args={[.57,1.16,.025]} /><meshStandardMaterial color="#0c0e0b" roughness={1} /></mesh>
-    {[-6.2,-9.9].map((z,i) => <group key={z} position={[i ? .93 : -.93,2.48,z]}>
-      <mesh castShadow><boxGeometry args={[.18,.3,.1]} /><meshStandardMaterial color="#393326" metalness={.38} roughness={.6} /></mesh>
-      <mesh position={[0,.04,.065]}><sphereGeometry args={[.07,12,10]} /><meshStandardMaterial ref={i ? bulbB : bulbA} color="#d3ad72" emissive="#b17a3c" emissiveIntensity={1.1} /></mesh>
-      <pointLight ref={i ? lampB : lampA} position={[0,0,.12]} color="#d9ad70" intensity={1} distance={3.6} decay={2} />
-    </group>)}
-    {[-5.8,-8.4,-11].map((z,i) => <group key={z} position={[i ? 1.325 : -1.325,1.72,z]} rotation={[0,i ? -Math.PI/2 : Math.PI/2,0]}>
-      <mesh castShadow><boxGeometry args={[.76,1.6,.07]} /><meshStandardMaterial color="#30271d" roughness={.88} /></mesh>
-      <mesh position={[0,0,.045]}><boxGeometry args={[.6,1.4,.025]} /><meshStandardMaterial color="#1c1c17" roughness={1} /></mesh>
-      <mesh position={[.22,-.05,.065]}><sphereGeometry args={[.025,8,8]} /><meshStandardMaterial color="#9d8051" metalness={.7} roughness={.3} /></mesh>
-    </group>)}
-    <mesh position={[0,.002,-8.8]} rotation={[-Math.PI/2,0,0]}><planeGeometry args={[2.5,8.5]} /><meshStandardMaterial color="#29261e" roughness={1} transparent opacity={.55} /></mesh>
-    <group ref={figure} position={[0,0,apparitionStage > 1 ? -7.8 : -10.55]} visible={apparitionStage > 0 && apparitionVisible}>
-      <mesh position={[0,1.42,0]} castShadow><sphereGeometry args={[.22,16,14]} /><meshStandardMaterial color="#030403" roughness={1} /></mesh>
-      <mesh position={[0,.83,0]} rotation={[0,0,-.04]} castShadow><capsuleGeometry args={[.23,.9,5,9]} /><meshStandardMaterial color="#050605" roughness={1} /></mesh>
-      <mesh position={[-.19,.18,0]} rotation={[0,0,-.04]}><capsuleGeometry args={[.085,.58,4,7]} /><meshStandardMaterial color="#050605" roughness={1} /></mesh>
-      <mesh position={[.18,.18,.015]} rotation={[0,0,.03]}><capsuleGeometry args={[.085,.58,4,7]} /><meshStandardMaterial color="#050605" roughness={1} /></mesh>
-      <pointLight position={[0,1.25,-.12]} color="#777b68" intensity={.08} distance={1.2} />
-    </group>
-  </group>;
-}
-
-function Room({ onDoor, opened, onUncanny, apparitionStage = 0, gazePressure = 0, apparitionVisible = false }) {
-  const textures = ProceduralTextures();
-  return <group>
-    {/* room shell */}
-    <mesh position={[0,-.13,0]} receiveShadow>
-      <boxGeometry args={[9.2,.25,9.1]} />
-      <meshStandardMaterial map={textures.floor} roughness={.92} />
-    </mesh>
-    <mesh position={[0,4.15,0]} receiveShadow>
-      <boxGeometry args={[9.2,.18,9.1]} />
-      <meshStandardMaterial color="#191c19" roughness={1} />
-    </mesh>
-    <mesh position={[0,2,4.45]} receiveShadow><boxGeometry args={[9.2,4.2,.2]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
-    {/* The rear wall is built around a real opening, so the door reveals depth. */}
-    <mesh position={[-2.98,2,-4.45]} receiveShadow><boxGeometry args={[3.24,4.2,.2]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
-    <mesh position={[2.98,2,-4.45]} receiveShadow><boxGeometry args={[3.24,4.2,.2]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
-    <mesh position={[0,3.78,-4.45]} receiveShadow><boxGeometry args={[2.72,.64,.2]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
-    <Corridor apparitionStage={apparitionStage} gazePressure={gazePressure} apparitionVisible={apparitionVisible} />
-    <mesh position={[-4.55,2,0]} receiveShadow><boxGeometry args={[.2,4.2,9.1]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
-    <mesh position={[4.55,2,0]} receiveShadow><boxGeometry args={[.2,4.2,9.1]} /><meshStandardMaterial map={textures.wall} roughness={.97} /></mesh>
-    {/* aged architectural trim and layered shadow lines */}
-    {[-1,1].map(side => <group key={'trim'+side} position={[side*4.37,0,0]}>
-      <mesh position={[0,2.05,0]} castShadow><boxGeometry args={[.12,4.08,9.02]} /><meshStandardMaterial color="#24231e" roughness={.84} /></mesh>
-      <mesh position={[-side*.068,2.05,0]}><boxGeometry args={[.035,3.92,8.82]} /><meshStandardMaterial color="#4a4334" roughness={.82} /></mesh>
-    </group>)}
-    {/* dark panelled back wall */}
-    {[-3.95,-2.9,-1.85,-.9,.9,1.85,2.9,3.95].filter(x => Math.abs(x) > 2).map(x => <WallPanel key={x} position={[x,2,-4.32]} width={.035} height={3.9} color="#252a25" />)}
-    {[.22,3.72].map(y => <mesh key={y} position={[0,y,-4.31]}><boxGeometry args={[9,.045,.08]} /><meshStandardMaterial color="#282a23" roughness={.8} /></mesh>)}
-    {/* skirting */}
-    {[-1,1].map(side => <mesh key={side} position={[side*4.42,.12,0]}><boxGeometry args={[.08,.23,8.8]} /><meshStandardMaterial color="#211e18" roughness={.8} /></mesh>)}
-    <mesh position={[0,.12,4.32]}><boxGeometry args={[8.9,.23,.08]} /><meshStandardMaterial color="#211e18" roughness={.8} /></mesh>
-    <Door textures={textures} onInteract={onDoor} opened={opened} />
-    <Sconce position={[-1.7,2.45,-4.12]} />
-    <Sconce position={[1.7,2.45,-4.12]} />
-    <Painting position={[-3.25,2.15,-4.3]} />
-    <Painting position={[3.25,2.15,-4.3]} />
-    {/* ceiling beams catch only a little of the warm practical light */}
-    {[-3,-1.5,0,1.5,3].map(x => <mesh key={'beam'+x} position={[x,4.02,0]} castShadow>
-      <boxGeometry args={[.12,.13,8.85]} /><meshStandardMaterial color="#211e18" roughness={.88} />
-    </mesh>)}
-    {/* foreground side table */}
-    <group position={[-2.8,0,-.6]}>
-      <mesh position={[0,.76,0]} castShadow receiveShadow><boxGeometry args={[1.1,.12,.72]} /><meshStandardMaterial map={textures.wood} roughness={.65} /></mesh>
-      {[-.43,.43].flatMap(x => [-.25,.25].map(z => <mesh key={x+'-'+z} position={[x,.37,z]} castShadow><boxGeometry args={[.075,.72,.075]} /><meshStandardMaterial color="#30231b" roughness={.8} /></mesh>))}
-      <mesh position={[0,.48,-.01]} castShadow><boxGeometry args={[.8,.24,.57]} /><meshStandardMaterial color="#38291e" roughness={.8} /></mesh>
-      <mesh position={[.12,.88,0]} castShadow><cylinderGeometry args={[.12,.16,.14,16]} /><meshStandardMaterial color="#777263" roughness={.8} /></mesh>
-      <mesh position={[.12,1.02,0]}><cylinderGeometry args={[.075,.075,.15,16]} /><meshStandardMaterial color="#e0c28f" emissive="#c28a47" emissiveIntensity={.6} transparent opacity={.6} /></mesh>
-      <pointLight position={[.12,1.1,0]} color="#e8b36d" intensity={.5} distance={2.3} />
-    </group>
-    {/* old rug */}
-    <mesh position={[0,-.002,.3]} rotation={[-Math.PI/2,0,0]} receiveShadow>
-      <planeGeometry args={[3.2,4.3]} /><meshStandardMaterial color="#302c25" roughness={1} />
-    </mesh>
-    <mesh position={[0,.006,.3]} rotation={[-Math.PI/2,0,0]}>
-      <ringGeometry args={[1.25,1.29,4]} /><meshStandardMaterial color="#70634b" roughness={1} />
-    </mesh>
-    {/* ceiling fixture, mostly lost in shadow */}
-    <group position={[0,4.02,0]}>
-      <mesh><cylinderGeometry args={[.34,.44,.13,24]} /><meshStandardMaterial color="#292820" metalness={.3} roughness={.5} /></mesh>
-      <mesh position={[0,-.25,0]}><cylinderGeometry args={[.12,.29,.45,24,1,true]} /><meshStandardMaterial color="#a28b66" emissive="#a87941" emissiveIntensity={.7} transparent opacity={.5} side={THREE.DoubleSide} /></mesh>
-      <pointLight position={[0,-.35,0]} color="#c2a477" intensity={.45} distance={4.5} />
-    </group>
-    <Dust />
-  </group>;
-}
-
-function CameraRig({ active, opened, apparitionStage, apparitionVisible, onUncanny, onApparitionShift, onGazePressure, onApparitionVisibility }) {
-  const controls = useRef();
-  const keys = useRef({});
-  const enteredCorridor = useRef(false);
-  const lookedAway = useRef(false);
-  const triggered = useRef(false);
-  const apparitionSeen = useRef(false);
-  const stareTime = useRef(0);
-  const gazeLevel = useRef(0);
-  const shiftTriggered = useRef(false);
-  const hiddenRevealTime = useRef(0);
-  const revealDelay = useRef(.35 + Math.random() * .85);
   useEffect(() => {
-    const camera = controls.current?.getObject();
-    if (camera) camera.position.set(0, 1.65, 3.25);
-  }, []);
-  useEffect(() => {
-    const down = (e) => { if (['KeyW','KeyA','KeyS','KeyD','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) keys.current[e.code] = true; };
-    const up = (e) => { keys.current[e.code] = false; };
-    const clear = () => { keys.current = {}; };
-    window.addEventListener('keydown', down);
-    window.addEventListener('keyup', up);
-    window.addEventListener('blur', clear);
-    return () => { window.removeEventListener('keydown', down); window.removeEventListener('keyup', up); window.removeEventListener('blur', clear); };
-  }, []);
-  useFrame((_, delta) => {
-    if (!active || !controls.current?.isLocked) return;
-    const camera = controls.current.getObject();
-    const direction = new THREE.Vector3();
-    camera.getWorldDirection(direction);
-    if (enteredCorridor.current && !triggered.current) {
-      if (direction.z > .35) lookedAway.current = true;
-      if (lookedAway.current && direction.z < -.55) {
-        triggered.current = true;
-        onUncanny?.();
-      }
-    }
-    if (apparitionStage > 0) {
-      const targetPosition = new THREE.Vector3(0, 1.05, apparitionStage > 1 ? -7.8 : -10.55);
-      const target = targetPosition.sub(camera.position).normalize();
-      const focus = direction.dot(target);
-      if (apparitionStage > 1) {
-        if (focus < .3 && apparitionVisible) {
-          onApparitionVisibility?.(false);
-          hiddenRevealTime.current = 0;
-        } else if (focus > .78 && !apparitionVisible) {
-          hiddenRevealTime.current += delta;
-          if (hiddenRevealTime.current >= revealDelay.current) {
-            onApparitionVisibility?.(true);
-            hiddenRevealTime.current = 0;
-            revealDelay.current = .35 + Math.random() * 1.1;
-          }
-        } else if (focus <= .78) {
-          hiddenRevealTime.current = 0;
-        }
-      }
-      if (focus > .94) {
-        apparitionSeen.current = true;
-        stareTime.current += delta;
-        const nextLevel = stareTime.current > 3.2 ? 2 : stareTime.current > 1.25 ? 1 : 0;
-        if (nextLevel !== gazeLevel.current) {
-          gazeLevel.current = nextLevel;
-          onGazePressure?.(nextLevel);
-        }
-      } else if (focus < .78) {
-        stareTime.current = 0;
-        if (gazeLevel.current !== 0) {
-          gazeLevel.current = 0;
-          onGazePressure?.(0);
-        }
-      }
-      if (apparitionStage === 1 && apparitionSeen.current && focus < .55 && !shiftTriggered.current) {
-        shiftTriggered.current = true;
-        onApparitionShift?.();
-      }
-    }
-    const forward = Number(keys.current.KeyW || keys.current.ArrowUp) - Number(keys.current.KeyS || keys.current.ArrowDown);
-    const side = Number(keys.current.KeyD || keys.current.ArrowRight) - Number(keys.current.KeyA || keys.current.ArrowLeft);
-    if (!forward && !side) return;
-    const speed = 2.15 * Math.min(delta, .04);
-    const direction = new THREE.Vector3(side, 0, -forward).normalize().applyQuaternion(camera.quaternion);
-    direction.y = 0;
-    camera.position.addScaledVector(direction.normalize(), speed);
-    camera.position.y = 1.65;
-    if (!opened && !enteredCorridor.current) camera.position.z = Math.max(camera.position.z, -3.25);
-    if (camera.position.z < -4.05 && (opened || enteredCorridor.current)) {
-      camera.position.x = THREE.MathUtils.clamp(camera.position.x, -1.02, 1.02);
-      camera.position.z = Math.max(camera.position.z, -12.75);
-      enteredCorridor.current = true;
-    } else {
-      camera.position.x = THREE.MathUtils.clamp(camera.position.x, -3.8, 3.8);
-      camera.position.z = THREE.MathUtils.clamp(camera.position.z, -3.25, 3.8);
-    }
-  });
-  return <PointerLockControls ref={controls} selector="#enter-room" />;
-}
+    if (phase === 'play' && startedAt.current === null) startedAt.current = Date.now();
+  }, [phase]);
 
-function Scene({ opened, setOpened, onUncanny, apparitionStage, apparitionVisible, onApparitionVisibility, onApparitionShift, gazePressure, onGazePressure }) {
-  const [started, setStarted] = useState(false);
   useEffect(() => {
-    const onLock = () => { setStarted(document.pointerLockElement !== null); };
-    document.addEventListener('pointerlockchange', onLock);
-    return () => document.removeEventListener('pointerlockchange', onLock);
-  }, []);
+    doorRef.current = doorOpen;
+  }, [doorOpen]);
+
+  /* --- clock ----------------------------------------------------------- */
   useEffect(() => {
-    const onKey = (e) => {
-      if (e.code === 'KeyE' && started) setOpened(v => !v);
-      if (e.code === 'Escape') setStarted(false);
+    if (phase !== 'play') return undefined;
+    const id = window.setInterval(() => {
+      if (startedAt.current) setElapsed((Date.now() - startedAt.current) / 1000);
+    }, 400);
+    return () => window.clearInterval(id);
+  }, [phase]);
+
+  /* --- door ------------------------------------------------------------ */
+  const toggleDoor = useCallback(() => {
+    setDoorOpen((value) => {
+      cue(value ? 'close' : 'door');
+      return !value;
+    });
+  }, [cue]);
+
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.code === 'KeyM') {
+        toggle();
+      } else if (event.code === 'Escape' && document.pointerLockElement) {
+        document.exitPointerLock();
+      } else if (event.code === 'KeyE' && phase === 'play' && locked && interactRef.current) {
+        toggleDoor();
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [started, setOpened]);
-  return <>
-    <color attach="background" args={['#080a09']} />
-    <fog attach="fog" args={['#101411', 5.1, 13.5]} />
-    <ambientLight intensity={0.13} color="#b9c0ad" />
-    <directionalLight position={[-3,4,2]} color="#c6b99a" intensity={0.18} />
-    <hemisphereLight args={['#8e9a88','#17130f',0.22]} />
-    <Room onDoor={() => setOpened(v => !v)} opened={opened} onUncanny={onUncanny} apparitionStage={apparitionStage} gazePressure={gazePressure} apparitionVisible={apparitionVisible} />
-    <Environment preset="warehouse" environmentIntensity={0.12} />
-    <ContactShadows position={[0,.005,0]} opacity={.45} scale={12} blur={2.6} far={4} resolution={256} color="#000000" />
-    <Sparkles count={50} scale={[8,3.5,8]} size={1.2} speed={.12} opacity={.24} color="#d6c9a9" />
-    <EffectComposer multisampling={0}>
-      <Bloom intensity={.48} luminanceThreshold={.72} luminanceSmoothing={.28} mipmapBlur />
-      <ChromaticAberration offset={new THREE.Vector2(.00045,.00045)} radialModulation />
-      <Noise opacity={.075} />
-      <Vignette eskil={false} offset={.22} darkness={.86} />
-    </EffectComposer>
-    <CameraRig active={started} opened={opened} apparitionStage={apparitionStage} apparitionVisible={apparitionVisible} onUncanny={onUncanny} onApparitionShift={onApparitionShift} onGazePressure={onGazePressure} onApparitionVisibility={onApparitionVisibility} />
-    {!started && <Html fullscreen>
-      <div className="start-screen">
-        <div className="start-grid" />
-        <div className="start-top"><span className="status-dot" /> VISUAL PROTOTYPE <span className="top-divider">/</span> BUILD 001</div>
-        <div className="start-center">
-          <div className="eyebrow">SOMEWHERE YOU SHOULDN'T BE</div>
-          <h1>THE<span> </span>DOOR<span className="title-period">.</span></h1>
-          <div className="title-rule"><span /></div>
-          <p className="subtitle">There is a room. There is a door.<br/>You don't remember coming here.</p>
-          <button id="enter-room" className="enter-button" onClick={() => { setStarted(true); }}><span>ENTER ROOM</span><span className="button-arrow">↗</span></button>
-          <div className="microcopy">HEADPHONES RECOMMENDED <span>·</span> LIGHTS LOW</div>
-        </div>
-        <div className="start-bottom"><span>ROOM 001 — THE WAITING ROOM</span><span>YOU ARE NOT EXPECTED</span></div>
-      </div>
-    </Html>}
-    {started && <Html fullscreen>
-      <div className="hud">
-        <div className="hud-top"><span className="hud-mark">T<span>.</span>D</span><span className="hud-location">ROOM 001 <i>/</i> THE WAITING ROOM</span><span className="hud-record"><span/> REC</span></div>
-        <div className="crosshair"><span/><span/></div>
-        <div className="hud-bottom"><div><span className="hud-label">OBJECTIVE</span><span className="hud-objective">Find a way out.</span></div><div className="controls-note"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> MOVE <span className="note-divider">/</span> <kbd>MOUSE</kbd> LOOK <span className="note-divider">/</span> <kbd>E</kbd> {opened ? 'CLOSE DOOR' : 'INTERACT'}</div></div>
-        <div className="center-prompt">{apparitionStage > 1 ? 'IT IS CLOSER NOW' : apparitionStage === 1 ? 'IT WAS NOT THERE BEFORE' : opened ? 'THE DARKNESS IS WAITING' : 'SOMETHING IS ON THE OTHER SIDE'}</div>
-      </div>
-    </Html>}
-  </>;
-}
+  }, [phase, locked, toggle, toggleDoor]);
 
-export default function App() {
-  const [opened, setOpened] = useState(false);
-  const [apparitionStage, setApparitionStage] = useState(0);
-  const [gazePressure, setGazePressure] = useState(0);
-  const [apparitionVisible, setApparitionVisible] = useState(false);
-  const [soundOn, setSoundOn] = useState(false);
-  const audioRef = useRef(null);
-  const toggleSound = async () => {
-    if (!audioRef.current) {
-      const ctx = new (window.AudioContext || window.webkitAudioContext)();
-      const master = ctx.createGain(); master.gain.value = .022; master.connect(ctx.destination);
-      const low = ctx.createOscillator(); low.type = 'sine'; low.frequency.value = 48;
-      const lowGain = ctx.createGain(); lowGain.gain.value = .6; low.connect(lowGain); lowGain.connect(master); low.start();
-      const hum = ctx.createOscillator(); hum.type = 'triangle'; hum.frequency.value = 60.4;
-      const humGain = ctx.createGain(); humGain.gain.value = .16; hum.connect(humGain); humGain.connect(master); hum.start();
-      audioRef.current = { ctx, master, low, hum };
+  /* --- moving on ------------------------------------------------------- */
+  const advance = useCallback(() => {
+    const nextIndex = Math.min(roomIndex + 1, EXIT_INDEX);
+    const nextRoom = chain[nextIndex];
+    setRoomIndex(nextIndex);
+    setDoorOpen(false);
+    setApparition(null);
+    figureSeq.current += 1;
+    setTension(0);
+    dreadRef.current.stalker = false;
+
+    // Some rooms are already dark when you step into them, and take a moment
+    // to admit that they have lights at all.
+    if (nextRoom && nextRoom.extras?.darkEntry) {
+      setPower(0.22);
+      const id = window.setTimeout(() => setPower(1), 1400);
+      extraTimers.current.add(id);
+    } else {
+      setPower(1);
     }
-    const next = !soundOn;
-    if (next) await audioRef.current.ctx.resume();
-    else await audioRef.current.ctx.suspend();
-    setSoundOn(next);
-  };
+  }, [chain, roomIndex, setTension]);
+
+  const finish = useCallback((kind) => {
+    setPhase('ending');
+    setCause(kind);
+    cue(kind === 'escape' ? 'exit' : 'caught');
+    setTension(kind === 'escape' ? 0 : 1);
+    setElapsed(startedAt.current ? (Date.now() - startedAt.current) / 1000 : 0);
+  }, [cue, setTension]);
+
   useEffect(() => {
-    const audio = audioRef.current;
-    if (!audio || audio.ctx.state === 'closed') return;
-    const now = audio.ctx.currentTime;
-    // The room's low drone subtly detunes as the apparition advances.
-    const lowTarget = ([48, 49.2, 51.5][apparitionStage] ?? 51.5) + gazePressure * 1.15;
-    const humTarget = ([60.4, 62.1, 64.8][apparitionStage] ?? 64.8) + gazePressure * 2.1;
-    const gainTarget = ([0.022, 0.023, 0.025][apparitionStage] ?? 0.025) + gazePressure * 0.0007;
-    audio.low.frequency.setTargetAtTime(lowTarget, now, 1.8);
-    audio.hum.frequency.setTargetAtTime(humTarget, now, 1.4);
-    audio.master.gain.setTargetAtTime(gainTarget, now, 2.2);
-  }, [apparitionStage, gazePressure]);
-  useEffect(() => () => { if (audioRef.current) audioRef.current.ctx.close(); }, []);
-  return <main className="experience">
-    <Canvas shadows dpr={[1,1.6]} camera={{ position:[0,1.65,3.25], fov:62, near:.05, far:40 }} gl={{ antialias:true, alpha:false, powerPreference:'high-performance' }}>
-      <Suspense fallback={null}><Scene opened={opened} setOpened={setOpened} apparitionStage={apparitionStage} apparitionVisible={apparitionVisible} onApparitionVisibility={setApparitionVisible} gazePressure={gazePressure} onGazePressure={setGazePressure} onUncanny={() => { setApparitionStage(1); setApparitionVisible(true); }} onApparitionShift={() => { setApparitionStage(2); setApparitionVisible(false); }} /></Suspense>
-    </Canvas>
-    <div className="brand-corner"><span className="brand-icon">T<span>.</span>D</span><span className="brand-caption">AN INTERACTIVE HORROR EXPERIENCE</span></div>
-    <button className={'sound-toggle '+(soundOn?'is-on':'')} onClick={toggleSound} aria-label="Toggle ambient sound"><span className="sound-bars"><i/><i/><i/><i/></span><span>{soundOn?'SOUND ON':'SOUND OFF'}</span></button>
-    <div className="film-grain" />
-    <div className="edge-shade" />
-  </main>;
+    if (phase !== 'ending') return undefined;
+    if (document.pointerLockElement) document.exitPointerLock();
+    setPower(cause === 'escape' ? 1.6 : 0.02);
+    const id = window.setTimeout(() => setPhase(cause === 'escape' ? 'end' : 'dead'), 2000);
+    return () => window.clearTimeout(id);
+  }, [phase, cause]);
+
+  const escape = useCallback(() => finish('escape'), [finish]);
+  const caught = useCallback(() => finish('caught'), [finish]);
+
+  /* --- dread scheduler -------------------------------------------------- */
+  useEffect(() => {
+    if (calm) return undefined;
+    if (phase !== 'play' || !locked) return undefined;
+    if (roomIndex >= EXIT_INDEX) return undefined;
+
+    let cancelled = false;
+    const timers = new Set();
+
+    const later = (fn, ms) => {
+      const id = window.setTimeout(() => {
+        timers.delete(id);
+        if (!cancelled) fn();
+      }, ms);
+      timers.add(id);
+      return id;
+    };
+
+    // Every staged figure gets a token, so the "now take it away" timer of an
+    // earlier scare can never reach in and clear a figure staged after it.
+    const show = (value, ms = 0) => {
+      const token = ++figureSeq.current;
+      setApparition(value);
+      if (ms) {
+        later(() => {
+          if (figureSeq.current !== token) return;
+          setApparition(null);
+          setTension(0);
+        }, ms);
+      }
+    };
+
+    const step = () => {
+      if (cancelled) return;
+      const depth = roomIndex;
+      if (depth >= EXIT_INDEX) return;
+
+      // The deeper you are, the less time the building gives you between
+      // events — but never so little that it stops being a rhythm.
+      const gap = 4600 + Math.random() * 6200 - Math.min(2800, depth * 220);
+
+      if (dreadRef.current.stalker) {
+        later(step, 4200);
+        return;
+      }
+
+      const stalkChance = depth >= 5 ? Math.min(0.34, 0.05 + depth * 0.018) : 0;
+      if (Math.random() < stalkChance) {
+        dreadRef.current.stalker = true;
+        lastEvent.current = 'stalker';
+        setStalkerSpeed(0.72 + depth * 0.045);
+        show({ mode: 'stalker' });
+        setTension(0.95);
+        cue('slam');
+        later(() => cue('breath'), 1100);
+        later(() => setTension(0.62), 9000);
+        later(step, 20000);
+        return;
+      }
+
+      const pool = ['flicker', 'whisper', 'steps'];
+      if (depth >= 1) pool.push('flicker', 'peek', 'slam');
+      if (depth >= 2) pool.push('procession', 'blackout');
+      if (depth >= 3) pool.push('behind', 'gaze', 'gaze', 'steps');
+      if (depth >= 4) pool.push('doorway', 'blackout');
+      if (depth >= 6) pool.push('stare', 'procession', 'doorway');
+
+      let kind = pool[Math.floor(Math.random() * pool.length)];
+      if (kind === lastEvent.current) kind = pool[(pool.indexOf(kind) + 1) % pool.length];
+      lastEvent.current = kind;
+
+      switch (kind) {
+        case 'flicker':
+          cue('whisper');
+          setTension(0.35);
+          setPower(0.16);
+          later(() => setPower(0.7), 80);
+          later(() => setPower(0.08), 190);
+          later(() => {
+            setPower(1);
+            setTension(0);
+          }, 340);
+          break;
+
+        case 'blackout':
+          cue('slam');
+          setTension(0.75);
+          setPower(0.02);
+          later(() => setPower(0.3), 250);
+          later(() => setPower(0.02), 470);
+          later(() => cue('breath'), 620);
+          later(() => {
+            setPower(1);
+            setTension(0);
+          }, 1080);
+          break;
+
+        case 'slam':
+          // The door you left open is shut when you look back at it.
+          cue('slam');
+          setPower(0.28);
+          later(() => setPower(1), 260);
+          later(() => {
+            if (doorRef.current) setDoorOpen(false);
+          }, 500);
+          break;
+
+        case 'whisper':
+          cue('whisper');
+          later(() => cue('whisper'), 700 + Math.random() * 700);
+          break;
+
+        case 'steps':
+          // Footsteps that are not yours, behind you, and getting no closer.
+          cue('step');
+          later(() => cue('step'), 430);
+          later(() => cue('step'), 900);
+          later(() => cue('step'), 1420);
+          setTension(0.4);
+          later(() => setTension(0), 2600);
+          break;
+
+        case 'peek': {
+          show(
+            {
+              mode: 'static',
+              x: Math.random() > 0.5 ? room.width * 0.22 : -room.width * 0.22,
+              z: -room.depth / 2 + 0.5,
+              facing: 0,
+              close: false,
+              pose: 'idle',
+            },
+            1500 + Math.random() * 1000,
+          );
+          cue('creak');
+          setTension(0.42);
+          later(() => cue('sting'), 1200);
+          break;
+        }
+
+        case 'procession':
+          show({ mode: 'procession' }, 7000);
+          cue('whisper');
+          setTension(0.55);
+          later(() => cue('breath'), 1600);
+          later(() => cue('sting'), 6800);
+          break;
+
+        case 'behind':
+          // It is standing in the doorway you came through. Most players never
+          // turn around, which is the point.
+          show({ mode: 'behind' }, 6500);
+          cue('creak');
+          setTension(0.5);
+          break;
+
+        case 'gaze':
+          show({ mode: 'weeping' }, 20000);
+          cue('whisper');
+          setTension(0.72);
+          break;
+
+        case 'doorway':
+          show({ mode: 'doorway' }, 8000);
+          cue('slam');
+          setTension(0.82);
+          later(() => cue('breath'), 900);
+          later(() => cue('sting'), 7800);
+          break;
+
+        case 'stare':
+          show(
+            {
+              mode: 'static',
+              x: (Math.random() > 0.5 ? 1 : -1) * room.width * 0.18,
+              z: -1.1,
+              facing: 0,
+              close: true,
+              pose: 'idle',
+            },
+            3200 + Math.random() * 1600,
+          );
+          cue('sting');
+          setTension(0.66);
+          break;
+
+        default:
+          break;
+      }
+
+      later(step, Math.max(3000, gap));
+    };
+
+    later(step, 3600 + Math.random() * 2400);
+
+    return () => {
+      cancelled = true;
+      timers.forEach((id) => window.clearTimeout(id));
+      timers.clear();
+      // A flicker can be interrupted by a room change; never leave the lights
+      // dimmed because its restore timer was cleared with it.
+      setPower(1);
+    };
+  }, [calm, phase, locked, room.index, roomIndex, room.width, room.depth, cue, setTension]);
+
+  /* --- the thing following you ------------------------------------------ */
+  useEffect(() => {
+    if (phase !== 'play' || !locked) return undefined;
+    if (apparition?.mode !== 'stalker') return undefined;
+    let id;
+    const beat = () => {
+      cue('step');
+      id = window.setTimeout(beat, 520 + Math.random() * 280);
+    };
+    id = window.setTimeout(beat, 700);
+    return () => window.clearTimeout(id);
+  }, [phase, locked, apparition, cue]);
+
+  /* --- ambience --------------------------------------------------------- */
+  useEffect(() => {
+    if (phase !== 'play' || !locked) return undefined;
+    const kind = room.key;
+    const sound = ['flooded', 'washroom', 'boiler', 'hall', 'kitchen'].includes(kind)
+      ? 'drip'
+      : kind === 'clockroom'
+        ? 'tick'
+        : ['laundry', 'mirrorhall', 'morgue'].includes(kind)
+          ? 'hum'
+          : null;
+    if (!sound) return undefined;
+    const beat = sound === 'tick' ? 1000 : 4800 + Math.random() * 4200;
+    const id = window.setInterval(() => cue(sound), beat);
+    return () => window.clearInterval(id);
+  }, [phase, locked, room.key, cue]);
+
+  /* --- proximity prompt -------------------------------------------------- */
+  useEffect(() => {
+    if (phase !== 'play') return undefined;
+    const id = window.setInterval(() => {
+      const near = Boolean(interactRef.current);
+      if (near !== nearRef.current) {
+        nearRef.current = near;
+        setNearDoor(near);
+      }
+    }, 140);
+    return () => window.clearInterval(id);
+  }, [phase]);
+
+  /* --- start / restart --------------------------------------------------- */
+  const enter = () => {
+    autoStart();
+    lockRef.current?.();
+  };
+
+  useEffect(() => {
+    if (!pendingLock.current) return undefined;
+    const id = window.setTimeout(() => {
+      pendingLock.current = false;
+      lockRef.current?.();
+    }, 90);
+    return () => window.clearTimeout(id);
+  }, [runId]);
+
+  const restart = () => {
+    setRunSeed((Math.random() * 1e9) | 0);
+    setRoomIndex(0);
+    setDoorOpen(false);
+    setPower(1);
+    setApparition(null);
+    setNearDoor(false);
+    setElapsed(0);
+    setCause('escape');
+    setTension(0);
+    dreadRef.current.stalker = false;
+    startedAt.current = null;
+    setPhase('title');
+    setRunId((value) => value + 1);
+    pendingLock.current = true;
+    autoStart();
+  };
+
+  /* --- debug hooks (?debug) ---------------------------------------------- */
+  // Everything here is behind a query flag and only exists so the scene can be
+  // driven by a headless browser: jump to a room, stage a scare, check state.
+  useEffect(() => {
+    if (typeof window === 'undefined') return undefined;
+    if (!new URLSearchParams(window.location.search).has('debug')) return undefined;
+    const api = (window.__run ||= {});
+    api.rooms = chain.map((item) => ({
+      index: item.index,
+      key: item.key,
+      label: item.label,
+      centerZ: item.centerZ,
+      frontZ: item.frontZ,
+      backZ: item.backZ,
+      depth: item.depth,
+      width: item.width,
+    }));
+    api.skip = (index) => {
+      setRoomIndex(Math.max(0, Math.min(EXIT_INDEX, index)));
+      setDoorOpen(false);
+      setApparition(null);
+      setPower(1);
+    };
+    api.figure = (value) => {
+      figureSeq.current += 1;
+      setApparition(value);
+    };
+    api.door = (value) => setDoorOpen(Boolean(value));
+    api.power = (value) => setPower(value);
+    api.phase = (value) => setPhase(value);
+    api.calm = (value) => setCalm(Boolean(value));
+    api.state = () => ({ roomIndex, phase, locked, doorOpen, calm });
+    return () => {
+      delete api.skip;
+      delete api.figure;
+      delete api.door;
+      delete api.power;
+      delete api.phase;
+      delete api.calm;
+      delete api.rooms;
+    };
+  }, [chain, roomIndex, phase, locked, doorOpen, calm]);
+
+  const playing = phase === 'play' && locked;
+
+  return (
+    <main className={`experience${apparition?.mode === 'stalker' ? ' is-stalking' : ''}`}>
+      <Canvas
+        shadows
+        dpr={[1, 1.5]}
+        camera={{ position: spawn, fov: 64, near: 0.05, far: 45 }}
+        gl={{ antialias: true, alpha: false, powerPreference: 'high-performance' }}
+        onCreated={({ gl }) => {
+          gl.toneMappingExposure = room.mood.exposure;
+        }}
+      >
+        <Suspense fallback={null}>
+          <Scene
+            key={runId}
+            room={room}
+            next={next}
+            tex={tex}
+            doorOpen={doorOpen}
+            onDoor={toggleDoor}
+            power={phase === 'ending' && cause !== 'escape' ? 0.04 : power}
+            apparition={apparition}
+            playerRef={playerRef}
+            onCaught={caught}
+            onAdvance={advance}
+            onEscape={escape}
+            onFootstep={() => cue('step')}
+            onShift={(upClose) => {
+              cue(upClose ? 'sting' : 'whisper');
+              setTension(upClose ? 0.85 : 0.6);
+            }}
+            interactRef={interactRef}
+            lockRef={lockRef}
+            spawn={spawn}
+            active={playing}
+            roomIndex={roomIndex}
+            stalkerSpeed={stalkerSpeed}
+          />
+        </Suspense>
+      </Canvas>
+
+      {playing && <Hud room={room} index={roomIndex} nearDoor={nearDoor} doorOpen={doorOpen} stalking={apparition?.mode === 'stalker'} />}
+
+      {phase === 'title' && (
+        <TitleScreen
+          paused={startedAt.current !== null}
+          canLock={canLock.current}
+          soundOn={soundOn}
+          onEnter={enter}
+          onToggleSound={toggle}
+          room={room}
+          elapsed={elapsed}
+        />
+      )}
+
+      {(phase === 'ending' || phase === 'dead') && (
+        <>
+          <div className={`ending-flash${cause === 'escape' ? ' is-white' : ''}`} />
+          <div className="ending-fade" />
+        </>
+      )}
+
+      {(phase === 'end' || phase === 'dead') && (
+        <EndScreen cause={cause} index={roomIndex} elapsed={elapsed} onRestart={restart} />
+      )}
+
+      <button
+        type="button"
+        className={`sound-toggle${soundOn ? ' is-on' : ''}`}
+        onClick={toggle}
+        aria-label={soundOn ? 'Mute ambient sound' : 'Enable ambient sound'}
+      >
+        <span className="sound-bars">
+          <i />
+          <i />
+          <i />
+          <i />
+        </span>
+        <span>{soundOn ? 'SOUND ON' : 'SOUND OFF'}</span>
+      </button>
+
+      {/* one dark blink as you cross the threshold into the next room */}
+      <div key={`room-${roomIndex}`} className="room-blink" />
+      <div className="film-grain" />
+      <div className="edge-shade" />
+      <div className="danger-pulse" />
+    </main>
+  );
 }

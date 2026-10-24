@@ -1,38 +1,125 @@
 # THE DOOR — Visual Prototype
 
-First milestone: a single atmospheric 3D horror room. This prototype focuses on visual direction and interaction foundations rather than a full game loop.
+A run of twenty-one rooms, a door at the end of every one, and no way back the
+way you came. Built as a visual-direction prototype: there are no 3D models,
+textures or audio files — every surface is painted to a canvas at runtime and
+every sound is synthesised.
 
 ## Stack
-- React + Vite
-- Three.js via React Three Fiber
-- Drei helpers and postprocessing effects
-- Procedurally generated material textures, no external 3D assets required
+
+- React 19 + Vite 7
+- Three.js via React Three Fiber, drei helpers, postprocessing effects
+- Procedural colour + bump maps for every surface, generated at boot
+- Seeded room generation (mulberry32), so a run is reproducible from one number
+- The only runtime network request is the two Google fonts in `index.html`
 
 ## Run locally
+
 ```bash
-npm install
+npm ci
 npm run dev
 ```
 
-## Current scene
-- A moody waiting room with a detailed paneled wooden door, brass hardware, sconces, framed wall art, a side table, rug, and aged wall/floor materials
-- Dynamic practical lights, subtle flicker, floating dust, fog, film grain, bloom, vignette, and restrained chromatic aberration
-- Minimal title screen and in-game HUD
-- Pointer-lock first-person controls, a traversable corridor beyond the door, and a door interaction (click the door or press E)
-- A two-beat uncanny sequence: after entering the corridor, look back toward the room and down the corridor to reveal a distant silhouette; focus on it, then look away and it relocates closer while unseen
-- Corridor practical lights respond to the apparition with uneven flicker and brief near-blackouts; the silhouette subtly sways
-- Sustained eye contact builds a two-step gaze pressure: corridor lights become more erratic, the silhouette's sway intensifies, and the opt-in ambient drone subtly detunes; looking away releases the pressure as the apparition relocates
-- After relocating, the apparition vanishes when you turn away and only returns after you look back down the corridor; its return delay varies, so it does not snap back on a perfectly predictable beat
-- Toggleable low-frequency ambient drone generated with Web Audio; when the apparition advances, the drone slowly detunes and gains a tiny amount of weight (only while sound is enabled)
+## Build and deploy
+
+```bash
+npm run build     # static output in dist/
+npm run preview   # serve the production build
+```
+
+`dist/` is a plain static bundle — host it on any static host (Netlify, Vercel,
+Cloudflare Pages, GitHub Pages, an object bucket). No environment variables, no
+server, no API keys. If you host it under a sub-path, set `base` in
+`vite.config.js`; the app itself only uses relative asset URLs.
+
+Client requirements: WebGL 2, a mouse and a keyboard. Pointer lock is required,
+so on touch devices the title screen explains that the piece is desktop-only
+instead of starting a scene that cannot be controlled.
+
+## How the rooms work
+
+Rooms are stacked along the −Z axis at a fixed pitch (14 m) and every room is
+generated from `(runSeed, roomIndex)`:
+
+- **Twenty-two archetypes** — waiting room, long hall, nursery, chapel, store
+  room, washroom, office, flood, gallery, boiler room, nowhere, bedroom, kitchen,
+  library, classroom, stairwell, mirror hall, cold room, laundry, clock room,
+  closet, the room with no ceiling, and the exit.
+- **A bag, not a die.** A run draws from a shuffled bag of every archetype, so
+  twenty rooms really are twenty different rooms. A weighted roll kept serving
+  the same dozen, which made the building feel small.
+- **Per-room variation.** Dimensions, prop placement, portraits, light seeds and
+  a handful of chance details (a false door, a puddle, rubble, a fan, a collapsed
+  ceiling, a dark entry) are drawn from the room's seed, so two library rooms are
+  not the same library.
+- **Traversal is physical.** Rooms are genuinely adjacent, so walking through a
+  door carries you into the next room. There is no loading screen and no
+  teleport: the room behind you is unmounted only once you are well inside the
+  next one, and the entry corridor covers the seam.
+- **Corridors** — the leftover space between two rooms becomes a dark passage
+  with its own bulb, so the door you open reveals a space before it reveals a
+  room. Their length varies with the depth of the rooms on either side, which is
+  how a closet can be reached down a six-metre corridor.
+- **Nothing blocks the door.** Every room's back wall is composed around the
+  doorway: dresser banks flank it, shelves turn away from it, and each room gets
+  a sconce or a portrait on the wall beside it so the view you walk towards has a
+  shape.
+
+`src/lib/rooms.js` owns the layout, the walkable rectangles and the moods;
+`src/components/Room.jsx` owns the shell and the dressing for each archetype;
+`src/components/props.jsx` owns the furniture.
+
+## Dread
+
+Events are scheduled while you are playing, and escalate with depth. No event
+repeats immediately.
+
+| From room | Events |
+| --- | --- |
+| 1 | light stutter, whispers, footsteps that are not yours, doors slamming |
+| 2 | something appears beside the door and is gone before you are sure |
+| 3 | three figures standing in a row, facing the wall; a blackout with breathing in it |
+| 4 | it stands in the doorway you came through — most players never turn around |
+| 4 | the weeping kind: hold it in view and it is gone, closer, at an angle you are not covering. Look four times and it is where your eyes already are |
+| 5 | it stands in the open doorway ahead of you, backlit by nothing |
+| 6+ | the stalker: it appears at the end of the room you are not standing in and walks. It does not stop. |
+
+The stalker is slower than you are, so it is a pressure valve rather than a jump
+scare: it makes you cross the room faster and open the door without checking
+what is behind you. Footsteps track it while it is active. If it reaches you, the
+run ends with the room you died in.
 
 ## Controls
-- Click **ENTER ROOM** to enter the scene
-- Mouse to look around
-- Pointer-lock first-person camera with WASD/arrow-key movement and room bounds
-- Click the door or press E to open/close it
-- When the door is open, walk through it into the corridor; the corridor is narrow, so stay centered
-- Once inside, turn back toward the room, then look down the corridor again to trigger the first reveal
-- Look directly at the silhouette, then look away; it shifts closer when it leaves your view
+
+- Click **OPEN THE FIRST DOOR** to lock the pointer and begin
+- Mouse to look, WASD or arrow keys to move
+- **E** to open/close the door you are standing in front of
+- **M** to toggle sound (also on the title screen)
+- **Esc** releases the pointer and pauses; the title screen shows how deep you are
+  and offers **KEEP GOING**
+
+## Notes
+
+- Sound starts on the first click (browser autoplay rules). Room tone, tension
+  drone and every cue are synthesised with Web Audio; there are no audio files.
+  Rooms get their own ambience: dripping, ticking, a machine hum.
+- The tension drone rises when something is active and falls when you leave it
+  behind in the room you came from.
+- Rendering: two rooms mounted at a time, one shadow-casting practical per room,
+  device pixel ratio capped at 1.5. `?debug` exposes `window.__door` (position,
+  room, door state, plus `warp()` and `look()`) and `window.__run` (rooms, skip,
+  staging a figure, calm mode) for automated tests; nothing is written to the
+  window without that flag, and calm mode only exists to make screenshots
+  deterministic.
+
+## Testing notes
+
+Headless Chromium checks used during development live in `artifacts/` (excluded
+from version control). They drive the real game: enter, photograph every room
+kind, stage each scare, open a door, walk through it into the next room, reach
+the exit, restart into a new building, and pause.
 
 ## Scope
-Only the new application files and this project note are added on the `the-door/visual-prototype` branch. Existing repository content is preserved.
+
+Only the application files, `.gitignore` and this note are touched on the
+`the-door/visual-prototype` branch. Existing repository content is preserved.
