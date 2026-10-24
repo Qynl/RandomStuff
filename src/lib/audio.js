@@ -235,6 +235,13 @@ export function useAudio() {
         tone(58, 54, 1.6, 0.05, 'triangle');
         return;
 
+      case 'rush':
+        // Something moving fast through the room: air, cloth, one heavy step.
+        burst(0.75, 0.34, 'bandpass', 2600, 1.1, 420);
+        burst(1.1, 0.18, 'lowpass', 900, 0.8, 180);
+        tone(120, 62, 0.9, 0.2, 'triangle');
+        return;
+
       case 'sting':
         tone(320, 96, 1.1, 0.4, 'sawtooth');
         burst(1.3, 0.4, 'highpass', 2200, 0.9, 900);

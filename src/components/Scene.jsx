@@ -5,6 +5,7 @@ import { Bloom, ChromaticAberration, EffectComposer, Noise, Vignette } from '@re
 import * as THREE from 'three';
 import Room from './Room.jsx';
 import PlayerRig from './PlayerRig.jsx';
+import { paletteFor } from '../lib/palette.js';
 
 /** A weak light riding with the camera: eyes adjusting, not a torch. */
 function EyeLight({ power }) {
@@ -51,6 +52,7 @@ export default function Scene({
 }) {
   const gl = useThree((state) => state.gl);
   const mood = room.mood;
+  const palette = paletteFor(room.key);
 
   // Own the pointer lock: drei's control re-binds its listener to a DOM node
   // that can unmount, and Chrome delivers one huge movementX on the first
@@ -69,9 +71,12 @@ export default function Scene({
       <Exposure value={mood.exposure} />
 
       <ambientLight intensity={mood.ambientIntensity * power} color={mood.ambient} />
-      <hemisphereLight args={[mood.ambient, '#2b2822', 0.52 * power]} />
+      {/* A little sky and a little bounce, kept low: the practical lights should
+          own the room, and a strong fill is what flattens a dark interior into
+          one even grey. */}
+      <hemisphereLight args={[palette.fill, '#1e1c18', 0.34 * power]} />
       {/* cold fill from behind: separates silhouettes from the dark */}
-      <directionalLight position={[2.5, 3.2, 5]} color="#8ea6b8" intensity={0.75 * power} />
+      <directionalLight position={[2.5, 3.2, 5]} color={palette.fill} intensity={0.5 * power} />
       <EyeLight power={power} />
 
       <Room

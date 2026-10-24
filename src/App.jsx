@@ -311,26 +311,33 @@ export default function App() {
   }, [phase, locked, toggle, toggleDoor]);
 
   /* --- moving on ------------------------------------------------------- */
+  // The index is advanced functionally. A step through a doorway can arrive on
+  // two frames in a row, and reading roomIndex from the closure made the second
+  // call write the same index again — which lost a room and could stop a run
+  // dead a few rooms in.
   const advance = useCallback(() => {
-    const nextIndex = Math.min(roomIndex + 1, EXIT_INDEX);
-    const nextRoom = chain[nextIndex];
-    setRoomIndex(nextIndex);
+    setRoomIndex((current) => Math.min(current + 1, EXIT_INDEX));
     setDoorOpen(false);
     setApparition(null);
     figureSeq.current += 1;
     setTension(0);
     dreadRef.current.stalker = false;
+  }, [setTension]);
 
-    // Some rooms are already dark when you step into them, and take a moment
-    // to admit that they have lights at all.
-    if (nextRoom && nextRoom.extras?.darkEntry) {
+  // Some rooms are already dark when you step into them, and take a moment to
+  // admit that they have lights at all.
+  useEffect(() => {
+    const entered = chain[roomIndex];
+    if (!entered) return undefined;
+    if (entered.extras?.darkEntry) {
       setPower(0.22);
       const id = window.setTimeout(() => setPower(1), 1400);
       extraTimers.current.add(id);
-    } else {
-      setPower(1);
+      return () => window.clearTimeout(id);
     }
-  }, [chain, roomIndex, setTension]);
+    setPower(1);
+    return undefined;
+  }, [chain, roomIndex]);
 
   const finish = useCallback((kind) => {
     setPhase('ending');
@@ -412,7 +419,7 @@ export default function App() {
       }
 
       const pool = ['flicker', 'whisper', 'steps'];
-      if (depth >= 1) pool.push('flicker', 'peek', 'slam');
+      if (depth >= 1) pool.push('flicker', 'peek', 'slam', 'pass');
       if (depth >= 2) pool.push('procession', 'blackout');
       if (depth >= 3) pool.push('behind', 'gaze', 'gaze', 'steps');
       if (depth >= 4) pool.push('doorway', 'blackout');
@@ -497,6 +504,16 @@ export default function App() {
           setTension(0.55);
           later(() => cue('breath'), 1600);
           later(() => cue('sting'), 6800);
+          break;
+
+        case 'pass':
+          // It crosses the room while you are looking at it.
+          show({ mode: 'pass' }, 1900);
+          cue('rush');
+          setTension(0.72);
+          later(() => cue('step'), 260);
+          later(() => cue('step'), 520);
+          later(() => cue('sting'), 980);
           break;
 
         case 'behind':

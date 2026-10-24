@@ -69,6 +69,29 @@ generated from `(runSeed, roomIndex)`:
 `src/components/Room.jsx` owns the shell and the dressing for each archetype;
 `src/components/props.jsx` owns the furniture.
 
+## Light, colour and surfaces
+
+Every room used to be lit by the same warm bulbs, which made twenty different
+floor plans read as one grey building. Rooms now have a light identity:
+
+- **Eight palettes** in `src/lib/palette.js` — amber, sodium, moonlight, sick
+  green, ice, nursery pink, ember and candlelight — assigned per archetype and
+  provided by context, so sconces, bulbs, tubes, candles, haze cones and the
+  ambient fill all take the room's colour without every call site passing it.
+- **Surfaces take the tint too.** A cold light on grey-green plaster is still
+  grey; the wall, floor and ceiling materials are multiplied by the palette's
+  surface wash, so the cold room is blue in the light *and* in the paint.
+- **Decay is decals.** Six procedural stain textures (damp, drips, mould) are
+  scattered per room from its seed across the walls, the ceiling and the corners,
+  because a lit box reads as a box until its surfaces have a history.
+- **Ceiling joists** on most rooms give the overhead light something to cut
+  across and stop the ceiling being a lid.
+- **Foreground dressing.** One or two low objects (chair, crate, barrel, rubble)
+  sit just inside each entrance, so the view you walk into has something at a
+  different distance than the far wall.
+- The fill lights were cut back: the practicals own the room, and the hemisphere
+  and directional fills are tinted by the palette instead of flattening it.
+
 ## Dread
 
 Events are scheduled while you are playing, and escalate with depth. No event
@@ -76,7 +99,7 @@ repeats immediately.
 
 | From room | Events |
 | --- | --- |
-| 1 | light stutter, whispers, footsteps that are not yours, doors slamming |
+| 1 | light stutter, whispers, footsteps that are not yours, doors slamming, something crossing the room ahead of you |
 | 2 | something appears beside the door and is gone before you are sure |
 | 3 | three figures standing in a row, facing the wall; a blackout with breathing in it |
 | 4 | it stands in the doorway you came through — most players never turn around |

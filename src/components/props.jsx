@@ -8,12 +8,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { makeRng } from '../lib/rng.js';
+import { usePalette } from '../lib/palette.js';
 
 /* ------------------------------------------------------------------ light */
 
 export function RoomLight({
   position,
-  color = '#ffc982',
+  color,
   intensity = 2,
   distance = 6,
   decay = 2,
@@ -22,6 +23,8 @@ export function RoomLight({
   seed = 0,
   shadow = false,
 }) {
+  const palette = usePalette();
+  const tint = color ?? palette.light;
   const ref = useRef();
   const phase = useMemo(() => seed * 3.77, [seed]);
 
@@ -38,7 +41,7 @@ export function RoomLight({
     <pointLight
       ref={ref}
       position={position}
-      color={color}
+      color={tint}
       intensity={intensity * power}
       distance={distance}
       decay={decay}
@@ -163,7 +166,7 @@ export function Spot({
   position,
   target,
   roomZ = 0,
-  color = '#ffd9a8',
+  color,
   intensity = 20,
   distance = 12,
   angle = 0.5,
@@ -171,6 +174,8 @@ export function Spot({
   power = 1,
   shadow = false,
 }) {
+  const palette = usePalette();
+  const tint = color ?? palette.light;
   const light = useRef();
   const targetObject = useMemo(() => new THREE.Object3D(), []);
 
@@ -189,7 +194,7 @@ export function Spot({
     <spotLight
       ref={light}
       position={position}
-      color={color}
+      color={tint}
       intensity={intensity * power}
       distance={distance}
       angle={angle}
@@ -207,12 +212,14 @@ export function Spot({
  * so there is no hard edge at the floor or at the tip. A plain additive cone
  * reads as a solid triangle.
  */
-export function LightCone({ position, color = '#ffc27a', height = 1.9, radius = 0.85, opacity = 0.05 }) {
+export function LightCone({ position, color, height = 1.9, radius = 0.85, opacity = 0.05 }) {
+  const palette = usePalette();
+  const tint = color ?? palette.cone;
   const material = useMemo(
     () =>
       new THREE.ShaderMaterial({
         uniforms: {
-          uColor: { value: new THREE.Color(color) },
+          uColor: { value: new THREE.Color(tint) },
           uOpacity: { value: opacity },
           uHeight: { value: height },
         },
@@ -238,7 +245,7 @@ export function LightCone({ position, color = '#ffc27a', height = 1.9, radius = 
         blending: THREE.AdditiveBlending,
         side: THREE.DoubleSide,
       }),
-    [color, height, opacity],
+    [tint, height, opacity],
   );
 
   return (
@@ -249,34 +256,36 @@ export function LightCone({ position, color = '#ffc27a', height = 1.9, radius = 
 }
 
 export function Sconce({ position, power = 1, flicker = 0, seed = 0 }) {
+  const palette = usePalette();
   return (
     <group position={position}>
       <mesh position={[0, -0.16, 0]} castShadow>
         <boxGeometry args={[0.24, 0.42, 0.12]} />
-        <meshStandardMaterial color="#29251e" metalness={0.5} roughness={0.45} />
+        <meshStandardMaterial color="#211f1a" metalness={0.5} roughness={0.45} />
       </mesh>
       <mesh position={[0, 0.04, -0.015]}>
         <cylinderGeometry args={[0.105, 0.14, 0.24, 16, 1, true]} />
         <meshStandardMaterial
-          color="#d0b98e"
-          emissive="#a16c35"
+          color={palette.glass}
+          emissive={palette.emissive}
           emissiveIntensity={0.85 * power}
           transparent
           opacity={0.78}
           side={THREE.DoubleSide}
         />
       </mesh>
-      <RoomLight position={[0, 0.02, 0.16]} color="#ffc982" intensity={20} distance={8.6} power={power} flicker={flicker} seed={seed} />
-      <LightCone position={[0, -0.85, 0.16]} height={1.75} radius={0.95} opacity={0.02 * power} />
+      <RoomLight position={[0, 0.02, 0.16]} intensity={20} distance={8.6} power={power} flicker={flicker} seed={seed} />
+      <LightCone position={[0, -0.85, 0.16]} height={1.75} radius={0.95} opacity={0.024 * power} />
     </group>
   );
 }
 
 export function HangingBulb({ position, power = 1, flicker = 0.2, seed = 0, drop = 1.2, cold = false }) {
+  const palette = usePalette();
   const bulb = useRef();
   const swing = useRef();
-  const tint = cold ? '#cfe2f2' : '#d9ad70';
-  const emissive = cold ? '#8fb6d6' : '#b17a3c';
+  const tint = cold ? palette.tube : palette.bulb;
+  const emissive = cold ? palette.tubeEmissive : palette.emissive;
 
   useFrame(({ clock }) => {
     if (!swing.current) return;
@@ -301,7 +310,7 @@ export function HangingBulb({ position, power = 1, flicker = 0.2, seed = 0, drop
         </mesh>
         <mesh position={[0, -drop - 0.09, 0]} ref={bulb}>
           <sphereGeometry args={[0.075, 14, 12]} />
-          <meshStandardMaterial color="#e8d3a6" emissive={emissive} emissiveIntensity={1.3} toneMapped={false} />
+          <meshStandardMaterial color={palette.glass} emissive={emissive} emissiveIntensity={1.3} toneMapped={false} />
         </mesh>
         <RoomLight position={[0, -drop - 0.1, 0]} color={tint} intensity={21} distance={11} power={power} flicker={flicker} seed={seed} />
         <LightCone position={[0, -drop - 0.95, 0]} color={tint} height={1.7} radius={1.25} opacity={0.024 * power} />
@@ -311,6 +320,7 @@ export function HangingBulb({ position, power = 1, flicker = 0.2, seed = 0, drop
 }
 
 export function Fluorescent({ position, power = 1, flicker = 0.35, seed = 0, rotation = [0, 0, 0] }) {
+  const palette = usePalette();
   const tube = useRef();
 
   useFrame(({ clock }) => {
@@ -328,14 +338,15 @@ export function Fluorescent({ position, power = 1, flicker = 0.35, seed = 0, rot
       </mesh>
       <mesh position={[0, -0.09, 0]} ref={tube}>
         <boxGeometry args={[1.32, 0.06, 0.11]} />
-        <meshStandardMaterial color="#e6f1f5" emissive="#a8d4e6" emissiveIntensity={1.0} toneMapped={false} />
+        <meshStandardMaterial color={palette.tube} emissive={palette.tubeEmissive} emissiveIntensity={1.0} toneMapped={false} />
       </mesh>
-      <RoomLight position={[0, -0.24, 0]} color="#d6ecf8" intensity={9} distance={9} power={power} flicker={flicker} seed={seed} />
+      <RoomLight position={[0, -0.24, 0]} intensity={9} distance={9} power={power} flicker={flicker} seed={seed} />
     </group>
   );
 }
 
 export function CandleCluster({ position, power = 1, count = 5, seed = 1 }) {
+  const palette = usePalette();
   const flames = useRef([]);
   const spots = useMemo(() => {
     const rng = makeRng(seed);
@@ -371,11 +382,11 @@ export function CandleCluster({ position, power = 1, count = 5, seed = 1 }) {
             }}
           >
             <coneGeometry args={[0.018, 0.07, 8]} />
-            <meshBasicMaterial color="#ffc978" toneMapped={false} />
+            <meshBasicMaterial color={palette.bulb} toneMapped={false} />
           </mesh>
         </group>
       ))}
-      <RoomLight position={[0, 0.62, 0]} color="#ffb35c" intensity={5.5 * Math.min(1, count / 4)} distance={5} power={power} flicker={0.18} seed={seed} />
+      <RoomLight position={[0, 0.62, 0]} intensity={5.5 * Math.min(1, count / 4)} distance={5} power={power} flicker={0.18} seed={seed} />
     </group>
   );
 }
@@ -1246,7 +1257,7 @@ export function Barrel({ tex, position, rotation = [0, 0, 0], height = 0.92, rad
   );
 }
 
-export function HangingCloth({ position, rotation = [0, 0, 0], width = 1.2, height = 2.2, opacity = 0.24, seed = 0 }) {
+export function HangingCloth({ tex, position, rotation = [0, 0, 0], width = 1.2, height = 2.2, opacity = 0.5, seed = 0 }) {
   const mesh = useRef();
   useFrame(({ clock }) => {
     if (!mesh.current) return;
@@ -1254,11 +1265,34 @@ export function HangingCloth({ position, rotation = [0, 0, 0], width = 1.2, heig
     mesh.current.rotation.y = rotation[1] + Math.sin(t * 0.42) * 0.06;
     mesh.current.rotation.x = rotation[0] + Math.cos(t * 0.31) * 0.02;
   });
+
+  // Three overlapping panels instead of one plane: a single quad catches the
+  // light evenly and reads as a lit card hanging in mid air. Folds give it a
+  // near edge, a far edge, and a shadow between them.
+  const panels = [
+    { x: -width * 0.34, ry: 0.16, o: 1 },
+    { x: 0, ry: 0, o: 1 },
+    { x: width * 0.34, ry: -0.16, o: 0.92 },
+  ];
+
   return (
     <group position={position}>
       <mesh ref={mesh} rotation={rotation}>
-        <planeGeometry args={[width, height, 1, 8]} />
-        <meshStandardMaterial color="#8d938a" transparent opacity={opacity} roughness={0.7} side={THREE.DoubleSide} depthWrite={false} />
+        {panels.map((panel) => (
+          <mesh key={panel.x} position={[panel.x, 0, 0]} rotation={[0, panel.ry, 0]}>
+            <planeGeometry args={[(width / 2.6), height, 1, 6]} />
+            <meshStandardMaterial
+              map={tex?.fabric}
+              color="#565a51"
+              transparent
+              opacity={opacity * panel.o}
+              roughness={1}
+              metalness={0}
+              side={THREE.DoubleSide}
+              depthWrite={false}
+            />
+          </mesh>
+        ))}
       </mesh>
     </group>
   );
@@ -1370,6 +1404,126 @@ export function Drain({ position, rotation = [-Math.PI / 2, 0, 0] }) {
           <meshStandardMaterial color="#4a4f4a" metalness={0.7} roughness={0.4} />
         </mesh>
       ))}
+    </group>
+  );
+}
+
+/* --------------------------------------------------------------- the walls */
+
+/**
+ * Everything the walls have been through, laid over the plaster as decals.
+ *
+ * Rooms are boxes, and a lit box reads as a box until its surfaces have a
+ * history: a leak above the door, mould in the corner where the walls meet,
+ * whatever came through the ceiling. Six decal textures, placed per room from
+ * its own seed, so no two rooms are weathered the same way.
+ */
+export function Grime({ tex, room }) {
+  const decals = useMemo(() => {
+    const rng = makeRng(room.seed ^ 0x2f1b3c);
+    const hw = room.width / 2 - 0.03;
+    const hd = room.depth / 2 - 0.03;
+    const list = [];
+    const count = 9 + rng.int(0, 5);
+
+    for (let i = 0; i < count; i++) {
+      const w = rng.float(1.1, 3.2);
+      const h = w * rng.float(0.75, 1.3);
+      const variant = rng.int(0, 5);
+      const opacity = rng.float(0.45, 0.92);
+      const roll = rng.next();
+
+      if (roll < 0.3) {
+        list.push({
+          variant,
+          opacity,
+          w,
+          h,
+          position: [rng.float(-hw + 0.6, hw - 0.6), rng.float(0.6, room.height - 0.6), -hd + 0.012],
+          rotation: [0, 0, rng.float(-0.2, 0.2)],
+        });
+      } else if (roll < 0.56) {
+        const side = rng.sign();
+        list.push({
+          variant,
+          opacity,
+          w,
+          h,
+          position: [side * (hw - 0.012), rng.float(0.6, room.height - 0.6), rng.float(-hd + 0.6, hd - 0.6)],
+          rotation: [0, side > 0 ? -Math.PI / 2 : Math.PI / 2, rng.float(-0.2, 0.2)],
+        });
+      } else if (roll < 0.78) {
+        // on the ceiling, where the leak came from
+        list.push({
+          variant,
+          opacity: opacity * 0.9,
+          w: w * 1.5,
+          h: h * 1.5,
+          position: [rng.float(-hw + 1, hw - 1), room.height - 0.02, rng.float(-hd + 1, hd - 1)],
+          rotation: [Math.PI / 2, 0, rng.float(0, Math.PI * 2)],
+        });
+      } else {
+        list.push({
+          variant,
+          opacity: opacity * 0.8,
+          w,
+          h,
+          position: [rng.float(-hw + 0.6, hw - 0.6), rng.float(0.6, room.height - 0.6), hd - 0.012],
+          rotation: [0, Math.PI, rng.float(-0.2, 0.2)],
+        });
+      }
+    }
+    return list;
+  }, [room.seed, room.width, room.depth, room.height]);
+
+  return (
+    <group>
+      {decals.map((decal, i) => (
+        <mesh key={i} position={decal.position} rotation={decal.rotation}>
+          <planeGeometry args={[decal.w, decal.h]} />
+          <meshStandardMaterial
+            map={tex.stains[decal.variant]}
+            transparent
+            opacity={decal.opacity}
+            roughness={1}
+            metalness={0}
+            depthWrite={false}
+            polygonOffset
+            polygonOffsetFactor={-2}
+          />
+        </mesh>
+      ))}
+    </group>
+  );
+}
+
+/**
+ * Exposed ceiling joists. Cheap, and they do a lot: the ceiling stops being a
+ * lid, the light gets something to cut across, and the shadows above you are
+ * irregular in a way the eye reads as age.
+ */
+export function Beams({ room }) {
+  const beams = useMemo(() => {
+    const rng = makeRng(room.seed ^ 0x77c1a2);
+    const count = Math.max(3, Math.round(room.depth / 2.3));
+    return Array.from({ length: count }, (_, i) => ({
+      z: -room.depth / 2 + ((i + 0.5) * room.depth) / count,
+      missing: rng.chance(0.08),
+      sag: rng.float(-0.02, 0.02),
+      width: rng.float(0.16, 0.26),
+    }));
+  }, [room.seed, room.depth]);
+
+  return (
+    <group>
+      {beams.map((beam, i) =>
+        beam.missing ? null : (
+          <mesh key={i} position={[0, room.height - 0.16, beam.z]} rotation={[0, 0, beam.sag]} castShadow>
+            <boxGeometry args={[room.width - 0.1, 0.22, beam.width]} />
+            <meshStandardMaterial color="#26241d" roughness={0.94} />
+          </mesh>
+        ),
+      )}
     </group>
   );
 }

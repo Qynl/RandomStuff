@@ -59,7 +59,7 @@ function plaster(base = '#8b8e85', accent = '#cfccb6', dirt = '#3c3e35') {
     const y = Math.random() * size;
     const r = 20 + Math.random() * 120;
     const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
-    grad.addColorStop(0, `rgba(40,44,36,${0.07 + Math.random() * 0.12})`);
+    grad.addColorStop(0, `rgba(40,44,36,${0.12 + Math.random() * 0.18})`);
     grad.addColorStop(1, 'rgba(18,20,16,0)');
     ctx.fillStyle = grad;
     ctx.fillRect(x - r, y - r, r * 2, r * 2);
@@ -264,6 +264,56 @@ function portrait(seed) {
   return toTexture(canvas);
 }
 
+/* Wall decay. Painted with transparency so it can be laid over the plaster as a
+ * decal: rising damp, a leak that has been running for years, mould blooming
+ * out of the corner where two walls meet. Flat walls are the thing that gives a
+ * box away as a box. */
+function stain(variant) {
+  const size = 256;
+  const canvas = canvasOf(size);
+  const ctx = canvas.getContext('2d');
+  const rng = makeRng(0x51a1 + variant * 977);
+
+  // A wet core with a ragged edge, then drips running down from it.
+  const cx = rng.float(size * 0.28, size * 0.72);
+  const cy = rng.float(size * 0.22, size * 0.5);
+  for (let i = 0; i < 22; i++) {
+    const angle = rng.float(0, Math.PI * 2);
+    const radius = rng.float(size * 0.05, size * 0.19);
+    const x = cx + Math.cos(angle) * radius * rng.float(0.2, 1.4);
+    const y = cy + Math.sin(angle) * radius * rng.float(0.2, 1.4);
+    const r = rng.float(size * 0.06, size * 0.2);
+    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+    grad.addColorStop(0, `rgba(20,20,15,${rng.float(0.16, 0.34)})`);
+    grad.addColorStop(0.6, `rgba(30,29,22,${rng.float(0.06, 0.16)})`);
+    grad.addColorStop(1, 'rgba(30,29,22,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x - r, y - r, r * 2, r * 2);
+  }
+  for (let i = 0; i < 12; i++) {
+    const x = cx + rng.float(-size * 0.18, size * 0.18);
+    const length = rng.float(size * 0.16, size * 0.62);
+    const width = rng.float(1.2, 5);
+    const grad = ctx.createLinearGradient(x, cy, x, cy + length);
+    grad.addColorStop(0, `rgba(16,17,12,${rng.float(0.24, 0.42)})`);
+    grad.addColorStop(1, 'rgba(16,17,12,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(x - width / 2, cy, width, length);
+  }
+  // Mould: small specks, denser near the core.
+  for (let i = 0; i < 260; i++) {
+    const angle = rng.float(0, Math.PI * 2);
+    const radius = Math.abs(rng.float(0, 1)) * size * 0.3;
+    ctx.globalAlpha = rng.float(0.04, 0.18);
+    ctx.fillStyle = rng.chance(0.3) ? '#2b2a1c' : '#0d0f0a';
+    ctx.beginPath();
+    ctx.arc(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius * 0.8, rng.float(0.6, 2.4), 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  return toTexture(canvas);
+}
+
 function clone(texture, x, y) {
   const copy = texture.clone();
   copy.wrapS = copy.wrapT = THREE.RepeatWrapping;
@@ -285,9 +335,9 @@ export function useTextures() {
     const bumpRepeat = (x, y) => clone(grain, x, y);
 
     return {
-      wall: wallRepeat(2.4, 1.5),
-      wallWide: wallRepeat(4.4, 1.4),
-      wallPiece: wallRepeat(1.7, 1.5),
+      wall: wallRepeat(2.9, 1.6),
+      wallWide: wallRepeat(4.2, 1.7),
+      wallPiece: wallRepeat(2.0, 1.6),
       floor: clone(floor, 3.2, 3.2),
       floorSmall: clone(floor, 1.6, 1.6),
       wood: clone(board, 1, 1.6),
@@ -296,15 +346,16 @@ export function useTextures() {
       tile: clone(tiles, 2.2, 1.6),
       tileFloor: clone(tiles, 2.6, 2.6),
       fabric: clone(cloth, 2, 3),
-      bumpWall: bumpRepeat(2.4, 1.5),
-      bumpWallWide: bumpRepeat(4.4, 1.4),
-      bumpPiece: bumpRepeat(1.7, 1.5),
+      bumpWall: bumpRepeat(2.9, 1.6),
+      bumpWallWide: bumpRepeat(4.2, 1.7),
+      bumpPiece: bumpRepeat(2.0, 1.6),
       bumpFloor: bumpRepeat(3.2, 3.2),
       bumpWood: bumpRepeat(1, 1.6),
       bumpTable: bumpRepeat(1.2, 0.9),
       bumpTile: bumpRepeat(2.2, 1.6),
       bumpFabric: bumpRepeat(2, 3),
       portraits: [portrait(11), portrait(29), portrait(47), portrait(83), portrait(131), portrait(197)],
+      stains: [stain(0), stain(1), stain(2), stain(3), stain(4), stain(5)],
     };
   }, []);
 }

@@ -117,6 +117,8 @@ export default function PlayerRig({ active, rooms, roomIndex, doorOpen, spawn, o
       state.near = Boolean(interactRef?.current);
       state.backZ = +current.backZ.toFixed(2);
       state.frontZ = +current.frontZ.toFixed(2);
+      state.nextFrontZ = next ? +next.frontZ.toFixed(2) : null;
+      state.advancedAt = advancedAtIndex.current;
     }
     if (!active) return;
 

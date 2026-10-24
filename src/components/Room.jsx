@@ -9,8 +9,10 @@ import * as THREE from 'three';
 import { DOOR_HALF, DOOR_TOP, CORRIDOR_HALF, CORRIDOR_H } from '../lib/rooms.js';
 import { makeRng } from '../lib/rng.js';
 import Apparition, { Weeping } from './Apparition.jsx';
+import { PaletteContext, paletteFor, tintColor } from '../lib/palette.js';
 import {
   Barrel,
+  Beams,
   Bed,
   BoardedWindow,
   Cabinet,
@@ -30,6 +32,7 @@ import {
   ExitSign,
   Fluorescent,
   GrandfatherClock,
+  Grime,
   HangingBulb,
   HangingCloth,
   Mirror,
@@ -58,7 +61,7 @@ import {
 
 /* --------------------------------------------------------------- materials */
 
-function surfaces(tex, key) {
+function baseSurfaces(tex, key) {
   if (key === 'washroom') {
     return {
       wall: { map: tex.tile, bumpMap: tex.bumpTile, bumpScale: 0.02, color: '#c6d0c8', roughness: 0.5, metalness: 0.06 },
@@ -157,11 +160,23 @@ function surfaces(tex, key) {
   };
 }
 
+/* The room's own colour, washed over every surface it owns. */
+function surfaces(tex, key, palette) {
+  const mats = baseSurfaces(tex, key);
+  if (!palette?.surfaces) return mats;
+  return Object.fromEntries(
+    Object.entries(mats).map(([slot, mat]) => [
+      slot,
+      mat.color ? { ...mat, color: tintColor(mat.color, palette.surfaces[slot] || palette.surfaces.wall) } : mat,
+    ]),
+  );
+}
+
 /* ------------------------------------------------------------------- shell */
 
-function Shell({ room, tex, power }) {
+function Shell({ room, tex, power, palette }) {
   const { width, depth, height, entryGap, key } = room;
-  const mats = useMemo(() => surfaces(tex, key), [tex, key]);
+  const mats = useMemo(() => surfaces(tex, key, palette), [tex, key, palette]);
   const hw = width / 2;
   const bz = -depth / 2;
   const fz = depth / 2;
@@ -224,6 +239,10 @@ function Shell({ room, tex, power }) {
           </mesh>
         </>
       )}
+
+      {/* what the walls have been through, and what is above them */}
+      <Grime tex={tex} room={room} />
+      {['waiting', 'exit', 'washroom', 'morgue', 'mirrorhall', 'closet'].includes(key) ? null : <Beams room={room} />}
 
       {/* baseboards and cornice */}
       {[-1, 1].map((side) => (
@@ -518,11 +537,37 @@ function Store({ room, tex, power }) {
       <HangingBulb position={[width / 2 - 1.6, height - 0.05, depth * 0.3]} drop={1.5} power={power * 0.6} flicker={0.1} seed={6} />
       <Pipes position={[0, 0, -depth / 2 + 0.4]} rotation={[0, Math.PI / 2, 0]} length={depth - 1.2} count={2} height={height * 0.9} />
 
-      {/* hanging plastic sheeting */}
-      {[-1.4, 0.1, 1.5].map((x, i) => (
-        <mesh key={x} position={[x, height / 2 - 0.2, depth * 0.22 + i * 0.4]} rotation={[0, 0.06 * (i - 1), 0]}>
-          <planeGeometry args={[1.1, height - 0.6]} />
-          <meshStandardMaterial color="#c9d2c6" transparent opacity={0.09} roughness={0.4} side={THREE.DoubleSide} />
+      {/* hanging plastic sheeting, in strips: one big plane across the room
+          catches the light evenly and reads as fog, not as plastic */}
+      {[-1.5, 0, 1.5].map((row, r) =>
+        Array.from({ length: 5 }, (_, i) => {
+          const x = row + (i - 2) * 0.34;
+          const drop = rng.float(0.2, 0.7);
+          return (
+            <mesh
+              key={`${row}-${i}`}
+              position={[x, height / 2 - 0.2 - drop, depth * 0.2 + r * 0.38]}
+              rotation={[0, 0.05 * (i - 2), 0.012 * (i % 3)]}
+            >
+              <planeGeometry args={[0.32, height - 0.6 - drop * 2]} />
+              <meshStandardMaterial
+                map={tex.fabric}
+                color="#aeb8ad"
+                transparent
+                opacity={0.17}
+                roughness={0.45}
+                metalness={0.05}
+                side={THREE.DoubleSide}
+                depthWrite={false}
+              />
+            </mesh>
+          );
+        }),
+      )}
+      {[-1.5, 0, 1.5].map((x) => (
+        <mesh key={`rail${x}`} position={[x, height - 0.72, depth * 0.2 + 0.38]} rotation={[0, 0, Math.PI / 2]}>
+          <cylinderGeometry args={[0.018, 0.018, 1.6, 6]} />
+          <meshStandardMaterial color="#3a3c34" metalness={0.6} roughness={0.5} />
         </mesh>
       ))}
       <Chains position={[width / 2 - 1.1, height - 0.15, -depth * 0.3]} count={3} length={1.5} />
@@ -843,12 +888,15 @@ function Stalker({ room, playerRef, speed, onCaught }) {
 
 export default function Room({ room, tex, doorOpen, onDoor, power = 1, apparition, playerRef, onCaught, onShift, stalkerSpeed = 1.2 }) {
   const bz = -room.depth / 2;
+  const palette = useMemo(() => paletteFor(room.key), [room.key]);
 
   return (
+    <PaletteContext.Provider value={palette}>
     <group position={[0, 0, room.centerZ]}>
-      <Shell room={room} tex={tex} power={power} />
+      <Shell room={room} tex={tex} power={power} palette={palette} />
 
       <Dressing room={room} tex={tex} power={power} />
+      <EntryDressing room={room} tex={tex} power={power} />
       <Extras room={room} tex={tex} power={power} />
 
       <DoorSet tex={tex} wallZ={bz} open={doorOpen} onInteract={onDoor} power={power} />
@@ -892,6 +940,144 @@ export default function Room({ room, tex, doorOpen, onDoor, power = 1, apparitio
       {apparition?.mode === 'stalker' && (
         <Stalker room={room} playerRef={playerRef} speed={stalkerSpeed} onCaught={onCaught} />
       )}
+
+      {/* walking from one side of the lit room to the other, quickly */}
+      {apparition?.mode === 'pass' && <Passer room={room} />}
+    </group>
+    </PaletteContext.Provider>
+  );
+}
+
+/**
+ * Something crosses the room ahead of you, once, from dark to dark.
+ *
+ * It is not standing anywhere and it does not wait to be seen: by the time the
+ * eye has caught up with the motion it is behind the furniture on the far side.
+ * This is the cheapest scare in the game and the one that works on the most
+ * people, because a figure that holds still is a set dressing and a figure that
+ * moves is a claim about what the building is doing while you look away.
+ */
+function Passer({ room }) {
+  const holder = useRef();
+  const started = useRef(null);
+  const fromLeft = useRef(Math.random() > 0.5);
+
+  useFrame(({ clock }) => {
+    if (!holder.current) return;
+    if (started.current === null) started.current = clock.elapsedTime;
+    const t = clock.elapsedTime - started.current;
+    const duration = 1.5;
+    const p = Math.min(1, t / duration);
+    const half = room.width / 2 - 0.5;
+    const x = fromLeft.current ? -half + p * half * 2 : half - p * half * 2;
+    holder.current.position.x = x;
+    holder.current.visible = p < 0.97;
+  });
+
+  return (
+    <group ref={holder} position={[0, 0, -room.depth * 0.06]}>
+      <Apparition pose="walk" scale={1.04} stagger={0.42} />
+      {/* Without a light of its own the figure is black on black. This one
+          travels with it, low and in front, so what crosses the room is a
+          shape moving through its own small pool of light. */}
+      <pointLight position={[0, 1.15, 1.3]} color="#a6bcc2" intensity={2.4} distance={3.6} decay={2} />
+    </group>
+  );
+}
+
+/* ------------------------------------------------------------- foreground */
+
+/**
+ * Something between you and the middle of the room.
+ *
+ * The first few metres after a doorway used to be empty floor in every room,
+ * so every room opened the same way: a lit far wall with a door in it. One
+ * object near the entrance, off to one side, gives the eye something at a
+ * different distance and breaks the symmetry of the walk in.
+ */
+function EntryDressing({ room, tex, power }) {
+  const items = useMemo(() => {
+    if (room.width < 6 || room.key === 'exit') return [];
+    const rng = makeRng(room.seed ^ 0x5bd1e9);
+    const side = rng.sign();
+    // Low things only. Something tall right inside the doorway does not add
+    // depth, it just stands in front of the camera and blocks the room.
+    const kinds = ['chair', 'crate', 'barrel', 'rubble'];
+    const list = [
+      {
+        kind: rng.pick(kinds),
+        side,
+        x: side * (room.width / 2 - rng.float(0.45, 0.85)),
+        z: room.depth * rng.float(0.2, 0.36),
+        rotation: rng.float(0, Math.PI * 2),
+      },
+    ];
+    if (rng.chance(0.4)) {
+      list.push({
+        kind: rng.pick(kinds),
+        side: -side,
+        x: -side * (room.width / 2 - rng.float(0.45, 0.95)),
+        z: room.depth * rng.float(0.12, 0.3),
+        rotation: rng.float(0, Math.PI * 2),
+      });
+    }
+    return list;
+  }, [room.key, room.seed, room.width, room.depth]);
+
+  if (!items.length) return null;
+
+  return (
+    <group>
+      {items.map((item, i) => {
+        const key = `entry-${i}`;
+        switch (item.kind) {
+          case 'chair':
+            return (
+              <Chair
+                key={key}
+                tex={tex}
+                position={[item.x, 0, item.z]}
+                rotation={[0, item.rotation, 0]}
+                scale={0.98}
+              />
+            );
+          case 'crate':
+            return <Crate key={key} tex={tex} position={[item.x, 0, item.z]} rotation={[0, item.rotation, 0]} size={0.62} />;
+          case 'barrel':
+            return <Barrel key={key} tex={tex} position={[item.x, 0, item.z]} rotation={[0, item.rotation, 0]} />;
+          case 'trolley':
+            return <Trolley key={key} tex={tex} position={[item.x, 0, item.z]} rotation={[0, item.rotation, 0]} covered={i === 0} />;
+          case 'rubble':
+            return <Rubble key={key} position={[item.x, 0, item.z]} seed={room.index * 7 + i} count={8} spread={1.3} />;
+          case 'cabinet':
+            return (
+              <Cabinet
+                key={key}
+                tex={tex}
+                position={[item.x, 0, item.z]}
+                rotation={[0, item.rotation, 0]}
+                height={1.5}
+                width={0.85}
+              />
+            );
+          case 'cloth':
+            return (
+              <HangingCloth tex={tex}
+                key={key}
+                position={[item.x, room.height * 0.62, item.z]}
+                rotation={[0, item.rotation, 0]}
+                width={0.9}
+                height={1.9}
+                opacity={0.2}
+                seed={room.index + i}
+              />
+            );
+          case 'shelf':
+            return <Shelf key={key} tex={tex} position={[item.x, 0, item.z]} rotation={[0, item.rotation, 0]} width={1.3} height={1.8} />;
+          default:
+            return null;
+        }
+      })}
     </group>
   );
 }
@@ -926,7 +1112,7 @@ function Bedroom({ room, tex, power }) {
 
       <TallWindow position={[0, height * 0.56, bz + 0.13]} power={power * 0.85} height={1.8} />
       {[-1, 1].map((s) => (
-        <HangingCloth key={s} position={[s * 0.95, height * 0.56, bz + 0.24]} width={0.62} height={2.1} opacity={0.17} seed={room.index + s} />
+        <HangingCloth tex={tex} key={s} position={[s * 0.95, height * 0.56, bz + 0.24]} width={0.62} height={2.1} opacity={0.17} seed={room.index + s} />
       ))}
 
       <CeilingFan position={[0, height - 0.16, depth * 0.08]} power={power * 0.8} speed={0.24} />
@@ -1203,7 +1389,7 @@ function Laundry({ room, tex, power }) {
       <Shelf tex={tex} position={[-side * (width / 2 - 0.4), 0, depth * 0.05]} rotation={[0, side * Math.PI / 2, 0]} width={1.8} height={1.9} />
 
       {[-1.2, 0.4, 1.7].map((x, i) => (
-        <HangingCloth key={x} position={[x, height - 1.35, depth * 0.24 + i * 0.18]} width={1.5} height={2.0} opacity={0.19} seed={room.index + i} />
+        <HangingCloth tex={tex} key={x} position={[x, height - 1.35, depth * 0.24 + i * 0.18]} width={1.5} height={2.0} opacity={0.19} seed={room.index + i} />
       ))}
 
       <Barrel tex={tex} position={[-side * (width / 2 - 0.6), 0, -depth * 0.32]} height={0.62} radius={0.26} />
@@ -1251,7 +1437,7 @@ function Closet({ room, tex, power }) {
           in three steps */}
       {[-1, 1].map((side) => (
         <group key={side} rotation={[0, 0, 0]}>
-          <HangingCloth
+          <HangingCloth tex={tex}
             position={[side * (width / 2 - 0.16), height - 1.2, -depth * 0.12]}
             rotation={[0, (side * Math.PI) / 2, 0]}
             width={1.5}
@@ -1383,7 +1569,7 @@ function Extras({ room, tex, power }) {
         <CeilingFan position={[0, room.height - 0.16, -room.depth * 0.1]} power={power * 0.55} speed={0.3} />
       )}
       {extras.cloth && room.key !== 'void' && (
-        <HangingCloth position={[spots.cloth[0], room.height - 1.5, spots.cloth[1]]} width={1.1} height={2.2} opacity={0.2} seed={seed} />
+        <HangingCloth tex={tex} position={[spots.cloth[0], room.height - 1.5, spots.cloth[1]]} width={1.1} height={2.2} opacity={0.2} seed={seed} />
       )}
       {extras.collapse && (
         <group position={[-side * (room.width * 0.3), 0, -room.depth * 0.33]}>
