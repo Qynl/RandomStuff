@@ -60,3 +60,9 @@
 .room-blink{position:absolute;inset:0;z-index:3;pointer-events:none;background:#040504;opacity:0;animation:room-in .62s cubic-bezier(.3,.1,.2,1) both}
 @keyframes room-in{0%{opacity:.92}35%{opacity:.55}100%{opacity:0}}
 @media(prefers-reduced-motion:reduce){.room-blink{display:none}}
+
+/* Drag look: the canvas is a control surface now, not just a viewport. */
+.experience canvas{touch-action:none}
+.experience.is-freelook canvas{cursor:grab}
+.experience.is-freelook canvas:active{cursor:grabbing}
+.device-note{margin:0 auto 20px}

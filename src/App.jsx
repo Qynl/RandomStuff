@@ -25,15 +25,19 @@ function roomNumber(index) {
   return String(index + 1).padStart(2, '0');
 }
 
+// Pointer lock is a convenience, not a requirement. Touchscreen laptops,
+// hybrid tablets and browsers that report a coarse primary pointer can still
+// ask for it, and plenty of desktops refuse it — so the door never depends on
+// it. If the lock cannot be taken, the room turns under a drag instead.
 function canUsePointerLock() {
   if (typeof document === 'undefined') return false;
   if (!('pointerLockElement' in document)) return false;
-  return !window.matchMedia('(pointer: coarse)').matches;
+  return typeof Element !== 'undefined' && typeof Element.prototype.requestPointerLock === 'function';
 }
 
 /* --------------------------------------------------------------------- HUD */
 
-function Hud({ room, index, nearDoor, doorOpen, stalking }) {
+function Hud({ room, index, nearDoor, doorOpen, stalking, freeLook }) {
   const objective =
     index >= EXIT_INDEX
       ? 'Whatever is behind that door, go through it.'
@@ -78,7 +82,7 @@ function Hud({ room, index, nearDoor, doorOpen, stalking }) {
           <kbd>W</kbd>
           <kbd>A</kbd>
           <kbd>S</kbd>
-          <kbd>D</kbd> MOVE <span className="note-divider">/</span> <kbd>MOUSE</kbd> LOOK{' '}
+          <kbd>D</kbd> MOVE <span className="note-divider">/</span> <kbd>{freeLook ? 'DRAG' : 'MOUSE'}</kbd> LOOK{' '}
           <span className="note-divider">/</span> <kbd>E</kbd> DOOR <span className="note-divider">/</span> <kbd>M</kbd> SOUND
         </div>
       </div>
@@ -95,6 +99,10 @@ function Hud({ room, index, nearDoor, doorOpen, stalking }) {
 /* ------------------------------------------------------------ title screen */
 
 function TitleScreen({ paused, canLock, soundOn, onEnter, onToggleSound, room, elapsed }) {
+  // The button is always here. Pointer lock is offered, never required: if the
+  // browser will not hold a lock, the rooms open anyway and you turn by
+  // dragging. Hiding the way in behind a capability check just looks broken.
+
   return (
     <div className="start-screen">
       <div className="start-grid" />
@@ -128,29 +136,23 @@ function TitleScreen({ paused, canLock, soundOn, onEnter, onToggleSound, room, e
             </>
           )}
         </p>
-        {canLock ? (
-          <button id="enter-room" className="enter-button" onClick={onEnter}>
-            <span>{paused ? 'KEEP GOING' : 'OPEN THE FIRST DOOR'}</span>
-            <span className="button-arrow">↗</span>
-          </button>
-        ) : (
+        {canLock ? null : (
           <div className="device-note">
-            THIS EXPERIENCE NEEDS A MOUSE, A KEYBOARD AND A BROWSER WITH POINTER LOCK.
+            THIS BROWSER WILL NOT HOLD YOUR CURSOR.
             <br />
-            OPEN IT ON A DESKTOP AND THE DOOR WILL OPEN FOR YOU.
+            DRAG TO LOOK. WALK WITH WASD OR THE ARROW KEYS.
           </div>
         )}
+        <button id="enter-room" className="enter-button" onClick={onEnter}>
+          <span>{paused ? 'KEEP GOING' : 'OPEN THE FIRST DOOR'}</span>
+          <span className="button-arrow">↗</span>
+        </button>
         <div className="microcopy">
-          {canLock ? 'HEADPHONES RECOMMENDED' : 'DESKTOP ONLY'} <span>·</span> {soundOn ? 'SOUND ON' : 'SOUND OFF'}
-          {canLock ? (
-            <>
-              {' '}
-              <span>·</span>{' '}
-              <button className="microcopy-link" onClick={onToggleSound}>
-                {soundOn ? 'MUTE' : 'ENABLE SOUND'}
-              </button>
-            </>
-          ) : null}
+          {canLock ? 'HEADPHONES RECOMMENDED' : 'DRAG TO LOOK'} <span>·</span> {soundOn ? 'SOUND ON' : 'SOUND OFF'}{' '}
+          <span>·</span>{' '}
+          <button className="microcopy-link" onClick={onToggleSound}>
+            {soundOn ? 'MUTE' : 'ENABLE SOUND'}
+          </button>
         </div>
       </div>
 
@@ -256,20 +258,52 @@ export default function App() {
   const pendingLock = useRef(false);
   const playerRef = useRef(new THREE.Vector3());
   const canLock = useRef(canUsePointerLock());
+  const [freeLook, setFreeLook] = useState(false);
+  const freeLookRef = useRef(false);
+  const lockFallback = useRef(0);
 
-  /* --- pointer lock ---------------------------------------------------- */
+  /* --- look control ----------------------------------------------------- */
+  // Free look is drag-to-turn. It is the fallback for every machine that cannot
+  // hold a pointer lock, which is why the start button is never hidden behind
+  // a capability check.
+  const startFree = useCallback(() => {
+    window.clearTimeout(lockFallback.current);
+    freeLookRef.current = true;
+    setFreeLook(true);
+    setLocked(false);
+    setPhase((current) => (current === 'title' || current === 'play' ? 'play' : current));
+  }, []);
+
+  const stopFree = useCallback(() => {
+    freeLookRef.current = false;
+    setFreeLook(false);
+  }, []);
+
   useEffect(() => {
     const onChange = () => {
       const isLocked = Boolean(document.pointerLockElement);
       setLocked(isLocked);
+      if (isLocked) {
+        window.clearTimeout(lockFallback.current);
+        stopFree();
+      }
       setPhase((current) => {
         if (current === 'ending' || current === 'end' || current === 'dead') return current;
-        return isLocked ? 'play' : 'title';
+        if (isLocked || freeLookRef.current) return 'play';
+        return 'title';
       });
     };
+    // A refused request — a sandboxed frame, no user activation, another lock
+    // still held — must not leave the player at a title screen that ignores
+    // them. It falls back to drag look instead.
+    const onError = () => startFree();
     document.addEventListener('pointerlockchange', onChange);
-    return () => document.removeEventListener('pointerlockchange', onChange);
-  }, []);
+    document.addEventListener('pointerlockerror', onError);
+    return () => {
+      document.removeEventListener('pointerlockchange', onChange);
+      document.removeEventListener('pointerlockerror', onError);
+    };
+  }, [startFree, stopFree]);
 
   useEffect(() => {
     if (phase === 'play' && startedAt.current === null) startedAt.current = Date.now();
@@ -302,13 +336,17 @@ export default function App() {
         toggle();
       } else if (event.code === 'Escape' && document.pointerLockElement) {
         document.exitPointerLock();
-      } else if (event.code === 'KeyE' && phase === 'play' && locked && interactRef.current) {
+      } else if (event.code === 'Escape' && freeLook) {
+        // No lock to give back, so pausing is ours to do.
+        stopFree();
+        setPhase('title');
+      } else if (event.code === 'KeyE' && phase === 'play' && (locked || freeLook) && interactRef.current) {
         toggleDoor();
       }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [phase, locked, toggle, toggleDoor]);
+  }, [phase, locked, freeLook, stopFree, toggle, toggleDoor]);
 
   /* --- moving on ------------------------------------------------------- */
   // The index is advanced functionally. A step through a doorway can arrive on
@@ -617,9 +655,23 @@ export default function App() {
   }, [phase]);
 
   /* --- start / restart --------------------------------------------------- */
+  const begin = useCallback(() => {
+    if (!canLock.current) {
+      startFree();
+      return;
+    }
+    lockRef.current?.();
+    // If the browser sits on the request, open the rooms anyway. Nothing is
+    // worse than a start button that appears to do nothing.
+    window.clearTimeout(lockFallback.current);
+    lockFallback.current = window.setTimeout(() => {
+      if (!document.pointerLockElement) startFree();
+    }, 700);
+  }, [startFree]);
+
   const enter = () => {
     autoStart();
-    lockRef.current?.();
+    begin();
   };
 
   useEffect(() => {
@@ -645,8 +697,13 @@ export default function App() {
     startedAt.current = null;
     setPhase('title');
     setRunId((value) => value + 1);
-    pendingLock.current = true;
     autoStart();
+    if (freeLookRef.current) {
+      // Already in the world by drag; go straight back to it.
+      setPhase('play');
+      return;
+    }
+    pendingLock.current = true;
   };
 
   /* --- debug hooks (?debug) ---------------------------------------------- */
@@ -692,10 +749,10 @@ export default function App() {
     };
   }, [chain, roomIndex, phase, locked, doorOpen, calm]);
 
-  const playing = phase === 'play' && locked;
+  const playing = phase === 'play' && (locked || freeLook);
 
   return (
-    <main className={`experience${apparition?.mode === 'stalker' ? ' is-stalking' : ''}`}>
+    <main className={`experience${apparition?.mode === 'stalker' ? ' is-stalking' : ''}${freeLook ? ' is-freelook' : ''}`}>
       <Canvas
         shadows
         dpr={[1, 1.5]}
@@ -728,13 +785,21 @@ export default function App() {
             lockRef={lockRef}
             spawn={spawn}
             active={playing}
+            freeLook={freeLook}
             roomIndex={roomIndex}
             stalkerSpeed={stalkerSpeed}
           />
         </Suspense>
-      </Canvas>
-
-      {playing && <Hud room={room} index={roomIndex} nearDoor={nearDoor} doorOpen={doorOpen} stalking={apparition?.mode === 'stalker'} />}
+      </Canvas>      {playing && (
+        <Hud
+          room={room}
+          index={roomIndex}
+          nearDoor={nearDoor}
+          doorOpen={doorOpen}
+          stalking={apparition?.mode === 'stalker'}
+          freeLook={freeLook}
+        />
+      )}
 
       {phase === 'title' && (
         <TitleScreen

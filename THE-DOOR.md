@@ -32,9 +32,10 @@ Cloudflare Pages, GitHub Pages, an object bucket). No environment variables, no
 server, no API keys. If you host it under a sub-path, set `base` in
 `vite.config.js`; the app itself only uses relative asset URLs.
 
-Client requirements: WebGL 2, a mouse and a keyboard. Pointer lock is required,
-so on touch devices the title screen explains that the piece is desktop-only
-instead of starting a scene that cannot be controlled.
+Client requirements: WebGL 2 and a keyboard. Pointer lock is preferred but not
+required: where a browser will not hold the cursor — iOS, a sandboxed frame, a
+hybrid laptop with a coarse primary pointer — the rooms open anyway and the view
+is turned by dragging the canvas.
 
 ## How the rooms work
 
@@ -114,8 +115,9 @@ run ends with the room you died in.
 
 ## Controls
 
-- Click **OPEN THE FIRST DOOR** to lock the pointer and begin
-- Mouse to look, WASD or arrow keys to move
+- Click **OPEN THE FIRST DOOR** to begin; the pointer locks if the browser allows it
+- Mouse to look (or drag the canvas when the pointer cannot be locked), WASD or
+  arrow keys to move
 - **E** to open/close the door you are standing in front of
 - **M** to toggle sound (also on the title screen)
 - **Esc** releases the pointer and pauses; the title screen shows how deep you are

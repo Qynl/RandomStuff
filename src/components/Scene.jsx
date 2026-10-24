@@ -47,6 +47,7 @@ export default function Scene({
   lockRef,
   spawn,
   active,
+  freeLook,
   roomIndex,
   stalkerSpeed,
 }) {
@@ -108,6 +109,7 @@ export default function Scene({
 
       <PlayerRig
         active={active}
+        freeLook={freeLook}
         rooms={[room, next].filter(Boolean)}
         roomIndex={roomIndex}
         doorOpen={doorOpen}

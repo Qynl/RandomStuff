@@ -12,8 +12,9 @@ import { EYE, EXIT_INDEX, pointInRects, walkableRects } from '../lib/rooms.js';
 
 const MOVE_KEYS = ['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
 
-export default function PlayerRig({ active, rooms, roomIndex, doorOpen, spawn, onAdvance, onEscape, onFootstep, playerRef, interactRef }) {
+export default function PlayerRig({ active, freeLook, rooms, roomIndex, doorOpen, spawn, onAdvance, onEscape, onFootstep, playerRef, interactRef }) {
   const camera = useThree((state) => state.camera);
+  const gl = useThree((state) => state.gl);
   const debug = useMemo(() => (typeof window === 'undefined' ? false : new URLSearchParams(window.location.search).has('debug')), []);
   const keys = useRef({});
   const bob = useRef(0);
@@ -83,6 +84,47 @@ export default function PlayerRig({ active, rooms, roomIndex, doorOpen, spawn, o
     document.addEventListener('mousemove', onMove);
     return () => document.removeEventListener('mousemove', onMove);
   }, [camera]);
+
+  // Drag look, for every browser that refuses or lacks pointer lock. Same
+  // numbers as the locked path, driven by press-and-drag on the canvas so it
+  // works with a mouse, a trackpad and a finger alike.
+  useEffect(() => {
+    const element = gl.domElement;
+    let dragging = false;
+    let last = null;
+
+    const down = (event) => {
+      if (!active || !freeLook || document.pointerLockElement) return;
+      dragging = true;
+      last = { x: event.clientX, y: event.clientY };
+      element.setPointerCapture?.(event.pointerId);
+    };
+    const move = (event) => {
+      if (!dragging || !last) return;
+      const dx = event.clientX - last.x;
+      const dy = event.clientY - last.y;
+      last = { x: event.clientX, y: event.clientY };
+      yaw.current -= dx * 0.0042;
+      pitch.current = THREE.MathUtils.clamp(pitch.current - dy * 0.0042, -1.35, 1.35);
+      camera.rotation.set(pitch.current, yaw.current, 0);
+    };
+    const up = (event) => {
+      dragging = false;
+      last = null;
+      if (element.hasPointerCapture?.(event.pointerId)) element.releasePointerCapture(event.pointerId);
+    };
+
+    element.addEventListener('pointerdown', down);
+    element.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
+    return () => {
+      element.removeEventListener('pointerdown', down);
+      element.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
+    };
+  }, [active, camera, freeLook, gl]);
 
   useEffect(() => {
     const down = (event) => {
