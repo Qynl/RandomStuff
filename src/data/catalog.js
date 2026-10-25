@@ -1,0 +1,270 @@
+// ─── Higgsfield catalog: models, camera moves, effects, community, pricing ───
+
+export const VIDEO_MODELS = [
+  { id:'seedance-2-5', name:'Seedance 2.5', vendor:'ByteDance', badge:'NEW', desc:'The most advanced video model. Native audio, physics, 1080p.', credits:22, unit:'5s', maxDur:15, res:['720p','1080p','4K'], speed:58, quality:99, tags:['audio','i2v','t2v'], grad:'from-violet-600 to-fuchsia-500' },
+  { id:'kling-4', name:'Kling 4.0', vendor:'Kuaishou', badge:'NEW', desc:'Create and edit videos with text, images and references.', credits:14, unit:'5s', maxDur:15, res:['720p','1080p'], speed:64, quality:97, tags:['edit','i2v','t2v'], grad:'from-sky-500 to-blue-700' },
+  { id:'seedance-2', name:'Seedance 2.0', vendor:'ByteDance', badge:'4K', desc:'Cinematic multi-shot generation with start & end frame control.', credits:18, unit:'5s', maxDur:15, res:['720p','1080p','4K'], speed:52, quality:96, tags:['audio','i2v'], grad:'from-indigo-500 to-purple-700' },
+  { id:'veo-3-1', name:'Veo 3.1', vendor:'Google', badge:'AUDIO', desc:'Photoreal video with synchronized dialogue and sound design.', credits:25, unit:'8s', maxDur:8, res:['720p','1080p'], speed:45, quality:98, tags:['audio','t2v'], grad:'from-emerald-500 to-teal-700' },
+  { id:'sora-2', name:'Sora 2', vendor:'OpenAI', badge:'PRO', desc:'World-simulation video with unmatched physical coherence.', credits:30, unit:'5s', maxDur:25, res:['720p','1080p'], speed:38, quality:98, tags:['t2v','i2v'], grad:'from-neutral-200 to-neutral-500' },
+  { id:'genjutsu', name:'Higgsfield Genjutsu', vendor:'Higgsfield', badge:'NEW', desc:'One upload in. Endless new visions out. Recast any motion.', credits:12, unit:'5s', maxDur:30, res:['720p','1080p'], speed:60, quality:94, tags:['v2v','recast'], grad:'from-lime-400 to-green-600' },
+  { id:'genjutsu-lite', name:'Genjutsu Lite', vendor:'Higgsfield', badge:'FREE GENS', desc:'Faster, lighter, cheaper. Same Genjutsu energy.', credits:5, unit:'5s', maxDur:30, res:['720p'], speed:85, quality:88, tags:['v2v','recast'], grad:'from-lime-300 to-emerald-500' },
+  { id:'dop-turbo', name:'Higgsfield DoP Turbo', vendor:'Higgsfield', badge:'70+ CAMERA', desc:'Director of Photography engine. 70+ cinematic camera presets.', credits:7, unit:'5s', maxDur:10, res:['720p','1080p'], speed:78, quality:93, tags:['camera','i2v'], grad:'from-amber-400 to-orange-600' },
+  { id:'kling-3', name:'Kling 3.0', vendor:'Kuaishou', badge:'UNLIMITED*', desc:'Multi-shot storyboard mode with native 4K stills-to-film.', credits:8, unit:'5s', maxDur:15, res:['720p','1080p','4K'], speed:66, quality:95, tags:['i2v','t2v'], grad:'from-cyan-500 to-sky-700' },
+  { id:'hailuo-2-3', name:'Minimax Hailuo 2.3', vendor:'Minimax', badge:null, desc:'Expressive character performance and micro-expressions.', credits:9, unit:'6s', maxDur:10, res:['768p','1080p'], speed:70, quality:92, tags:['i2v'], grad:'from-rose-500 to-red-700' },
+  { id:'wan-2-6', name:'Wan 2.6', vendor:'Alibaba', badge:null, desc:'Open-weight flagship tuned for anime and stylized motion.', credits:6, unit:'5s', maxDur:10, res:['720p','1080p'], speed:72, quality:91, tags:['t2v','i2v'], grad:'from-orange-500 to-amber-700' },
+  { id:'ray-3', name:'Luma Ray 3', vendor:'Luma', badge:null, desc:'HDR-native reasoning video model with keyframe control.', credits:11, unit:'5s', maxDur:10, res:['720p','1080p'], speed:61, quality:93, tags:['i2v','hdr'], grad:'from-fuchsia-500 to-purple-800' },
+  { id:'runway-gen45', name:'Runway Gen-4.5', vendor:'Runway', badge:null, desc:'Hollywood-grade consistency, references and Aleph editing.', credits:16, unit:'5s', maxDur:16, res:['720p','1080p'], speed:55, quality:96, tags:['edit','i2v'], grad:'from-zinc-400 to-zinc-700' },
+  { id:'seedance-fast', name:'Seedance 2.0 Fast', vendor:'ByteDance', badge:'FAST', desc:'Draft at lightning speed, finish in full Seedance quality.', credits:4, unit:'5s', maxDur:15, res:['720p'], speed:92, quality:86, tags:['i2v','t2v'], grad:'from-violet-400 to-indigo-600' },
+]
+
+export const IMAGE_MODELS = [
+  { id:'nano-banana-pro', name:'Nano Banana Pro', vendor:'Google', badge:'2K / 4K', desc:'Gemini-class image model. Perfect text, editing and consistency.', credits:2, speed:88, quality:98, grad:'from-yellow-400 to-amber-600' },
+  { id:'nano-banana-2', name:'Nano Banana 2', vendor:'Google', badge:'UNLIMITED*', desc:'Fast everyday generation and inpainting at 2K.', credits:1, speed:95, quality:94, grad:'from-amber-300 to-yellow-600' },
+  { id:'soul-v2', name:'Higgsfield Soul V2', vendor:'Higgsfield', badge:'SOUL ID', desc:'Fashion-grade photorealism locked to your Soul ID character.', credits:2, speed:80, quality:97, grad:'from-lime-400 to-emerald-600' },
+  { id:'flux-2-pro', name:'FLUX.2 Pro', vendor:'Black Forest Labs', badge:null, desc:'Reference-driven generation with production color science.', credits:3, speed:74, quality:96, grad:'from-neutral-300 to-neutral-600' },
+  { id:'seedream-5', name:'Seedream 5.0', vendor:'ByteDance', badge:'4K', desc:'Ultra-detailed 4K stills with native typography.', credits:2, speed:82, quality:95, grad:'from-violet-500 to-purple-700' },
+  { id:'gpt-image-2', name:'GPT Image 2', vendor:'OpenAI', badge:null, desc:'Instruction-perfect edits, layouts and infographics.', credits:4, speed:68, quality:96, grad:'from-teal-400 to-emerald-700' },
+  { id:'ideogram-4', name:'Ideogram 4', vendor:'Ideogram', badge:'TEXT', desc:'Posters, logos and lettering that actually spell correctly.', credits:2, speed:84, quality:93, grad:'from-pink-500 to-rose-700' },
+  { id:'recraft-v4', name:'Recraft V4', vendor:'Recraft', badge:'VECTOR', desc:'Brand systems, vectors and style-locked illustration.', credits:2, speed:86, quality:92, grad:'from-red-500 to-orange-600' },
+  { id:'cinema-still', name:'Cinema Still Pro', vendor:'Higgsfield', badge:'NEW', desc:'Anamorphic film stills graded like a colorist touched them.', credits:3, speed:76, quality:97, grad:'from-orange-400 to-red-600' },
+]
+
+// Camera presets — motion params consumed by the MotionEngine (t: 0→1)
+const M = (name, cat, m, desc='') => ({ id: name.toLowerCase().replace(/[^a-z0-9]+/g,'-'), name, category: cat, desc, motion: m })
+export const CAMERA_PRESETS = [
+  M('Static Shot','Essential',{s0:1.08,s1:1.08},'Locked-off tripod frame.'),
+  M('Slow Push In','Essential',{s0:1.05,s1:1.35,ease:'inout'},'Gentle, emotional approach.'),
+  M('Crash Zoom In','Zoom',{s0:1.02,s1:2.6,ease:'snap'},'Violent snap into the subject.'),
+  M('Crash Zoom Out','Zoom',{s0:2.4,s1:1.02,ease:'snap'},'Reveal the world around them.'),
+  M('Rapid Zoom Burst','Zoom',{s0:1.1,s1:2.2,ease:'snap',pulse:3},'Stuttering punch-in hits.'),
+  M('Dolly Zoom (Vertigo)','Zoom',{s0:1.0,s1:1.5,warp:1},'Background melts, subject holds.'),
+  M('Digital Punch In','Zoom',{s0:1.3,s1:1.9,ease:'out'},'Social-native emphasis zoom.'),
+  M('Dolly In','Dolly & Track',{s0:1.1,s1:1.6,y0:2,y1:-2},'Physical move toward subject.'),
+  M('Dolly Out','Dolly & Track',{s0:1.7,s1:1.08,y0:-2,y1:2},'Pull back and breathe.'),
+  M('Truck Left','Dolly & Track',{s0:1.35,s1:1.35,x0:7,x1:-7},'Lateral tracking move.'),
+  M('Truck Right','Dolly & Track',{s0:1.35,s1:1.35,x0:-7,x1:7},'Lateral tracking move.'),
+  M('Tracking Follow','Dolly & Track',{s0:1.25,s1:1.45,x0:-5,x1:5,shake:.35},'Walk-and-talk energy.'),
+  M('Gimbal Chase','Dolly & Track',{s0:1.15,s1:1.5,x0:4,x1:-4,shake:.6},'Breathless pursuit cam.'),
+  M('360° Orbit','Orbit & Arc',{s0:1.4,s1:1.4,orbit:1},'Full revolution around subject.'),
+  M('180° Arc','Orbit & Arc',{s0:1.35,s1:1.35,orbit:.5},'Half-circle hero arc.'),
+  M('Bullet Time','Orbit & Arc',{s0:1.3,s1:1.55,orbit:.7,ease:'bullet'},'Time freezes, camera flies.'),
+  M('Hero Low-Angle Arc','Orbit & Arc',{s0:1.5,s1:1.3,y0:5,y1:2,orbit:.4},'Mythic worm’s-eye sweep.'),
+  M('Crane Up Reveal','Crane & Aerial',{s0:1.7,s1:1.05,y0:-4,y1:5},'Rise and unveil the scene.'),
+  M('Crane Down','Crane & Aerial',{s0:1.05,s1:1.6,y0:6,y1:-3},'Descend into the moment.'),
+  M('Drone Flyover','Crane & Aerial',{s0:1.02,s1:1.3,y0:7,y1:-7},'Epic aerial pass.'),
+  M('FPV Dive','Crane & Aerial',{s0:1.0,s1:2.1,r0:-4,r1:3,ease:'in'},'Stomach-drop FPV plunge.'),
+  M('Top-Down God Shot','Crane & Aerial',{s0:1.05,s1:1.4,r0:0,r1:8},'Symmetric overhead drift.'),
+  M('Earth Zoom Out','Crane & Aerial',{s0:2.8,s1:1.0,ease:'snap'},'From face to planet in one move.'),
+  M('Whip Pan Left','Pan & Tilt',{s0:1.3,s1:1.3,x0:12,x1:-12,blur:1,ease:'snap'},'Smear-cut pan transition.'),
+  M('Whip Pan Right','Pan & Tilt',{s0:1.3,s1:1.3,x0:-12,x1:12,blur:1,ease:'snap'},'Smear-cut pan transition.'),
+  M('Slow Pan','Pan & Tilt',{s0:1.3,s1:1.3,x0:-6,x1:6},'Contemplative landscape pan.'),
+  M('Tilt Up Reveal','Pan & Tilt',{s0:1.35,s1:1.35,y0:7,y1:-5},'From ground to sky.'),
+  M('Tilt Down','Pan & Tilt',{s0:1.35,s1:1.35,y0:-6,y1:6},'Sky to subject settle.'),
+  M('Dutch Angle Drift','Pan & Tilt',{s0:1.3,s1:1.45,r0:-6,r1:5},'Unease in every degree.'),
+  M('Barrel Roll','Pan & Tilt',{s0:1.45,s1:1.45,r0:0,r1:360,ease:'inout'},'Full 360° roll.'),
+  M('Handheld Docu','Handheld & POV',{s0:1.25,s1:1.35,shake:1},'Raw documentary truth.'),
+  M('POV Walk','Handheld & POV',{s0:1.2,s1:1.4,shake:.8,bob:1},'First-person stride.'),
+  M('POV Run','Handheld & POV',{s0:1.15,s1:1.5,shake:1.6,bob:2},'Sprinting first-person.'),
+  M('Bodycam','Handheld & POV',{s0:1.35,s1:1.35,shake:1.3,warp:.6},'Chest-mounted chaos.'),
+  M('SnorriCam','Handheld & POV',{s0:1.5,s1:1.35,shake:.9},'Face locked, world lurches.'),
+  M('Through Object','Signature',{s0:1.0,s1:2.4,ease:'in'},'Pass through the impossible gap.'),
+  M('Boltcam Product','Signature',{s0:1.6,s1:1.25,orbit:.35,r0:2,r1:-2},'Robotic product choreography.'),
+  M('Speed Ramp Chase','Signature',{s0:1.1,s1:1.8,ease:'ramp'},'Slow-mo to full-throttle ramp.'),
+  M('Time Freeze Push','Signature',{s0:1.15,s1:1.7,ease:'bullet'},'Frozen world, moving camera.'),
+  M('Seamless Loop Orbit','Signature',{s0:1.35,s1:1.35,orbit:1,loop:1},'Perfectly looping orbit.'),
+  M('Mirror Push-Through','Signature',{s0:1.05,s1:2.8,ease:'in'},'Through the looking glass.'),
+  M('Window Transition','Signature',{s0:1.1,s1:2.5,y0:0,y1:-2,ease:'in'},'Enter through the window.'),
+  M('Anamorphic Breathing','Essential',{s0:1.2,s1:1.28,ease:'inout'},'Subtle living-frame drift.'),
+  M('Macro Probe','Signature',{s0:1.3,s1:2.9,x0:-3,x1:3},'Probe-lens macro journey.'),
+  M('Kubrick One-Point','Essential',{s0:1.05,s1:1.55,ease:'linear'},'Symmetric corridor dread.'),
+  M('Bayhem Spin','Signature',{s0:1.4,s1:1.2,orbit:.55,r0:3,r1:-3,y0:4,y1:1},'Low spinning explosion heroics.'),
+  M('Elevator Reveal','Dolly & Track',{s0:1.3,s1:1.3,y0:-7,y1:6},'Vertical stage reveal.'),
+]
+export const CAMERA_CATEGORIES = [...new Set(CAMERA_PRESETS.map(c => c.category))]
+
+// Effects — filter = CSS filter string, overlay = particle/grade type for the engine
+const E = (name, cat, filter, overlay, motion, meta={}) => ({ id: name.toLowerCase().replace(/[^a-z0-9]+/g,'-'), name, category: cat, filter, overlay, motion, uses: meta.uses || Math.floor(40+Math.random()*9000)+'K', hot: !!meta.hot, isNew: !!meta.isNew })
+export const EFFECTS = [
+  E('Earth Zoom Out','Viral','saturate(1.2) contrast(1.05)','none','earth-zoom-out',{hot:1,uses:'2.1M'}),
+  E('Explosion','Action','contrast(1.15) saturate(1.3)','explosion','bayhem-spin',{hot:1,uses:'1.8M'}),
+  E('Car Explosion','Action','contrast(1.2) hue-rotate(-8deg)','explosion','crash-zoom-out',{uses:'940K'}),
+  E('Money Rain','Viral','saturate(1.25) brightness(1.05)','money','slow-push-in',{hot:1,uses:'1.6M'}),
+  E('Levitate','Magic','brightness(1.08) saturate(1.1)','sparks','hero-low-angle-arc',{uses:'720K'}),
+  E('Time Freeze','Magic','saturate(.7) contrast(1.1) brightness(1.05)','sparks','time-freeze-push',{hot:1}),
+  E('Bullet Time','Action','contrast(1.2) saturate(.9)','none','bullet-time',{uses:'1.2M'}),
+  E('Face Punch','Action','contrast(1.1)','impact','crash-zoom-in',{}),
+  E('Superhero Landing','Action','contrast(1.25) saturate(1.2)','impact','crane-down',{hot:1}),
+  E('Disintegrate','Magic','brightness(1.1) contrast(1.1)','dust','dolly-out',{}),
+  E('Inflate','Comedy','saturate(1.3)','none','digital-punch-in',{}),
+  E('Squish','Comedy','saturate(1.3) brightness(1.05)','none','rapid-zoom-burst',{}),
+  E('Melt','Comedy','saturate(1.2) contrast(1.05)','drips','tilt-down',{}),
+  E('Cake-ify','Comedy','saturate(1.5) brightness(1.1)','confetti','boltcam-product',{}),
+  E('Eye Zoom','Viral','contrast(1.1)','none','through-object',{uses:'860K'}),
+  E('Head Explosion','Comedy','saturate(1.4)','confetti','crash-zoom-in',{}),
+  E('Decapitate Illusion','Magic','saturate(1.1)','none','static-shot',{}),
+  E('Clone Army','Magic','saturate(1.15)','none','truck-left',{isNew:1}),
+  E('Invisibility Cloak','Magic','brightness(1.15) contrast(.95)','sparks','slow-pan',{isNew:1}),
+  E('Fire Aura','Anime & Style','saturate(1.6) contrast(1.2) hue-rotate(-12deg)','fire','bayhem-spin',{hot:1}),
+  E('Lightning Strike','Action','brightness(1.3) contrast(1.25) saturate(.8)','lightning','crash-zoom-out',{}),
+  E('Rainstorm','Cinematic','saturate(.65) contrast(1.15) brightness(.85)','rain','handheld-docu',{}),
+  E('Snow Globe','Cinematic','brightness(1.15) saturate(.9)','snow','slow-push-in',{}),
+  E('Underwater','Cinematic','hue-rotate(18deg) saturate(1.2) brightness(.9) contrast(1.05)','bubbles','dolly-in',{}),
+  E('Anime World','Anime & Style','saturate(1.9) contrast(1.25) brightness(1.08)','none','slow-push-in',{hot:1,uses:'1.4M'}),
+  E('Claymation','Anime & Style','saturate(1.35) contrast(1.1) brightness(1.05)','none','static-shot',{}),
+  E('Pixel Game','Anime & Style','saturate(1.5) contrast(1.15)','none','digital-punch-in',{}),
+  E('Comic Book','Anime & Style','saturate(2) contrast(1.4)','halftone','rapid-zoom-burst',{}),
+  E('Watercolor','Anime & Style','saturate(1.4) brightness(1.15) contrast(.9)','none','slow-pan',{}),
+  E('Oil Painting','Anime & Style','saturate(1.3) contrast(1.15) sepia(.25)','none','anamorphic-breathing',{}),
+  E('VHS 1994','Retro','saturate(1.3) contrast(1.1) brightness(1.05)','vhs','handheld-docu',{}),
+  E('16mm Film','Retro','sepia(.35) contrast(1.1) saturate(.85)','grain-heavy','handheld-docu',{}),
+  E('Noir Detective','Cinematic','grayscale(1) contrast(1.45) brightness(.9)','rain','kubrick-one-point',{}),
+  E('Cyberpunk Neon','Cinematic','saturate(1.8) contrast(1.2) hue-rotate(12deg)','rain','fpv-dive',{hot:1}),
+  E('Golden Hour','Cinematic','sepia(.3) saturate(1.45) brightness(1.1) contrast(1.05)','dust','crane-up-reveal',{}),
+  E('Horror Flicker','Cinematic','saturate(.4) contrast(1.35) brightness(.8)','flicker','snorricam',{}),
+  E('Dream Sequence','Cinematic','brightness(1.25) saturate(1.3) contrast(.85) blur(.4px)','sparks','dolly-out',{}),
+  E('Glitch Reality','Viral','saturate(1.7) contrast(1.2)','glitch','whip-pan-left',{isNew:1}),
+  E('Kaleidoscope','Magic','saturate(1.8) hue-rotate(25deg)','none','barrel-roll',{}),
+  E('Tiny Planet','Viral','saturate(1.3) contrast(1.1)','none','seamless-loop-orbit',{}),
+  E('Product 360','Commercial','saturate(1.15) contrast(1.05) brightness(1.02)','none','boltcam-product',{}),
+  E('Splash Reveal','Commercial','saturate(1.4) contrast(1.15)','bubbles','crash-zoom-in',{}),
+  E('Confetti Party','Comedy','saturate(1.5) brightness(1.08)','confetti','gimbal-chase',{}),
+  E('Wings Unfurl','Magic','brightness(1.12) saturate(1.25)','sparks','hero-low-angle-arc',{isNew:1}),
+  E('Zombie Mode','Horror','saturate(.5) contrast(1.25) hue-rotate(48deg) brightness(.85)','dust','pov-walk',{}),
+  E('Ghost Trail','Horror','saturate(.6) brightness(.9) contrast(1.2)','flicker','tracking-follow',{}),
+  E('Fireworks Sky','Viral','saturate(1.5) contrast(1.15) brightness(1.05)','fireworks','tilt-up-reveal',{}),
+  E('Speed Lines','Anime & Style','saturate(1.6) contrast(1.25)','none','speed-ramp-chase',{}),
+  E('Mecha Transform','Anime & Style','saturate(1.4) contrast(1.25)','sparks','bayhem-spin',{isNew:1}),
+  E('Vintage Cartoon','Retro','sepia(.5) saturate(1.2) contrast(1.05)','grain-heavy','static-shot',{}),
+  E('Fisheye Skate','Retro','saturate(1.35) contrast(1.1)','none','gimbal-chase',{}),
+  E('Thermal Vision','Action','hue-rotate(140deg) saturate(2.2) contrast(1.3)','none','bodycam',{}),
+  E('X-Ray','Sci-Fi','invert(.9) hue-rotate(160deg) contrast(1.2)','none','macro-probe',{}),
+  E('Hologram','Sci-Fi','brightness(1.2) saturate(1.6) hue-rotate(80deg) contrast(1.1)','glitch','180-arc',{isNew:1}),
+  E('Portal Jump','Sci-Fi','saturate(1.5) contrast(1.2)','sparks','mirror-push-through',{}),
+  E('Zero Gravity','Sci-Fi','saturate(1.1) brightness(1.05)','bubbles','barrel-roll',{}),
+  E('Wedding Glow','Cinematic','brightness(1.18) saturate(1.2) contrast(.95)','sparks','slow-push-in',{}),
+  E('Music Video Pop','Commercial','saturate(1.9) contrast(1.2) brightness(1.06)','confetti','rapid-zoom-burst',{hot:1}),
+  E('Old Hollywood','Retro','grayscale(.85) sepia(.25) contrast(1.2) brightness(1.05)','grain-heavy','anamorphic-breathing',{}),
+  E('Neon Outline','Sci-Fi','contrast(1.5) saturate(2) brightness(.95)','none','digital-punch-in',{}),
+]
+export const EFFECT_CATEGORIES = ['All','Viral','Action','Magic','Cinematic','Anime & Style','Comedy','Retro','Sci-Fi','Commercial','Horror']
+
+export const IMAGE_STYLES = ['Photorealistic','Cinematic Still','Fashion Editorial','Anime','3D Render','Claymation','Cyberpunk','Vintage Film','Watercolor','Oil Painting','Pixel Art','Comic','Product Shot','Architectural','UGC Selfie','Noir']
+export const ASPECTS_VIDEO = [{id:'16:9',w:1280,h:720},{id:'9:16',w:720,h:1280},{id:'1:1',w:960,h:960},{id:'4:5',w:864,h:1080},{id:'21:9',w:1344,h:576},{id:'3:4',w:864,h:1152}]
+export const ASPECTS_IMAGE = [{id:'1:1',w:1024,h:1024},{id:'16:9',w:1344,h:768},{id:'9:16',w:768,h:1344},{id:'4:5',w:896,h:1120},{id:'3:2',w:1216,h:832},{id:'2:3',w:832,h:1216},{id:'21:9',w:1456,h:624}]
+
+export const CINEMA = {
+  bodies: ['ARRI Alexa 65','IMAX MSM 9802','RED V-Raptor XL','Panavision Millennium DXL2','Sony Venice 2','16mm Bolex','35mm Arricam LT'],
+  lenses: ['Cooke S8/i Anamorphic','Panavision C-Series','Zeiss Supreme Prime','ARRI Signature Prime','Canon K35 Vintage','Laowa Probe 24mm','Hawk V-Lite'],
+  focals: [14,18,24,35,50,85,100,135,200],
+  apertures: ['T1.4','T1.8','T2.0','T2.8','T4','T5.6','T8'],
+  genres: ['General','Action','Horror','Comedy','Noir','Drama','Epic','Sci-Fi','Romance','Music Video'],
+  ramps: ['None','Slow-In Smash-Out','Bullet Hold','Hyperlapse Pulse','Heartbeat','Crash Ramp','Dream Drift','Kinetik'],
+}
+
+const A = (name, img, role, voice) => ({ id: name.toLowerCase().replace(/\s+/g,'-'), name, img, role, voice })
+export const AVATARS = [
+  A('Maya Chen','https://randomuser.me/api/portraits/women/79.jpg','UGC Creator · Beauty','maya'),
+  A('Jordan Blake','https://randomuser.me/api/portraits/men/32.jpg','Tech Reviewer','marcus'),
+  A('Sofia Reyes','https://randomuser.me/api/portraits/women/68.jpg','Fashion Influencer','sofia'),
+  A('Marcus Reed','https://randomuser.me/api/portraits/men/75.jpg','Fitness Coach','marcus'),
+  A('Aiko Tanaka','https://randomuser.me/api/portraits/women/79.jpg','Anime VTuber Energy','aiko'),
+  A('Liam O’Connor','https://randomuser.me/api/portraits/men/41.jpg','Finance Bro (reformed)','liam'),
+  A('Priya Nair','https://randomuser.me/api/portraits/women/65.jpg','Startup Founder','priya'),
+  A('Diego Alvarez','https://randomuser.me/api/portraits/men/22.jpg','Travel Creator','diego'),
+  A('Emma Wilson','https://randomuser.me/api/portraits/women/44.jpg','Skincare Educator','emma'),
+  A('Noah Kim','https://randomuser.me/api/portraits/men/85.jpg','Sneakerhead','noah'),
+  A('Zara Ahmed','https://randomuser.me/api/portraits/women/17.jpg','Modest Fashion','zara'),
+  A('Felix Wagner','https://randomuser.me/api/portraits/men/52.jpg','Indie Filmmaker','felix'),
+]
+// distinct portraits for aiko fix
+AVATARS[4].img = 'https://randomuser.me/api/portraits/women/79.jpg'
+
+export const VOICES = [
+  { id:'maya', name:'Maya', desc:'Warm · Conversational · US', pitch:1.1, rate:1.02, gender:'F' },
+  { id:'marcus', name:'Marcus', desc:'Deep · Confident · US', pitch:.75, rate:.97, gender:'M' },
+  { id:'sofia', name:'Sofia', desc:'Bright · Expressive · ES-EN', pitch:1.25, rate:1.05, gender:'F' },
+  { id:'aiko', name:'Aiko', desc:'Soft · Youthful · JP-EN', pitch:1.45, rate:1.03, gender:'F' },
+  { id:'liam', name:'Liam', desc:'Casual · Dry humor · IE', pitch:.9, rate:1.0, gender:'M' },
+  { id:'priya', name:'Priya', desc:'Clear · Professional · IN', pitch:1.05, rate:1.0, gender:'F' },
+  { id:'diego', name:'Diego', desc:'Energetic · Storyteller · MX', pitch:.95, rate:1.08, gender:'M' },
+  { id:'emma', name:'Emma', desc:'Gentle · Trustworthy · UK', pitch:1.15, rate:.96, gender:'F' },
+  { id:'noah', name:'Noah', desc:'Hype · Fast-paced · US', pitch:1.0, rate:1.14, gender:'M' },
+  { id:'zara', name:'Zara', desc:'Elegant · Calm · UK', pitch:1.08, rate:.94, gender:'F' },
+  { id:'felix', name:'Felix', desc:'Cinematic · Gritty · DE-EN', pitch:.65, rate:.92, gender:'M' },
+  { id:'nova', name:'Nova', desc:'AI Native · Futuristic', pitch:1.3, rate:1.06, gender:'F' },
+]
+
+export const COMMUNITY_PROMPTS = [
+  ['Neon samurai walks through rain-soaked Tokyo alley, reflections everywhere','Seedance 2.5','16:9','rainstorm'],
+  ['Astronaut plants a glowing flower on the moon, earthrise behind','Kling 4.0','16:9','golden-hour'],
+  ['Fashion model in chrome trench coat, desert wind, anamorphic flare','Soul V2','9:16','none'],
+  ['A whale swims through clouds above a sleepy coastal town at dawn','Veo 3.1','16:9','dream-sequence'],
+  ['Street racer drifts through neon underpass, sparks flying','Genjutsu','16:9','cyberpunk-neon'],
+  ['Grandmother wins a breakdance battle in a Brooklyn park','Sora 2','9:16','music-video-pop'],
+  ['Medieval knight faces a dragon made entirely of stained glass','Seedance 2.0','21:9','fire-aura'],
+  ['Tiny chef cooks a giant pancake on a sunflower','Kling 3.0','1:1','claymation'],
+  ['Detective lights a cigarette in fog, single street lamp, noir','DoP Turbo','16:9','noir-detective'],
+  ['Robot barista pours latte art that turns into a galaxy','Wan 2.6','9:16','none'],
+  ['Skateboarder ollies over the Grand Canyon at golden hour','Seedance 2.5','16:9','golden-hour'],
+  ['Ballerina dances on the surface of a frozen lake under aurora','Veo 3.1','9:16','snow-globe'],
+  ['Cyberpunk geisha with holographic umbrella in acid rain','Genjutsu','9:16','cyberpunk-neon'],
+  ['A library where books fly like birds between marble shelves','Sora 2','16:9','dream-sequence'],
+  ['Pirate ship sails through a storm of glowing jellyfish','Seedance 2.0','21:9','underwater'],
+  ['Portrait of a queen woven from autumn leaves, wind rising','Soul V2','4:5','none'],
+  ['F1 car made of liquid chrome morphs mid-corner at Monaco','Kling 4.0','16:9','none'],
+  ['Cat astronaut trades snacks with a Martian street vendor','Hailuo 2.3','1:1','anime-world'],
+  ['Viking longship crashes through arctic waves toward lightning','Seedance 2.5','16:9','lightning-strike'],
+  ['Jazz quartet performs inside a rotating glass cube above NYC','Ray 3','16:9','none'],
+  ['Mushroom forest village wakes up, windows blink like eyes','Wan 2.6','16:9','dream-sequence'],
+  ['Boxer shadow-fights his own reflection that fights back','DoP Turbo','9:16','none'],
+  ['Perfume bottle erupts into a slow-motion flower supernova','Seedance 2.5','9:16','splash-reveal'],
+  ['Ancient temple overgrown by a single colossal banyan tree','Veo 3.1','16:9','16mm-film'],
+  ['Surfer rides a wave inside a collapsing glass skyscraper','Sora 2','16:9','none'],
+  ['Two AI influencers unbox the moon, studio lighting, UGC style','Genjutsu Lite','9:16','confetti-party'],
+  ['Samurai duel frozen mid-strike as cherry blossoms hang in air','Seedance 2.0','21:9','time-freeze'],
+  ['Retro diner on Mars serves milkshakes to homesick astronauts','Kling 3.0','16:9','vhs-1994'],
+]
+export const AUTHORS = ['pixelnomad','frameforge','aiko.makes','dopamine.dop','retrograde','lumenlabs','kaijunior','velvetframe','noirbynight','glitchgarden','studio.ortiz','mossandchrome','tessa.jpg','orbitalszn','fablefilms','junothecreator']
+
+export const PLANS = [
+  { id:'free', name:'Free', monthly:0, annual:0, credits:25, tag:'Try the interface', cta:'Current plan',
+    features:['25 trial credits','1 parallel job',' Nano Banana 2 + Genjutsu Lite','720p exports with watermark','Community gallery access'] },
+  { id:'starter', name:'Starter', monthly:19, annual:19, credits:270, tag:'For casual creators', cta:'Go Starter',
+    features:['270 credits / month','2 videos + 4 images in parallel','Seedance 2.0 Fast, Kling 3.0 720p, DoP Turbo','Soul V2 + Cinema free-gens allowance','Commercial use included','No watermark'] },
+  { id:'plus', name:'Plus', monthly:59, annual:47, credits:1200, tag:'The creator plan', cta:'Go Plus', popular:true,
+    features:['1,200 credits / month','6 videos + 8 images in parallel','ALL models incl. Seedance 2.5 1080p & Sora 2','Start & End frame control, Speak, UGC Builder','7-day Unlimited: Nano Banana 2 + Kling 3.0','5,000 free Soul V2 / Cinema generations','Priority queue'] },
+  { id:'ultra', name:'Ultra', monthly:129, annual:99, credits:3000, tag:'Best value · Volume production', cta:'Go Ultra',
+    features:['3,000 credits / month (scale to 9,000)','8 videos + 8 images in parallel','Everything in Plus','365-day Unlimited on one video model','7-day Unlimited: Nano Banana Pro 2K/4K','10,000 free Soul V2 / Cinema generations','Fastest queue + early access drops'] },
+  { id:'teams', name:'Teams', monthly:65, annual:59, credits:1000, tag:'Per seat · pooled credits', cta:'Build a team', perSeat:true,
+    features:['1,000 credits / seat, pooled','Shared workspaces & brand Souls','16 parallel video jobs','SSO, admin spend controls, analytics','No training on your data · SOC 2','Indemnification + SLA + Slack support'] },
+]
+
+export const CREDIT_COSTS = [
+  ['Seedance 2.5 · 1080p','22 / 5s'],['Seedance 2.0 Fast','4 / 5s'],['Kling 4.0','14 / 5s'],['Kling 3.0','8 / 5s'],
+  ['Veo 3.1','25 / 8s'],['Sora 2','30 / 5s'],['Genjutsu','12 / 5s'],['Genjutsu Lite','5 / 5s'],['DoP Turbo','7 / 5s'],
+  ['Nano Banana Pro','2 / image'],['Nano Banana 2','1 / image'],['Soul V2','2 / image'],['FLUX.2 Pro','3 / image'],['Speak','3 / 30s script'],
+]
+
+export const ACADEMY = [
+  { id:1, title:'Cinema Studio Zero-to-Hero', lessons:12, mins:96, level:'Beginner', seed:'academy-cinema', desc:'Shot language, lens choice and Mr. Higgs breakdowns — direct your first AI short in an afternoon.', topics:['Shot sizes & coverage','Camera bodies & lenses','Genre motion logic','Multi-shot sequencing'] },
+  { id:2, title:'Soul ID: Build a Character That Lasts', lessons:8, mins:54, level:'Intermediate', seed:'academy-soul', desc:'Train a Soul from 3–5 photos and keep them consistent across 1,000 generations.', topics:['Seed photo selection','Outfit & prop locking','Aging and styling a Soul'] },
+  { id:3, title:'Viral Effects Playbook', lessons:10, mins:71, level:'Beginner', seed:'academy-effects', desc:'Earth Zoom, Bullet Time, Money Rain — the anatomy of effects that print views.', topics:['Hook in first 0.8s','Loop engineering','Sound design pairing'] },
+  { id:4, title:'UGC Ads That Convert', lessons:9, mins:63, level:'Intermediate', seed:'academy-ugc', desc:'AI influencers, hook frameworks and product cinematography for paid social.', topics:['Hook frameworks','Speak & lip sync','A/B variant factories'] },
+  { id:5, title:'Prompt Direction Masterclass', lessons:14, mins:118, level:'Advanced', seed:'academy-prompt', desc:'Write prompts like a director: blocking, performance, light and texture vocabulary.', topics:['Performance direction','Lighting vocabulary','Negative space & restraint'] },
+  { id:6, title:'Genjutsu Recast Workflows', lessons:7, mins:47, level:'Advanced', seed:'academy-genjutsu', desc:'Take any reference motion and recast it with your characters, locations and products.', topics:['Motion capture hygiene','Element swap','Multi-version campaigns'] },
+]
+
+export const UGC_HOOKS = [
+  'POV: you finally found the {product} that actually works',
+  'Stop scrolling. Your {problem} era ends today',
+  'I tested {product} for 30 days so you don’t have to',
+  'Nobody is talking about this {product} hack',
+  'Three reasons {product} broke my FYP this week',
+  'My {audience} friends keep asking about my {product}',
+  'Unpopular opinion: expensive {category} is a scam. Try this instead',
+  'Watch what happens when I use {product} for the first time',
+  'I was today years old when I learned {product} could do THIS',
+  'Gatekeeping is over. This is the {product} from my last video',
+]
+
+export const EXPLORE_TABS = ['For You','Trending','Cinema Studio','Effects','Soul','UGC & Ads','Anime','Music Videos','Following']
