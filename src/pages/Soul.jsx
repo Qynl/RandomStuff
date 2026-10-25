@@ -16,7 +16,7 @@ const WARDROBE = ['Signature look','Red carpet','Streetwear','Business','Athleis
 const TRAIN_STEPS = ['Aligning facial landmarks','Extracting identity embedding','Learning skin & hair texture','Locking wardrobe signatures','Calibrating expression range','Baking Soul ID checkpoint']
 
 export default function Soul() {
-  const { souls, setSouls, toast, assets, openPlayer, enqueue, credits } = useApp()
+  const { souls, setSouls, toast, assets, openPlayer, enqueue, credits, liveMode } = useApp()
   const [swapSoul, setSwapSoul] = useState(null)
   const [swapTarget, setSwapTarget] = useState(null)
   const nav = useNavigate()
@@ -108,7 +108,7 @@ export default function Soul() {
           <span className="hidden md:grid h-10 w-10 place-items-center rounded-full bg-lime text-black font-black mb-6">→</span>
           <Field label="2 · Target photo"><ImageUpload label="Target photo" value={swapTarget} onChange={setSwapTarget} compact /></Field>
           <Btn kind="lime" className="!py-3 mb-4" disabled={!swapSoul || !swapTarget} onClick={()=>{
-            if (credits < 3) { toast('Face Swap needs 3 credits', 'warn'); return }
+            if (!liveMode && credits < 3) { toast('Face Swap needs 3 credits', 'warn'); return }
             enqueue({ type:'image', modelId:'soul-v2', modelName:'Face Swap', prompt:`${swapSoul.name} swapped into target photo — expression, lighting and skin tone harmonized`, ratio:'1:1', w:1024, h:1024, cost:3, character: swapSoul.name, seed: (swapSoul.name.length*733 + swapTarget.length) % 99991, source:'face swap' })
             toast('Swapping faces — result lands in your Library')
           }}><Sparkles size={15}/> Swap face</Btn>

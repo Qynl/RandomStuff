@@ -11,7 +11,7 @@ import { calcCost, hash } from '../lib/engine.js'
 const MODES = ['Text to Video','Image to Video','Start & End Frame','Genjutsu Recast']
 
 export default function VideoStudio() {
-  const { enqueue, assets, credits, jobs, toast } = useApp()
+  const { enqueue, assets, credits, jobs, toast, liveMode, liveEstimate } = useApp()
   const loc = useLocation()
   const qs = useMemo(()=> new URLSearchParams(loc.search), [loc.search])
   const [mode, setMode] = useState('Text to Video')
@@ -46,20 +46,21 @@ export default function VideoStudio() {
   const model = VIDEO_MODELS.find(m=>m.id===modelId) || VIDEO_MODELS[0]
   const effRes = model.res.includes(res) ? res : model.res[model.res.length-1]
   const cost = calcCost(model, duration, effRes, count)
+  const liveEst = liveMode ? liveEstimate({ type:'video', modelId, duration, count, baseImage: startImg }) : null
   const effect = EFFECTS.find(e=>e.id===effectId)
   const myVideos = assets.filter(a=>a.type==='video')
   const running = jobs.filter(j=>j.status==='rendering' && j.type==='video')
 
   const generate = () => {
     if (!prompt.trim() && !startImg) { toast('Describe your shot first — or hit “Surprise me”', 'warn'); return }
-    if (credits < cost) { toast(`This render needs ${cost} credits — you have ${credits}.`, 'warn'); return }
+    if (!liveMode && credits < cost) { toast(`This render needs ${cost} credits — you have ${credits}.`, 'warn'); return }
     const id = enqueue({
       type:'video', modelId, modelName:model.name, prompt: prompt.trim(), motionId, effectId,
       filter: effect?.filter, overlay: effect?.overlay, ratio: aspect.id, w: aspect.w, h: aspect.h,
       duration, res: effRes, count, cost, baseImage: startImg,
       seed: seedLock ? seed : hash(prompt + Date.now()), source: mode.toLowerCase(),
     })
-    if (id) toast(`${model.name} is rendering — ${cost} credits · ~${Math.max(20, Math.round(14000/model.speed))}s ETA`)
+    if (id) toast(liveMode ? `${model.name} is generating for REAL on your ${liveEst?.providerName || 'provider'} account (~$${liveEst?.usd?.toFixed(2) || '?'} est.)` : `${model.name} is rendering — ${cost} credits · ~${Math.max(20, Math.round(14000/model.speed))}s ETA`)
   }
 
   return (
@@ -134,8 +135,8 @@ export default function VideoStudio() {
         </>)}
 
         <div className="sticky bottom-0 bg-[#0c0c0e] pt-3 pb-1 -mx-1 px-1">
-          <Btn kind="lime" className="w-full !py-3.5 !text-[15px]" onClick={generate}><Sparkles size={17}/> Generate <span className="inline-flex items-center gap-1 bg-black/15 rounded-full px-2 py-0.5 text-[12px] font-extrabold"><Coins size={12}/>{cost}</span></Btn>
-          <p className="text-center text-[11px] text-zinc-600 mt-2">{credits.toLocaleString()} credits available · {running.length} rendering now</p>
+          <Btn kind="lime" className="w-full !py-3.5 !text-[15px]" onClick={generate}><Sparkles size={17}/> {liveMode ? 'Generate · REAL AI' : 'Generate'} <span className="inline-flex items-center gap-1 bg-black/15 rounded-full px-2 py-0.5 text-[12px] font-extrabold">{liveMode ? (liveEst ? `~$${liveEst.usd.toFixed(2)}` : 'no key') : <><Coins size={12}/>{cost}</>}</span></Btn>
+          <p className="text-center text-[11px] text-zinc-600 mt-2">{liveMode ? (liveEst ? `Bills your ${liveEst.providerName} account · ${liveEst.endpoint} · app credits untouched` : 'Live video needs a fal.ai key — Settings → AI Providers') : `${credits.toLocaleString()} credits available`} · {running.length} rendering now</p>
         </div>
       </div>
 

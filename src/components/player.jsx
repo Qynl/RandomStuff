@@ -7,7 +7,7 @@ import { motionById, exportVideoWebM, downloadBlob, downloadImage, fmtTime } fro
 import { EFFECTS } from '../data/catalog.js'
 
 export function PlayerModal() {
-  const { playerAsset: a, setPlayerAsset, toggleFav, toast, assets } = useApp()
+  const { playerAsset: a, setPlayerAsset, toggleFav, toast, assets, enqueue, credits, liveMode } = useApp()
   const nav = useNavigate()
   const [playing, setPlaying] = useState(true)
   const [t, setT] = useState(0)
@@ -48,6 +48,9 @@ export function PlayerModal() {
       <div className="relative w-full max-w-6xl bg-panel border border-line rounded-3xl overflow-hidden shadow-2xl grid lg:grid-cols-[1fr_340px] max-h-[94vh]">
         <div className="relative bg-black flex flex-col">
           <div ref={wrapRef} className="relative grain flex-1 min-h-[300px] sm:min-h-[420px]">
+            {asset.videoUrl ? (
+              <video src={asset.videoUrl} controls autoPlay loop playsInline className="absolute inset-0 h-full w-full object-contain bg-black" />
+            ) : (<>
             <MotionImage src={asset.url} motionId={asset.motionId} playing={playing} duration={dur} filter={showFx? asset.filter:'none'} className="absolute inset-0" />
             {showFx && <FxOverlay overlay={asset.overlay} />}
             <div className="absolute inset-0 vignette pointer-events-none z-[5]" />
@@ -56,6 +59,7 @@ export function PlayerModal() {
                 {!playing && <span className="h-16 w-16 grid place-items-center rounded-full bg-lime text-black shadow-2xl"><Play size={26} className="ml-1"/></span>}
               </button>
             )}
+            </>)}
             <span className="absolute top-3 left-3 z-[9] text-[10px] font-mono font-bold bg-black/60 border border-white/10 rounded-md px-2 py-1 text-zinc-300">
               {asset.modelName} · {asset.res || '1080p'} · {cam.name}
             </span>
@@ -96,24 +100,31 @@ export function PlayerModal() {
           <div className="grid grid-cols-4 gap-2 mt-3">
             <button onClick={()=>toggleFav(asset.id)} className={cx('flex flex-col items-center gap-1 rounded-2xl border border-line bg-panel2 py-2.5 text-[11px] font-bold hover:border-zinc-500 transition', asset.fav && 'text-red-400 border-red-500/40')}><Heart size={16} fill={asset.fav?'currentColor':'none'}/>Like</button>
             <button onClick={share} className="flex flex-col items-center gap-1 rounded-2xl border border-line bg-panel2 py-2.5 text-[11px] font-bold hover:border-zinc-500 transition"><Share2 size={16}/>Share</button>
-            <button onClick={()=>downloadImage(asset.url,'higgsfield-'+asset.id+'.jpg')} className="flex flex-col items-center gap-1 rounded-2xl border border-line bg-panel2 py-2.5 text-[11px] font-bold hover:border-zinc-500 transition"><Download size={16}/>Still JPG</button>
+            <button onClick={()=>downloadImage(asset.videoUrl || asset.url, 'higgsfield-'+asset.id+(asset.videoUrl?'.mp4':'.jpg'))} className="flex flex-col items-center gap-1 rounded-2xl border border-line bg-panel2 py-2.5 text-[11px] font-bold hover:border-zinc-500 transition"><Download size={16}/>{asset.videoUrl ? 'Video file' : 'Still JPG'}</button>
             <button onClick={()=>{ setPlayerAsset(null); nav(asset.type==='video'?'/video':'/image', { state:{ prompt:asset.prompt, motionId:asset.motionId, effectId:asset.effectId } }) }} className="flex flex-col items-center gap-1 rounded-2xl border border-line bg-panel2 py-2.5 text-[11px] font-bold hover:border-zinc-500 transition"><Repeat2 size={16}/>Remix</button>
           </div>
 
           <div className="grid grid-cols-2 gap-2 mt-3">
             <button onClick={()=>{
-              if (credits < 4) { toast('Upscale needs 4 credits', 'warn'); return }
+              if (!liveMode && credits < 4) { toast('Upscale needs 4 credits', 'warn'); return }
               enqueue({ type: asset.type, modelId: asset.type==='video' ? 'seedance-2-5' : 'nano-banana-pro', modelName:'Upscale 4K', prompt:(asset.prompt||'Untitled')+' — 4K detail-enhanced', motionId: asset.motionId, effectId: asset.effectId, filter: asset.filter, overlay: asset.overlay, ratio: asset.ratio, w:1600, h:900, duration: asset.duration, res:'4K', cost:4, baseImage: asset.url, seed: asset.seed, source:'upscale' })
               toast('4K upscale queued')
             }} className="rounded-full border border-line bg-panel2 py-2.5 text-[13px] font-bold hover:border-lime/60 transition">Upscale to 4K · 4cr</button>
             <button disabled={asset.type!=='video'} onClick={()=>{
-              if (credits < 10) { toast('Extend needs 10 credits', 'warn'); return }
+              if (!liveMode && credits < 10) { toast('Extend needs 10 credits', 'warn'); return }
               enqueue({ type:'video', modelId:'seedance-2-5', modelName:'Video Extend', prompt:(asset.prompt||'Untitled')+' — extended cut, story continues', motionId: asset.motionId, effectId: asset.effectId, filter: asset.filter, overlay: asset.overlay, ratio: asset.ratio, w:1280, h:720, duration: Math.min(25,(asset.duration||5)+5), res: asset.res||'1080p', cost:10, baseImage: asset.url, seed: asset.seed+5, source:'extend' })
               toast('Extending your clip by 5 seconds…')
             }} className="rounded-full border border-line bg-panel2 py-2.5 text-[13px] font-bold hover:border-lime/60 transition disabled:opacity-35">{asset.type==='video' ? 'Extend +5s · 10cr' : 'Extend (video only)'}</button>
           </div>
 
-          {asset.type==='video' && (
+          {asset.real && (
+            <div className="mt-4 rounded-2xl border border-lime/30 bg-lime/5 p-3.5 text-[12.5px] leading-relaxed">
+              <b className="text-lime">Real AI generation</b> on your {asset.provider} account via <span className="font-mono text-[11px]">{asset.endpoint}</span>
+              {asset.costUSD ? <> · est. cost <b>${asset.costUSD.toFixed(3)}</b> billed by {asset.provider}</> : null}.
+              {asset.videoUrl && <Btn kind="lime" className="w-full mt-2.5" onClick={()=>downloadImage(asset.videoUrl,'higgsfield-'+asset.id+'.mp4')}><Download size={15}/> Download original video file</Btn>}
+            </div>
+          )}
+          {asset.type==='video' && !asset.videoUrl && (
             <div className="mt-4 rounded-2xl border border-lime/30 bg-lime/5 p-3.5">
               <div className="flex items-center gap-2 text-sm font-bold"><MonitorPlay size={15} className="text-lime"/> Export real video file</div>
               <p className="text-[12px] text-zinc-400 mt-1 leading-snug">Renders the camera move + grade to an actual .webm in your browser. No watermark on your plan.</p>

@@ -17,8 +17,19 @@ const SURPRISE = [
 ]
 
 export function PromptBox({ value, onChange, mode='video', rows=4, placeholder }) {
-  const { savePrompt, savedPrompts, toast } = useApp()
+  const { savePrompt, savedPrompts, toast, askLLM } = useApp()
   const [showSaved, setShowSaved] = useState(false)
+  const [enhancing, setEnhancing] = useState(false)
+  const doEnhance = async () => {
+    setEnhancing(true)
+    const out = await askLLM([
+      { role:'system', content:`You are a world-class ${mode} director rewriting prompts for AI ${mode} generation. Return ONLY the rewritten prompt, one paragraph, vivid and specific: subject, action, environment, lighting, camera/lens language, texture, mood. No preamble.` },
+      { role:'user', content: value },
+    ])
+    onChange(out?.trim() || enhancePrompt(value, mode))
+    setEnhancing(false)
+    toast(out ? 'Enhanced by your connected LLM' : 'Prompt enhanced with cinematic direction')
+  }
   return (
     <div>
       <div className="relative rounded-2xl bg-panel2 border border-line focus-within:border-lime/50 transition">
@@ -26,7 +37,7 @@ export function PromptBox({ value, onChange, mode='video', rows=4, placeholder }
           placeholder={placeholder || (mode==='video' ? 'Describe your shot… a subject, an action, a world. “@mySoul” tags your character.' : 'Describe the image you imagine…')}
           className="w-full bg-transparent resize-none p-4 text-[15px] leading-relaxed placeholder:text-zinc-600 border-none" />
         <div className="flex items-center gap-1.5 px-3 pb-3">
-          <button onClick={()=>{ onChange(enhancePrompt(value, mode)); toast('Prompt enhanced with cinematic direction') }} disabled={!value.trim()} className="inline-flex items-center gap-1.5 text-[12px] font-bold rounded-full bg-lime/12 text-lime border border-lime/25 px-3 py-1.5 hover:bg-lime/20 disabled:opacity-40 transition"><Wand2 size={13}/> Enhance</button>
+          <button onClick={doEnhance} disabled={!value.trim() || enhancing} className="inline-flex items-center gap-1.5 text-[12px] font-bold rounded-full bg-lime/12 text-lime border border-lime/25 px-3 py-1.5 hover:bg-lime/20 disabled:opacity-40 transition"><Wand2 size={13}/> {enhancing ? 'Directing…' : 'Enhance'}</button>
           <button onClick={()=>onChange(SURPRISE[Math.floor(Math.random()*SURPRISE.length)])} className="inline-flex items-center gap-1.5 text-[12px] font-bold rounded-full bg-panel3 border border-line px-3 py-1.5 hover:border-zinc-500 transition"><Dices size={13}/> Surprise me</button>
           <button onClick={()=>savePrompt(value)} className="inline-flex items-center gap-1.5 text-[12px] font-bold rounded-full bg-panel3 border border-line px-3 py-1.5 hover:border-zinc-500 transition"><Bookmark size={13}/> Save</button>
           {savedPrompts.length>0 && <button onClick={()=>setShowSaved(!showSaved)} className="text-[12px] font-bold text-zinc-400 hover:text-white px-2 py-1.5">Saved ({savedPrompts.length})</button>}

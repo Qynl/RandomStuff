@@ -51,7 +51,7 @@ function agentBrain(text, ctx) {
 }
 
 export default function Agent() {
-  const { enqueue, credits, jobs, assets, openPlayer, toast } = useApp()
+  const { enqueue, credits, jobs, assets, openPlayer, toast, askLLM, liveMode } = useApp()
   const nav = useNavigate()
   const [msgs, setMsgs] = useState(()=>{ try { return JSON.parse(localStorage.getItem('hf_agent')||'null') } catch { return null } })
   const [input, setInput] = useState('')
@@ -62,20 +62,27 @@ export default function Agent() {
   useEffect(()=>{ bottom.current?.scrollIntoView({ behavior:'smooth' }) },[msgs, typing])
   if (!msgs) return null
 
-  const send = (preset) => {
+  const send = async (preset) => {
     const text = (preset || input).trim(); if (!text || typing) return
-    setInput(''); setMsgs(m=>[...m, { role:'user', text }]); setTyping(true)
-    setTimeout(()=>{
+    setInput(''); const history = [...msgs, { role:'user', text }]; setMsgs(history); setTyping(true)
+    {
       const reply = agentBrain(text, { credits })
+      if (!reply.action) {
+        const llm = await askLLM([
+          { role:'system', content:'You are the Higgsfield Supercomputer — a sharp, funny AI film director inside a creative suite (models: Seedance, Kling, Veo, Sora, Nano Banana, FLUX; tools: Cinema Studio, Soul ID, Speak, Effects). Answer concisely in character. If the user asks to make media, tell them to phrase it as "make a video/image of …" and you will render it. Use **bold** sparingly.' },
+          ...history.slice(-8).map(m=>({ role: m.role==='bot' ? 'assistant' : 'user', content: m.text.replaceAll('**','') })),
+        ])
+        if (llm) reply.text = llm
+      }
       let jobId = null
       if (reply.action) {
         const a = reply.action
         if (a.type==='video') jobId = enqueue({ type:'video', modelId:a.model.id, modelName:a.model.name, prompt:a.prompt, motionId:a.motionId, effectId:a.effectId, filter: EFFECTS.find(e=>e.id===a.effectId)?.filter, overlay: EFFECTS.find(e=>e.id===a.effectId)?.overlay, ratio:'16:9', w:1280, h:720, duration:5, res:'1080p', count:a.count, cost: calcCost(a.model,5,'1080p',a.count), seed: hash(a.prompt), source:'supercomputer' })
         else jobId = enqueue({ type:'image', modelId:a.model.id, modelName:a.model.name, prompt:a.prompt, ratio:'16:9', w:1344, h:768, count:a.count, cost: a.model.credits*a.count, seed: hash(a.prompt), source:'supercomputer' })
-        if (!jobId) reply.text += '\n\n⚠ But you don’t have enough credits for that render — top up in Pricing and ask again.'
+        if (!jobId) reply.text += liveMode ? '\n\nBut that render was blocked — check your provider key, balance or spend cap in Settings → AI Providers.' : '\n\nBut you don’t have enough app credits for that render — top up in Pricing, or flip to LIVE AI and pay your provider directly.'
       }
       setMsgs(m=>[...m, { role:'bot', text: reply.text, jobId }]); setTyping(false)
-    }, 750 + Math.random()*650)
+    }
   }
 
   const jobAsset = (jobId) => { const j = jobs.find(x=>x.id===jobId); return j?._assetIds?.map(id=>assets.find(a=>a.id===id)).filter(Boolean) || [] }

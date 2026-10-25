@@ -3,7 +3,7 @@ import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Compass, Clapperboard, Image as ImageIcon, Film, AudioLines, Fingerprint, Sparkles, LayoutDashboard, Megaphone, Cpu, FolderOpen, GraduationCap, Crown, Search, Coins, ChevronDown, X, Loader2, CheckCircle2, Play, Command, Settings, LogOut, User, Zap, Heart, Download, Trash2, Repeat2, Menu, TriangleAlert } from 'lucide-react'
 import { useApp } from '../store/AppContext.jsx'
-import { cx, Logo, Btn, MotionImage, FxOverlay, ProgressBar } from './ui.jsx'
+import { cx, Logo, Btn, MotionImage, RealVideo, FxOverlay, ProgressBar } from './ui.jsx'
 import { EFFECTS, VIDEO_MODELS, IMAGE_MODELS, CAMERA_PRESETS } from '../data/catalog.js'
 import { downloadImage } from '../lib/engine.js'
 
@@ -76,7 +76,8 @@ export function Sidebar({ mobileOpen, setMobileOpen }) {
 }
 
 export function Topbar({ setMobileOpen }) {
-  const { credits, setPaletteOpen, user, setAuthOpen, plan } = useApp()
+  const { credits, setPaletteOpen, user, setAuthOpen, plan, liveMode, setLiveMode, keys, toast } = useApp()
+  const hasKeys = !!(keys.fal || keys.gemini || keys.openrouter || (keys.customKey && keys.customBase))
   const nav = useNavigate(); const loc = useLocation()
   const [q, setQ] = useState('')
   return (
@@ -89,6 +90,16 @@ export function Topbar({ setMobileOpen }) {
       <button onClick={()=>setPaletteOpen(true)} className="sm:hidden text-zinc-300 p-1"><Search size={20}/></button>
       <div className="flex-1 sm:hidden" />
       <div className="hidden md:flex items-center gap-1 text-[11px] font-bold text-zinc-500 uppercase tracking-wider">{loc.pathname==='/' ? 'Explore' : ''}</div>
+      <button title={liveMode ? 'Live AI mode: generations run on YOUR provider keys — you pay the provider directly. Click for Demo mode.' : 'Demo mode: simulated generations with app credits. Click for Live AI with your own provider keys.'}
+        onClick={()=>{
+          if (!liveMode && !hasKeys) { nav('/settings'); toast('Connect your own AI provider key — generations then bill YOUR account, not app credits') ; return }
+          setLiveMode(!liveMode)
+          toast(!liveMode ? 'LIVE AI mode on — real generations on your provider account. You pay the provider (~cents each), app credits untouched.' : 'Demo mode — simulated generations using app credits')
+        }}
+        className={cx('flex items-center gap-2 rounded-full border px-3 py-1.5 text-[12px] font-extrabold transition shrink-0', liveMode ? 'bg-lime text-black border-lime' : 'bg-panel2 border-line text-zinc-400 hover:border-zinc-500')}>
+        <span className={cx('h-2 w-2 rounded-full', liveMode ? 'bg-black' : 'bg-zinc-500')} style={liveMode ? {animation:'pulse-dot 1s infinite'} : {}} />
+        {liveMode ? 'LIVE AI' : 'DEMO'}
+      </button>
       <button onClick={()=>nav('/pricing')} className="flex items-center gap-2 rounded-full bg-panel2 border border-line pl-3 pr-1 py-1 hover:border-lime/50 transition group">
         <Coins size={16} className="text-lime" /><span className="font-extrabold text-sm tabular-nums">{credits.toLocaleString()}</span>
         <span className="text-[11px] text-zinc-500 font-semibold hidden sm:inline">credits</span>
@@ -118,7 +129,7 @@ export function Toasts() {
 
 export function JobDock() {
   const { jobs, dismissJob, cancelJob, stageLabel, assets, openPlayer } = useApp()
-  const visible = jobs.filter(j=>j.status==='rendering' || (j.status==='done'))
+  const visible = jobs.filter(j=>['rendering','done','error'].includes(j.status))
   const [open, setOpen] = useState(true)
   useEffect(()=>{ if (jobs.some(j=>j.status==='rendering')) setOpen(true) },[jobs.length])
   if (!visible.length) return null
@@ -141,9 +152,11 @@ export function JobDock() {
                   ? <button onClick={()=>cancelJob(j.id)} className="text-zinc-500 hover:text-red-300"><X size={15}/></button>
                   : <button onClick={()=>dismissJob(j.id)} className="text-zinc-500 hover:text-white"><X size={15}/></button>}
               </div>
-              {j.status==='rendering' ? (<>
+              {j.status==='error' ? (
+                <p className="mt-2 text-[12px] leading-snug text-red-300">{j.error || 'Generation failed'}{j.mode==='live' ? ' — check your provider key/balance in Settings.' : ''}</p>
+              ) : j.status==='rendering' ? (<>
                 <ProgressBar value={j.progress} className="mt-2.5" />
-                <div className="flex justify-between mt-1.5 text-[11px] text-zinc-500"><span className="text-lime/90 font-semibold">{stageLabel(j)}</span><span className="tabular-nums">{Math.round(j.progress)}% · {j.modelName}</span></div>
+                <div className="flex justify-between mt-1.5 text-[11px] text-zinc-500"><span className="text-lime/90 font-semibold">{stageLabel(j)}</span><span className="tabular-nums">{Math.round(j.progress)}% · {j.mode==='live' ? `${j.providerName} · LIVE` : j.modelName}</span></div>
               </>) : (
                 <button className="mt-2 flex items-center gap-1.5 text-[12px] font-bold text-lime hover:underline" onClick={()=>{ const a=assets.find(x=>j._assetIds?.includes(x.id)); if(a) openPlayer(a) }}><Play size={12}/> Open result</button>
               )}
@@ -201,8 +214,11 @@ export function AssetCard({ asset, ratioClass='aspect-[4/3]' }) {
   const nav = useNavigate(); const [hover,setHover] = useState(false)
   return (
     <div className="group relative rounded-2xl overflow-hidden border border-line bg-panel2 cursor-pointer" onMouseEnter={()=>setHover(true)} onMouseLeave={()=>setHover(false)} onClick={()=>openPlayer(asset)}>
-      <MotionImage src={asset.url} motionId={asset.motionId} playing={hover && asset.type==='video'} duration={asset.duration||6} filter={asset.filter} className={cx('w-full', ratioClass)} />
+      {asset.videoUrl
+        ? <RealVideo src={asset.videoUrl} playing={hover} className={cx('w-full', ratioClass)} />
+        : <MotionImage src={asset.url} motionId={asset.motionId} playing={hover && asset.type==='video'} duration={asset.duration||6} filter={asset.filter} className={cx('w-full', ratioClass)} />}
       <FxOverlay overlay={hover ? asset.overlay : 'none'} />
+      {asset.real && <span className="absolute top-2.5 left-2.5 z-[8] text-[9px] font-black bg-lime text-black rounded-md px-1.5 py-0.5 tracking-wide">REAL AI · {asset.provider?.toUpperCase()}</span>}
       <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent p-3 pt-8 z-[6]">
         <p className="text-[12px] font-medium leading-snug line-clamp-2 text-zinc-200">{asset.prompt || asset.label || 'Untitled'}</p>
         <div className="flex items-center gap-1.5 mt-1.5 text-[10px] font-bold text-zinc-400">
@@ -210,7 +226,7 @@ export function AssetCard({ asset, ratioClass='aspect-[4/3]' }) {
           <span>{asset.modelName}</span>{asset.duration && <span>· {asset.duration}s</span>}
         </div>
       </div>
-      {asset.type==='video' && <span className="absolute top-2.5 left-2.5 z-[6] h-8 w-8 grid place-items-center rounded-full bg-black/55 border border-white/15"><Play size={13} className="ml-0.5"/></span>}
+      {asset.type==='video' && !asset.real && <span className="absolute top-2.5 left-2.5 z-[6] h-8 w-8 grid place-items-center rounded-full bg-black/55 border border-white/15"><Play size={13} className="ml-0.5"/></span>}
       <div className="absolute top-2.5 right-2.5 z-[7] flex gap-1.5 opacity-0 group-hover:opacity-100 transition" onClick={e=>e.stopPropagation()}>
         <button title="Favorite" onClick={()=>toggleFav(asset.id)} className={cx('h-8 w-8 grid place-items-center rounded-full bg-black/60 border border-white/15 hover:bg-black', asset.fav && 'text-red-400')}><Heart size={14} fill={asset.fav?'currentColor':'none'}/></button>
         <button title="Remix" onClick={()=>{ nav(asset.type==='video'?'/video':'/image', { state:{ prompt:asset.prompt, motionId:asset.motionId, effectId:asset.effectId } }); toast('Loaded into the studio — remix away') }} className="h-8 w-8 grid place-items-center rounded-full bg-black/60 border border-white/15 hover:bg-black"><Repeat2 size={14}/></button>

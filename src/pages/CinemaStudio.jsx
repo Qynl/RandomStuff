@@ -8,7 +8,7 @@ import { shotBreakdown, seedImg, hash, motionById, exportVideoWebM, downloadBlob
 const shotImg = (shot) => seedImg('hf'+hash(shot.seed), 960, 540)
 
 export default function CinemaStudio() {
-  const { enqueue, jobs, credits, toast } = useApp()
+  const { enqueue, jobs, credits, toast, liveMode } = useApp()
   const [title, setTitle] = useState(()=> localStorage.getItem('hf_cinema_title') || 'Untitled Short')
   const [story, setStory] = useState(()=> localStorage.getItem('hf_cinema_story') || '')
   const [genre, setGenre] = useState('General')
@@ -43,7 +43,7 @@ export default function CinemaStudio() {
 
   const genShot = (shot) => {
     const cost = calcCost(model, shot.duration, '1080p', 1)
-    if (credits < cost) { toast(`Shot ${shot.n} needs ${cost} credits`, 'warn'); return }
+    if (!liveMode && credits < cost) { toast(`Shot ${shot.n} needs ${cost} credits`, 'warn'); return }
     const jobId = enqueue({ type:'video', modelId, modelName:model.name, prompt:`[${title} · Shot ${shot.n}: ${shot.name}] ${shot.prompt} — ${body}, ${lens} ${shot.focal}mm ${aperture}, ${genre} genre${ramp!=='None'?`, speed ramp: ${ramp}`:''}`,
       motionId: shot.motionId, ratio:'21:9', w:1344, h:576, duration: shot.duration, res:'1080p', cost, seed: hash(shot.seed), source:'cinema studio', label:`Shot ${shot.n}` })
     if (jobId) setShots(prev=>prev.map(s=>s.id===shot.id?{...s,status:'rendering',jobId}:s))

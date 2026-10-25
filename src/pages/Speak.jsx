@@ -13,7 +13,7 @@ const SCRIPTS = [
 ]
 
 export default function Speak() {
-  const { enqueue, assets, credits, toast } = useApp()
+  const { enqueue, assets, credits, toast, liveMode } = useApp()
   const [avatar, setAvatar] = useState(AVATARS[0])
   const [voiceId, setVoiceId] = useState('maya')
   const [script, setScript] = useState(SCRIPTS[0])
@@ -53,9 +53,9 @@ export default function Speak() {
 
   const generate = () => {
     if (!script.trim()) { toast('Write a script first', 'warn'); return }
-    if (credits < cost) { toast(`Speak needs ${cost} credits`, 'warn'); return }
+    if (!liveMode && credits < cost) { toast(`Speak needs ${cost} credits`, 'warn'); return }
     const id = enqueue({ type:'video', modelId:'seedance-2-5', modelName:'Speak · Sync Engine', prompt:`${avatar.name} says: “${script.slice(0,120)}…” (${emotion.toLowerCase()} delivery, ${bg.toLowerCase()} background)`,
-      motionId:'anamorphic-breathing', ratio:'9:16', w:720, h:1280, duration: Math.min(secs,15), res:'1080p', cost, seed: avatar.id.length*131 + words.length, source:'speak', character: avatar.name })
+      motionId:'anamorphic-breathing', ratio:'9:16', w:720, h:1280, duration: Math.min(secs,15), res:'1080p', cost, seed: avatar.id.length*131 + words.length, source:'speak', character: avatar.name, baseImage: avatar.img })
     if (id) toast('Lip-sync render queued — audio, performance and captions included')
   }
 

@@ -9,7 +9,7 @@ import { IMAGE_MODELS, IMAGE_STYLES, ASPECTS_IMAGE } from '../data/catalog.js'
 import { hash } from '../lib/engine.js'
 
 export default function ImageStudio() {
-  const { enqueue, assets, credits, jobs, souls, toast } = useApp()
+  const { enqueue, assets, credits, jobs, souls, toast, liveMode, liveEstimate } = useApp()
   const loc = useLocation()
   const qs = useMemo(()=> new URLSearchParams(loc.search), [loc.search])
   const [prompt, setPrompt] = useState('')
@@ -22,6 +22,7 @@ export default function ImageStudio() {
   const [quality, setQuality] = useState('2K')
   const model = IMAGE_MODELS.find(m=>m.id===modelId) || IMAGE_MODELS[0]
   const cost = model.credits * count * (quality==='4K'?2:1)
+  const liveEst = liveMode ? liveEstimate({ type:'image', modelId, count, baseImage: refImg }) : null
   const myImages = assets.filter(a=>a.type==='image')
   const running = jobs.filter(j=>j.status==='rendering' && j.type==='image')
   const soul = souls.find(s=>s.id===soulId)
@@ -35,11 +36,11 @@ export default function ImageStudio() {
 
   const generate = () => {
     if (!prompt.trim() && !refImg) { toast('Describe the image first', 'warn'); return }
-    if (credits < cost) { toast(`Needs ${cost} credits — you have ${credits}.`, 'warn'); return }
+    if (!liveMode && credits < cost) { toast(`Needs ${cost} credits — you have ${credits}.`, 'warn'); return }
     const id = enqueue({ type:'image', modelId, modelName:model.name, prompt:`${prompt.trim()}${style?` — ${style} style`:''}`,
       ratio:aspect.id, w:aspect.w, h:aspect.h, count, cost, style, res:quality, baseImage: refImg, characterImg: soul?.cover, character: soul?.name,
       seed: hash(prompt+Date.now()), source:'image studio' })
-    if (id) toast(`${model.name} generating ×${count}…`)
+    if (id) toast(liveMode ? `${model.name} generating ×${count} for REAL on your ${liveEst?.providerName || 'provider'} (~$${liveEst?.usd?.toFixed(2) || '?'} est.)` : `${model.name} generating ×${count}…`)
   }
 
   return (
@@ -80,8 +81,8 @@ export default function ImageStudio() {
         </div>
 
         <div className="sticky bottom-0 bg-[#0c0c0e] pt-3 pb-1 -mx-1 px-1">
-          <Btn kind="lime" className="w-full !py-3.5 !text-[15px]" onClick={generate}><Sparkles size={17}/> Generate ×{count} <span className="inline-flex items-center gap-1 bg-black/15 rounded-full px-2 py-0.5 text-[12px] font-extrabold"><Coins size={12}/>{cost}</span></Btn>
-          <p className="text-center text-[11px] text-zinc-600 mt-2">{credits.toLocaleString()} credits · unlimited windows apply on Plus/Ultra</p>
+          <Btn kind="lime" className="w-full !py-3.5 !text-[15px]" onClick={generate}><Sparkles size={17}/> Generate ×{count}{liveMode ? ' · REAL' : ''} <span className="inline-flex items-center gap-1 bg-black/15 rounded-full px-2 py-0.5 text-[12px] font-extrabold">{liveMode ? (liveEst ? `~$${liveEst.usd.toFixed(2)}` : 'no key') : <><Coins size={12}/>{cost}</>}</span></Btn>
+          <p className="text-center text-[11px] text-zinc-600 mt-2">{liveMode ? (liveEst ? `Bills your ${liveEst.providerName} account · ${liveEst.endpoint}` : 'Connect a provider key in Settings → AI Providers') : `${credits.toLocaleString()} credits · unlimited windows apply on Plus/Ultra`}</p>
         </div>
       </div>
 

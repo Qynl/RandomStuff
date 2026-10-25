@@ -9,7 +9,7 @@ import { AVATARS, UGC_HOOKS } from '../data/catalog.js'
 import { seedImg } from '../lib/engine.js'
 
 export default function Influencer() {
-  const { enqueue, assets, credits, toast } = useApp()
+  const { enqueue, assets, credits, toast, liveMode } = useApp()
   const nav = useNavigate()
   const [inf, setInf] = useState(AVATARS[2])
   const [product, setProduct] = useState('Aurora Glow Serum')
@@ -28,7 +28,7 @@ export default function Influencer() {
     setHook(t.replaceAll('{product}', product || 'this product').replaceAll('{problem}','bad skin days').replaceAll('{audience}', audience).replaceAll('{category}', category.toLowerCase()))
   }
   const generate = () => {
-    if (credits < cost) { toast(`UGC batch needs ${cost} credits`, 'warn'); return }
+    if (!liveMode && credits < cost) { toast(`UGC batch needs ${cost} credits`, 'warn'); return }
     const finalHook = hook || `POV: you finally found the ${product} that actually works`
     const id = enqueue({ type:'video', modelId:'genjutsu', modelName:'UGC Builder',
       prompt:`${format}: ${inf.name} (${inf.role}) films a vertical UGC ad for ${product}. Hook: “${finalHook}” ${scene?`Scene: ${scene}. `:''}Authentic phone-camera energy, ${audience} audience.`,

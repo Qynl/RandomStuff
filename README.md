@@ -2,6 +2,19 @@
 
 A complete, working Higgsfield-style AI video/image platform built with **React + Vite + Tailwind CSS v4 + Framer Motion**. Not a landing page — the whole product, plus extras Higgsfield doesn't have. Fan-made demo; not affiliated with Higgsfield AI. Generation is simulated client-side: a custom **MotionEngine** drives cinematic camera moves over seeded imagery, and finished videos can be exported as **real `.webm` files rendered in your browser** (Canvas + MediaRecorder).
 
+## Real AI generations — the user pays (BYOK)
+
+Flip the **DEMO → LIVE AI** switch (top bar) and connect your own provider keys in **Settings → AI Providers**. From then on, generations are 100% real and run *browser → provider*: **you pay your provider directly** (images from ~$0.003, video from ~$0.15), this app charges nothing, and keys never leave your browser's localStorage.
+
+| Provider | What it powers | Get a key |
+|---|---|---|
+| **fal.ai** | Real video (Kling 3, Veo 3.1, Hailuo, Seedance, Wan, LTX) + image (FLUX, Nano Banana Pro, Ideogram…) | fal.ai/dashboard/keys |
+| **Google Gemini** | The actual Nano Banana / Nano Banana Pro (`gemini-2.5-flash-image`, `gemini-3-pro-image-preview`) + LLM brain | aistudio.google.com/apikey |
+| **OpenRouter** | Supercomputer brain, prompt enhancer, image models; shows your real $ usage | openrouter.ai/keys |
+| **Custom** | Any OpenAI-compatible endpoint you pay for | — |
+
+Safety rails included: per-generation ~$ estimate *before* you generate, a monthly **spend cap** that blocks overspend, a local spend ledger, endpoint fail-over (if a model moves, the closest real model serves), and provider errors surfaced verbatim (failed fal runs aren't billed). Replicate/OpenAI block browser CORS by design, hence the Custom slot for your own proxy/gateway. Without keys, Demo mode keeps the full simulated studio free forever.
+
 ## Run it
 
 ```bash

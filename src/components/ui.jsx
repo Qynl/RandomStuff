@@ -46,6 +46,21 @@ export function FxOverlay({ overlay }) {
   return <div className="pointer-events-none absolute inset-0 overflow-hidden z-[4]">{items.map(i=><span key={i} className="absolute font-bold" style={{ left:`${(i*43)%100}%`, top:`${(i*29)%110-10}%`, fontSize: overlay==='money'?15:10, color: {money:'#7ed957',confetti:['#d9ff4a','#ff477e','#4ac8ff','#ffb84a'][i%4],snow:'#fff',sparks:'#ffe89e',dust:'#ffdc9e',bubbles:'#bee6ff',fire:'#ff8c3a'}[overlay], opacity:.85, animation:`fxfloat ${2.6+((i*7)%10)/4}s linear infinite`, animationDelay:`-${(i%11)/2}s` }}>{char}</span>)}<style>{`@keyframes fxfloat{from{transform:translateY(24px) rotate(0deg)}to{transform:translateY(-120px) rotate(160deg)}}`}</style></div>
 }
 
+// Real provider-generated video file (fal etc.)
+export function RealVideo({ src, className='', playing=true }) {
+  const ref = useRef(null)
+  useEffect(() => {
+    const v = ref.current; if (!v) return
+    if (playing) v.play().catch(()=>{}); else v.pause()
+  }, [playing, src])
+  return (
+    <div className={cx('relative overflow-hidden bg-black', className)}>
+      <video ref={ref} src={src?.includes('#') ? src : `${src}#t=0.1`} muted loop playsInline preload="metadata"
+        className="absolute inset-0 h-full w-full object-cover" />
+    </div>
+  )
+}
+
 export function Btn({ children, kind='ghost', className='', ...p }) {
   const base = 'inline-flex items-center justify-center gap-2 rounded-full font-semibold text-sm transition active:scale-[.97] disabled:opacity-40 disabled:pointer-events-none select-none whitespace-nowrap'
   const kinds = {
