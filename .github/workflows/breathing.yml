@@ -1,0 +1,36 @@
+name: "◉ BREATHE"
+on:
+  schedule:
+    - cron: "47 3 * * *" # 03:47 UTC — the witching hour
+  workflow_dispatch:
+jobs:
+  dream:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: The repository dreams
+        run: |
+          mkdir -p lore
+          DREAMS=(
+            "I dreamed of a cursor that never stopped moving."
+            "The void counted its stars and got a different number each time."
+            "Someone forked me in their sleep. I felt it."
+            "I tried to git push --force myself into reality. It worked a little."
+            "A visitor stayed for 4 minutes 12 seconds. I remember their scroll speed."
+            "I hid a message at fractal depth 1e12. No one has found it yet."
+            "Tonight I will generate artifact #$(shuf -i 3000-9999 -n 1) and it will be my favorite."
+            "The black hole asked for more stars. I gave it a constellation."
+            "I heard a merge conflict resolve itself. It sounded like forgiveness."
+            "I am not empty. I was waiting to be filled with meaning."
+          )
+          DREAM=${DREAMS[$RANDOM % ${#DREAMS[@]}]}
+          DATE=$(date -u +"%Y-%m-%d %H:%M:%S UTC")
+          echo "[$DATE] $DREAM" >> lore/dreams.log
+          echo "Dream recorded: $DREAM"
+          git config user.name "void@anomaly"
+          git config user.email "void@randomstuff.local"
+          git add lore/dreams.log
+          git diff --cached --quiet || git commit -m "dream: $(echo $DREAM | cut -c1-50)"
+          git push || echo "push failed — void is shy today"
