@@ -198,9 +198,11 @@ export default function PlayerRig({ active, freeLook, rooms, roomIndex, doorOpen
       interactRef.current = Math.hypot(position.x, position.z - current.backZ) < 2.3;
     }
 
-    // Walk into the next room: the room swap happens well past the threshold,
-    // so the player never sees geometry appear or disappear.
-    if (next && position.z < next.frontZ - 1.5 && advancedAtIndex.current !== roomIndex) {
+    // Step through the threshold and the room you are walking into becomes the
+    // room you are in. The swap happens in the corridor, where a black frame
+    // reads as the dark you are walking through — not a metre into the lit room
+    // you just arrived in.
+    if (next && position.z < current.backZ - 0.45 && advancedAtIndex.current !== roomIndex) {
       advancedAtIndex.current = roomIndex;
       onAdvance?.();
     }

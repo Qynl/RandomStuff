@@ -245,6 +245,13 @@ export default function App() {
   const [cause, setCause] = useState('escape');
   const [stalkerSpeed, setStalkerSpeed] = useState(1.1);
   const [calm, setCalm] = useState(false);
+  // Crossing a threshold is a cut, not a stumble. Building the room you are
+  // walking into compiles its shaders, which costs a few hundred milliseconds
+  // on a new light set — so the black goes up first, the room is built behind
+  // it, and it comes back down once the new room has actually drawn a frame.
+  const [crossing, setCrossing] = useState(false);
+  const crossingRef = useRef(false);
+  const cutTimer = useRef(0);
   const lastEvent = useRef('');
   const extraTimers = useRef(new Set());
   const doorRef = useRef(false);
@@ -356,17 +363,40 @@ export default function App() {
   }, [phase, locked, freeLook, stopFree, toggle, toggleDoor]);
 
   /* --- moving on ------------------------------------------------------- */
+  const releaseCut = useCallback(() => {
+    window.clearTimeout(cutTimer.current);
+    if (!crossingRef.current) return;
+    crossingRef.current = false;
+    setCrossing(false);
+  }, []);
+
   // The index is advanced functionally. A step through a doorway can arrive on
   // two frames in a row, and reading roomIndex from the closure made the second
   // call write the same index again — which lost a room and could stop a run
   // dead a few rooms in.
   const advance = useCallback(() => {
-    setRoomIndex((current) => Math.min(current + 1, EXIT_INDEX));
-    setDoorOpen(false);
-    setApparition(null);
-    figureSeq.current += 1;
-    setTension(0);
-    dreadRef.current.stalker = false;
+    if (crossingRef.current) return;
+    crossingRef.current = true;
+    setCrossing(true);
+    // One frame to paint the black, one more to be sure it reached the screen:
+    // the room you are stepping into is built and its shaders compiled on the
+    // main thread, and none of that should happen where you can see it.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setRoomIndex((current) => Math.min(current + 1, EXIT_INDEX));
+        setDoorOpen(false);
+        setApparition(null);
+        figureSeq.current += 1;
+        setTension(0);
+        dreadRef.current.stalker = false;
+      });
+    });
+    // If no frame ever arrives to lift the cut, lift it anyway.
+    window.clearTimeout(cutTimer.current);
+    cutTimer.current = window.setTimeout(() => {
+      crossingRef.current = false;
+      setCrossing(false);
+    }, 2600);
   }, [setTension]);
 
   // Some rooms are already dark when you step into them, and take a moment to
@@ -691,6 +721,9 @@ export default function App() {
   }, [runId]);
 
   const restart = () => {
+    window.clearTimeout(cutTimer.current);
+    crossingRef.current = false;
+    setCrossing(false);
     setRunSeed((Math.random() * 1e9) | 0);
     setRoomIndex(0);
     setDoorOpen(false);
@@ -784,6 +817,7 @@ export default function App() {
             onAdvance={advance}
             onEscape={escape}
             onFootstep={() => cue('step')}
+            onRoomDrawn={releaseCut}
             onShift={(upClose) => {
               cue(upClose ? 'sting' : 'whisper');
               setTension(upClose ? 0.85 : 0.6);
@@ -847,8 +881,12 @@ export default function App() {
         <span>{soundOn ? 'SOUND ON' : 'SOUND OFF'}</span>
       </button>
 
-      {/* one dark blink as you cross the threshold into the next room */}
-      <div key={`room-${roomIndex}`} className="room-blink" />
+      {/* the cut over a threshold: raised before the next room is built, lifted
+          once it has drawn, so its first frame never lands on screen */}
+      <div
+        className={`room-cut${crossing ? ' is-down' : ''}`}
+        style={{ transition: crossing ? 'none' : 'opacity 340ms ease-out' }}
+      />
       <div className="film-grain" />
       <div className="edge-shade" />
       <div className="danger-pulse" />

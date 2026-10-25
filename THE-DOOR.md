@@ -53,14 +53,20 @@ generated from `(runSeed, roomIndex)`:
   a handful of chance details (a false door, a puddle, rubble, a fan, a collapsed
   ceiling, a dark entry) are drawn from the room's seed, so two library rooms are
   not the same library.
-- **Traversal is physical.** Rooms are genuinely adjacent, so walking through a
-  door carries you into the next room. There is no loading screen and no
-  teleport: the room behind you is unmounted only once you are well inside the
-  next one, and the entry corridor covers the seam.
+- **Traversal is physically continuous.** Rooms are genuinely adjacent, so
+  walking through a door carries you into the next room. The room you are
+  walking into is already built and lit — you look at it through the open door
+  before you step through it. What happens at the threshold is a short cut to
+  black: it goes up before the room two doors on is built (compiling a new set
+  of shaders costs a few hundred milliseconds), and lifts once the room you are
+  in has drawn a frame. The black is the seam, and it is the only load.
 - **Corridors** — the leftover space between two rooms becomes a dark passage
   with its own bulb, so the door you open reveals a space before it reveals a
   room. Their length varies with the depth of the rooms on either side, which is
-  how a closet can be reached down a six-metre corridor.
+  how a closet can be reached down a six-metre corridor. The cap closing the far
+  end of a corridor faces back down it; facing the room behind you instead, it
+  filled the open doorway with a black rectangle and the way on looked like a
+  dead end.
 - **Nothing blocks the door.** Every room's back wall is composed around the
   doorway: dresser banks flank it, shelves turn away from it, and each room gets
   a sconce or a portrait on the wall beside it so the view you walk towards has a

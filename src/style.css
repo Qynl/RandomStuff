@@ -56,10 +56,10 @@
   .danger-pulse{animation:none}
 }
 
-/* The threshold: a half-second of darkness as the next room comes up. */
-.room-blink{position:absolute;inset:0;z-index:3;pointer-events:none;background:#040504;opacity:0;animation:room-in .62s cubic-bezier(.3,.1,.2,1) both}
-@keyframes room-in{0%{opacity:.92}35%{opacity:.55}100%{opacity:0}}
-@media(prefers-reduced-motion:reduce){.room-blink{display:none}}
+/* The threshold: black over the room swap, lifted once the new room has drawn. */
+.room-cut{position:absolute;inset:0;z-index:8;pointer-events:none;background:#040504;opacity:0}
+.room-cut.is-down{opacity:1}
+@media(prefers-reduced-motion:reduce){.room-cut{transition:none!important}}
 
 /* Drag look: the canvas is a control surface now, not just a viewport. */
 .experience canvas{touch-action:none}

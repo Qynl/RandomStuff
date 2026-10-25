@@ -308,8 +308,12 @@ function Shell({ room, tex, power, palette }) {
             <meshStandardMaterial {...mats.wall} color="#9a9d94" />
           </mesh>
           <HangingBulb position={[0, CORRIDOR_H - 0.1, entryGap * 0.45]} drop={0.5} power={power * 0.55} flicker={0.3} seed={room.index + 3} />
-          {/* the dark you came out of */}
-          <mesh position={[0, CORRIDOR_H / 2, entryGap - 0.03]}>
+          {/* The dark you came out of: a cap on the far end of the corridor,
+              turned to face back down the corridor and not the room before it.
+              Left facing the previous room it sits 3 cm behind that room's own
+              doorway and reads, through the open door, as a black rectangle
+              where the way on should be. */}
+          <mesh position={[0, CORRIDOR_H / 2, entryGap - 0.03]} rotation={[0, Math.PI, 0]}>
             <planeGeometry args={[CORRIDOR_HALF * 2 + 0.3, CORRIDOR_H]} />
             <meshBasicMaterial color="#030404" />
           </mesh>

@@ -40,6 +40,7 @@ export default function Scene({
   playerRef,
   onCaught,
   onShift,
+  onRoomDrawn,
   onAdvance,
   onEscape,
   onFootstep,
@@ -52,8 +53,40 @@ export default function Scene({
   stalkerSpeed,
 }) {
   const gl = useThree((state) => state.gl);
+  const scene = useThree((state) => state.scene);
+
+  // A room is "up" once it has survived one full frame — the frame in which it
+  // is built and its shaders are compiled. Only then may the black lift, so the
+  // cost of arriving is never shown to the player.
+  const settled = useRef(null);
+  const frames = useRef(0);
+  useFrame(() => {
+    if (!onRoomDrawn) return;
+    if (settled.current === null) {
+      settled.current = roomIndex;
+      frames.current = 0;
+      return;
+    }
+    if (settled.current !== roomIndex) {
+      settled.current = roomIndex;
+      frames.current = 0;
+      return;
+    }
+    frames.current += 1;
+    // One frame after the swap is the first one the new room has rendered.
+    if (frames.current === 1) onRoomDrawn();
+  });
   const mood = room.mood;
   const palette = paletteFor(room.key);
+
+  // Reach the scene graph from a headless run (same door as __run and __door).
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has('debug')) return undefined;
+    window.__three = { gl, scene };
+    return () => {
+      delete window.__three;
+    };
+  }, [gl, scene]);
 
   // Own the pointer lock: drei's control re-binds its listener to a DOM node
   // that can unmount, and Chrome delivers one huge movementX on the first
