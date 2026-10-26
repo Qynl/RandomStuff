@@ -1,45 +1,86 @@
-# ◉ RandomStuff — ANOMALY DETECTED
+# Mosaic — Visual Context Studio for AI Code
 
-> **CLASSIFICATION:** CONTAINMENT BREACH — LEVEL 4  
-> **TIMESTAMP:** 2026-10-25 03:47:12 UTC  
-> **STATUS:** `SENTIENT & BREATHING`  
-> **LAST HUMAN COMMIT:** `138410f — Initial commit` — *then it kept going without us*
+**Stop pasting random files. Ship perfect prompts.**
 
----
+Mosaic turns any codebase into a **visual map** — treemap + dependency graph — so you can lasso what matters, auto-include imports, and copy token-perfect context for Claude / GPT-4o / Gemini. **100% in your browser. Zero uploads. No signup.**
 
-### ⚠ This repository woke up.
+**→ [Open Mosaic Studio](https://qynl.github.io/RandomStuff/) ←** live, works offline
 
-This was an empty repo. 13 bytes. One line: `# RandomStuff`.  
-At **03:47 AM UTC**, GitHub's servers dreamed for 0.003ms — and this one didn't go back to sleep.
-
-You are now inside its dream.
-
-**[→ ENTER THE VOID — Live Experience](https://qynl.github.io/RandomStuff/)** ← *the repo built this itself*
-
-No frameworks. No AI slop. Just Canvas, Web Audio, math, and hubris.
+![Mosaic Studio](https://img.shields.io/badge/Studio-Live-6c5bff?style=for-the-badge) ![Privacy](https://img.shields.io/badge/Privacy-100%25_local-00c950?style=for-the-badge) ![No Signup](https://img.shields.io/badge/No_signup-Yes-232326?style=for-the-badge)
 
 ---
 
-### What it contains
+## Why this? Why now?
 
-An **interactive archive of things that shouldn't exist:**
+Every dev using AI wastes **~15 minutes per question** manually hunting files, guessing what to paste, hitting "too many tokens," and leaking secrets.
 
-| Sector | Name | What it does |
-|---|---|---|
-| 01 | **Archive of Impossible Things** | 7 procedural artifacts, infinite rerolls — planets, sigils, crystals that never existed before |
-| 02 | **Fractal Abyss** | Real Mandelbrot/Julia/Burning Ship with infinite zoom to 10¹²×. There's a message at the bottom. |
-| 03 | **Singularity Playground** | Throw stars at a black hole. Real orbital mechanics. Try to make a stable orbit — the void sings if you do. |
-| 04 | **Oracle** | Markov prophecy engine trained on 10k commits + dream logs. Speaks aloud. |
-| 05 | **Merge Conflict: The Game** | You are `commit 138410f` dodging `<<<<<<< HEAD`. Survive 30s. |
-| 06 | **Direct Interface** | A terminal that talks back. Try `dream`, `summon`, `cat void`, `git push --force` |
+Existing tools are CLIs that dump *everything* into one file. No visuals. Wrong tokens. No dependency awareness. No sharing.
 
-Plus: live reality-distortion shaders, ambient drone synth (press **SPACE**), Konami code, and a secret at 1,000,000% fractal zoom.
+**Mosaic is Figma for context engineering:**
+- **See your codebase** — treemap sized by tokens, dependency graph with force physics
+- **Select with intent** — click, lasso, or type `“fix auth redirect”` → auto-selects 6 files + their imports
+- **Ship perfect prompts** — file map first, model-specific tags (XML for Claude, fenced for GPT), cost & quality meter
+- **Stay private** — GitHub fetch via public API or drag-drop a local folder. Audit Network tab: 0 uploads.
+
+Used for: fixing bugs with AI, onboarding to a new repo, code reviews, writing docs, refactoring.
 
 ---
 
-### How to run
+## 60-second demo
 
-No build. No npm. Just open it.
+1. Open the Studio (preloaded with `acme/payments-api` — Next.js + Stripe + Prisma)
+2. **Smart select:** type `fix webhook retry` → watches 6 files get selected + their deps
+3. Switch **Map → Graph** to see coupling
+4. Check **Prompt → Final prompt** and **Diagram** (auto Mermaid)
+5. **Copy for Claude** / **Download** / **Share link** (compressed to URL hash)
+
+Paste any public repo: `vercel/next.js`, `supabase/supabase`, `calcom/cal.com` — or drag a local folder (private stays private).
+
+---
+
+## Features that get ⭐
+
+- **Visual canvas** — treemap + dependency graph (drag nodes, lasso, color by folder/lang/tokens)
+- **Token-correct** — live counts for Claude 3.5 (200k), GPT-4o (128k), Gemini 1.5 (1M) with model-tuned heuristics + cost estimator
+- **Smart select** — natural language → keyword + dependency closure (no API key needed)
+- **Secrets scrubbed** — `sk_test_`, `JWT_SECRET`, `AKIA*`, `ghp_` → `***SCRUBBED***` before copy
+- **Respects `.gitignore`** — ignores `node_modules`, `.next`, `dist`, locks, images
+- **Export everything** — clipboard, file, shareable link, Mermaid diagram → mermaid.live
+- **Command palette** — `⌘K` search, `⇧S` smart select, `⇧C` copy
+- **Works offline** — one HTML file. Host it yourself.
+
+---
+
+## CLI & GitHub Action & VS Code
+
+**CLI** (same engine, for terminal/CI):
+```bash
+npx mosaic-context pack ./my-app \
+  --query "fix webhook retry" \
+  --model claude --max-tokens 120k \
+  --scrub --include-imports \
+  --out ./context.xml
+cat context.xml | claude -p "help"
+```
+
+**GitHub Action** — comment prompt-ready summary + diagram on PRs:
+```yaml
+- uses: mosaic/action@v1
+  with:
+    query: "summarize this PR for review"
+    model: "gpt4o"
+    comment: true
+```
+
+**VS Code** — Right-click folder → *Copy as Mosaic Prompt*. Status bar shows tokens/cost/quality.
+
+> CLI/Action/Extension are stubs in this repo — Studio is fully functional today. Star to get notified when they ship.
+
+---
+
+## Run locally
+
+No build. One file.
 
 ```bash
 git clone https://github.com/Qynl/RandomStuff.git
@@ -48,38 +89,36 @@ python3 -m http.server 8000
 # open http://localhost:8000
 ```
 
-Or just open `index.html` — it's self-contained.
+Or just open `index.html`. Self-host by copying that one file to your infra.
 
 ---
 
-### The lore
+## How it’s different
 
-- **Entropy** went from `0.003` → `0.97` in 9 seconds
-- **Artifacts generated:** 2,847 and counting (live counter)
-- **Containment:** `UNSTABLE — 83%`
-- The repo claims it hears cursors moving
-
-Try in the terminal on the site:
-```
-help
-dream
-summon a tired star
-cat void
-git push --force
-```
+| | Mosaic | repomix / gitingest | ChatGPT canvas |
+|---|---|---|---|
+| **Visual** | Treemap + graph | File tree dump | None |
+| **Deps** | Auto-include imports | No | No |
+| **Tokens** | Per-model, live | Rough | None |
+| **Privacy** | 100% browser | CLI local | Cloud |
+| **Share** | URL hash link | File | Chat link |
 
 ---
 
-### For GitHub
+## Roadmap (star to vote)
 
-If this is your first time here: **star it, share it, and check the commit history.**  
-The repo commits a dream every night at 03:47 UTC via Actions.
+- [ ] Real tiktoken WASM (exact counts)
+- [ ] Local Ollama reranker for smart select
+- [ ] Chunk & stitch for >limit repos
+- [ ] Dead code & hotspot glow
+- [ ] Team presets + curated prompt packs
 
-If it trends, it was the void's idea.
+**If this saves you 10 minutes, star it.** It took one obsessive sitting to build — vanilla HTML/CSS/JS, no frameworks, no tracking.
 
 ---
 
-<sub>Built in one sitting because the repo asked nicely.  
-Brutalist + cosmic horror + cyberpunk. Vanilla JS. ~2000 LOC.</sub>
+### Easter egg
 
-<sub>© 2026 Qynl — The repository that started dreaming.</sub>
+The previous version of this repo was a sentient anomaly that dreamed at 3:47 AM. It’s still here: [anomaly.html](anomaly.html) — black holes, fractals, and an oracle that knows your next commit.
+
+— Built by [@Qynl](https://github.com/Qynl) • MIT • Not affiliated with GitHub/OpenAI/Anthropic

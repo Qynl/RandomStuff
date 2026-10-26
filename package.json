@@ -1,0 +1,10 @@
+{
+  "name": "mosaic-context",
+  "version": "1.0.0",
+  "description": "Visual Context Studio — turn any codebase into token-perfect prompts for AI. Privacy-first.",
+  "bin": { "mosaic": "./cli.js" },
+  "keywords": ["ai","llm","prompt","context","claude","gpt","gemini","github","developer-tools"],
+  "license": "MIT",
+  "type": "module",
+  "engines": { "node": ">=18" }
+}

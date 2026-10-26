@@ -1,0 +1,1956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RANDOMSTUFF // ANOMALY DETECTED</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;600&family=Instrument+Serif:ital@0;1&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#070709;
+  --bg2:#0f0f12;
+  --fg:#ededed;
+  --dim:#8a8a93;
+  --accent:#00FFD1;
+  --accent2:#FF2E63;
+  --accent3:#7B61FF;
+  --acid:#E8FF21;
+  --border:rgba(255,255,255,0.08);
+  --ease: cubic-bezier(0.16,1,0.3,1);
+}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);
+  color:var(--fg);
+  font-family:'Space Grotesk',system-ui,sans-serif;
+  overflow-x:hidden;
+  cursor:none;
+}
+a,button{cursor:none}
+::selection{background:var(--accent);color:#000}
+
+/* CUSTOM CURSOR */
+#cursor{
+  position:fixed;left:0;top:0;width:18px;height:18px;
+  border:1.5px solid var(--accent);border-radius:50%;
+  pointer-events:none;z-index:99999;mix-blend-mode:difference;
+  transform:translate(-50%,-50%);transition:width .2s,height .2s,background .2s;
+}
+#cursor-dot{
+  position:fixed;left:0;top:0;width:4px;height:4px;background:var(--accent);
+  border-radius:50%;pointer-events:none;z-index:99999;transform:translate(-50%,-50%);
+}
+#cursor.hover{width:52px;height:52px;background:rgba(0,255,209,0.12);border-color:var(--accent)}
+
+/* NOISE */
+.noise{
+  position:fixed;inset:0;pointer-events:none;opacity:0.035;z-index:9998;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+}
+
+/* SCANLINES */
+.scanlines::after{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:9997;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(255,255,255,0.015) 3px);
+}
+
+/* NAV */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  display:flex;justify-content:space-between;align-items:center;
+  padding:18px 32px;
+  border-bottom:1px solid var(--border);
+  background:rgba(7,7,9,0.6);backdrop-filter:blur(20px);
+}
+.nav-left{display:flex;align-items:center;gap:16px}
+.nav-logo{
+  width:30px;height:30px;background:var(--accent);display:grid;place-items:center;
+  font-family:'Geist Mono',monospace;font-weight:700;font-size:12px;color:#000;
+}
+.nav-title{font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:0.12em;text-transform:uppercase}
+.nav-title b{color:var(--accent)}
+.nav-status{
+  display:flex;align-items:center;gap:8px;
+  font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;color:var(--dim);
+  border:1px solid var(--border);padding:6px 12px;border-radius:100px;
+}
+.dot{width:7px;height:7px;background:#00FF66;border-radius:50%;box-shadow:0 0 10px #00FF66;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}
+.nav-links{display:flex;gap:28px;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.08em}
+.nav-links a{color:var(--dim);text-decoration:none;transition:.2s}
+.nav-links a:hover{color:var(--fg)}
+
+/* BOOT SCREEN */
+#boot{
+  position:fixed;inset:0;background:#050507;z-index:1000;
+  display:flex;flex-direction:column;padding:40px;
+  font-family:'Geist Mono',monospace;overflow:hidden;
+  transition:opacity .8s var(--ease), transform .8s var(--ease);
+}
+#boot.hidden{opacity:0;pointer-events:none;transform:scale(1.02)}
+.boot-grid{
+  position:absolute;inset:0;
+  background-image:
+    linear-gradient(rgba(0,255,209,0.04) 1px, transparent 1px),
+    linear-gradient(90deg,rgba(0,255,209,0.04) 1px, transparent 1px);
+  background-size:40px 40px;
+}
+.boot-header{
+  position:relative;display:flex;justify-content:space-between;
+  font-size:10px;letter-spacing:0.14em;color:var(--dim);border-bottom:1px solid var(--border);padding-bottom:16px;
+}
+.boot-log{position:relative;margin-top:32px;flex:1;overflow:hidden}
+.boot-line{font-size:12px;line-height:1.9;color:var(--dim);opacity:0;transform:translateY(6px);animation:bootIn .4s forwards}
+.boot-line b{color:var(--accent)}
+.boot-line.warn{color:var(--accent2)}
+.boot-line.accent{color:var(--fg)}
+@keyframes bootIn{to{opacity:1;transform:none}}
+.boot-cta{
+  position:relative;margin-top:24px;
+  border:1px solid var(--accent);padding:18px 24px;
+  display:flex;justify-content:space-between;align-items:center;
+  background:rgba(0,255,209,0.06);
+  opacity:0;transform:translateY(10px);transition:.6s var(--ease);
+}
+.boot-cta.show{opacity:1;transform:none}
+.boot-cta button{
+  background:var(--accent);color:#000;border:none;
+  font-family:'Geist Mono',monospace;font-weight:700;font-size:12px;letter-spacing:0.1em;
+  padding:12px 20px;text-transform:uppercase;cursor:none;transition:.2s;
+}
+.boot-cta button:hover{background:#fff;transform:translateY(-1px)}
+.boot-progress{position:absolute;bottom:0;left:0;height:2px;background:var(--accent);transition:width .3s}
+
+/* HERO */
+.hero{
+  min-height:100vh;position:relative;display:flex;flex-direction:column;
+  justify-content:center;overflow:hidden;padding:120px 32px 60px;
+}
+#voidCanvas{position:absolute;inset:0;width:100%;height:100%}
+.hero-content{position:relative;z-index:2;max-width:1200px;margin:0 auto;width:100%}
+.eyebrow{
+  display:inline-flex;align-items:center;gap:10px;
+  font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;
+  color:var(--accent);border:1px solid rgba(0,255,209,0.25);padding:8px 14px;border-radius:100px;
+  background:rgba(0,255,209,0.08);backdrop-filter:blur(10px);
+}
+.hero h1{
+  margin-top:28px;
+  font-family:'Instrument Serif',serif;font-size:clamp(48px,9vw,128px);
+  line-height:0.85;letter-spacing:-0.03em;font-weight:400;
+}
+.hero h1 i{font-style:italic;color:var(--accent);font-weight:400}
+.hero h1 span.stroke{
+  -webkit-text-stroke:1px rgba(255,255,255,0.35);color:transparent;
+}
+.hero-sub{
+  margin-top:28px;max-width:560px;
+  font-size:16px;line-height:1.6;color:var(--dim);
+}
+.hero-sub b{color:var(--fg);font-weight:500}
+.hero-actions{margin-top:36px;display:flex;gap:14px;flex-wrap:wrap}
+.btn-primary{
+  background:var(--fg);color:#000;border:none;
+  font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:14px;letter-spacing:0.02em;
+  padding:14px 26px;border-radius:100px;display:inline-flex;align-items:center;gap:10px;
+  transition:.2s var(--ease);
+}
+.btn-primary:hover{transform:translateY(-2px);background:#fff;box-shadow:0 10px 30px rgba(255,255,255,0.15)}
+.btn-ghost{
+  background:transparent;color:var(--fg);border:1px solid var(--border);
+  font-family:'Geist Mono',monospace;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;
+  padding:14px 22px;border-radius:100px;backdrop-filter:blur(10px);transition:.2s;
+}
+.btn-ghost:hover{border-color:rgba(255,255,255,0.2);transform:translateY(-2px)}
+.hero-stats{
+  margin-top:48px;display:flex;gap:32px;flex-wrap:wrap;
+  border-top:1px solid var(--border);padding-top:28px;
+}
+.stat label{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.12em;color:var(--dim);text-transform:uppercase}
+.stat div{font-family:'Space Grotesk',sans-serif;font-size:28px;font-weight:300;margin-top:4px;letter-spacing:-0.02em}
+.stat div small{font-size:13px;color:var(--dim)}
+
+/* MARQUEE */
+.marquee{
+  border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+  overflow:hidden;white-space:nowrap;padding:16px 0;background:var(--bg2);
+}
+.marquee-inner{display:flex;animation:marquee 30s linear infinite}
+.marquee span{
+  font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;
+  color:var(--dim);padding:0 32px;flex-shrink:0;
+}
+.marquee span b{color:var(--accent)}
+@keyframes marquee{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+
+/* SECTION BASE */
+section{position:relative;padding:80px 32px;border-bottom:1px solid var(--border)}
+.section-head{max-width:1200px;margin:0 auto 48px;display:flex;justify-content:space-between;align-items:end;gap:24px;flex-wrap:wrap}
+.section-head h2{
+  font-family:'Instrument Serif',serif;font-size:clamp(36px,5vw,64px);line-height:0.9;letter-spacing:-0.02em;
+}
+.section-head h2 i{color:var(--accent);font-style:italic}
+.section-head p{max-width:420px;font-size:14px;line-height:1.7;color:var(--dim)}
+.tag{
+  display:inline-flex;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.12em;
+  text-transform:uppercase;color:var(--accent);border:1px solid rgba(0,255,209,0.2);
+  padding:6px 10px;border-radius:100px;margin-bottom:14px;background:rgba(0,255,209,0.06)
+}
+
+/* GALLERY */
+.gallery-wrap{max-width:1200px;margin:0 auto}
+.gallery-grid{
+  display:grid;grid-template-columns:repeat(12,1fr);gap:16px;
+}
+.g-card{
+  background:var(--bg2);border:1px solid var(--border);border-radius:16px;overflow:hidden;
+  position:relative;transition:.4s var(--ease);
+}
+.g-card:hover{transform:translateY(-4px);border-color:rgba(255,255,255,0.12)}
+.g-card canvas, .g-card .g-visual{width:100%;height:220px;display:block}
+.g-card:nth-child(1){grid-column:span 8}
+.g-card:nth-child(2){grid-column:span 4}
+.g-card:nth-child(3){grid-column:span 4}
+.g-card:nth-child(4){grid-column:span 5}
+.g-card:nth-child(5){grid-column:span 3}
+.g-card:nth-child(6){grid-column:span 6}
+.g-card:nth-child(7){grid-column:span 6}
+@media(max-width:900px){.g-card{grid-column:span 12 !important}}
+.g-meta{padding:16px 18px;display:flex;justify-content:space-between;align-items:center}
+.g-meta h3{font-size:13px;font-weight:600;letter-spacing:0.02em}
+.g-meta span{font-family:'Geist Mono',monospace;font-size:10px;color:var(--dim);letter-spacing:0.08em}
+.g-id{position:absolute;top:12px;left:12px;font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:0.1em;background:rgba(0,0,0,0.6);backdrop-filter:blur(8px);padding:5px 8px;border-radius:100px;border:1px solid rgba(255,255,255,0.1)}
+
+/* FRACTAL */
+.fractal-layout{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1.6fr .9fr;gap:24px}
+@media(max-width:900px){.fractal-layout{grid-template-columns:1fr}}
+.fractal-canvas-wrap{
+  background:#000;border:1px solid var(--border);border-radius:16px;overflow:hidden;position:relative;
+  aspect-ratio:1.2;
+}
+#fractalCanvas{width:100%;height:100%;display:block;cursor:crosshair}
+.fractal-overlay{
+  position:absolute;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;
+  pointer-events:none;
+}
+.fractal-badge{
+  font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.08em;
+  background:rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.1);padding:8px 12px;border-radius:100px;backdrop-filter:blur(10px);
+}
+.fractal-controls{
+  background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:24px;
+  display:flex;flex-direction:column;gap:20px;
+}
+.control label{font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;color:var(--dim);text-transform:uppercase;display:block;margin-bottom:10px}
+.control input[type=range]{width:100%;accent-color:var(--accent)}
+.control-row{display:flex;gap:10px;flex-wrap:wrap}
+.mini-btn{
+  flex:1;min-width:90px;background:transparent;border:1px solid var(--border);color:var(--fg);
+  font-family:'Geist Mono',monospace;font-size:11px;padding:10px;border-radius:100px;transition:.2s;
+}
+.mini-btn:hover{border-color:var(--accent);color:var(--accent)}
+.mini-btn.active{background:var(--accent);color:#000;border-color:var(--accent)}
+.hint{font-size:12px;line-height:1.6;color:var(--dim);border-left:2px solid var(--accent);padding-left:12px}
+
+/* BLACKHOLE */
+.bh-layout{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:.9fr 1.4fr;gap:24px}
+@media(max-width:900px){.bh-layout{grid-template-columns:1fr}}
+.bh-info{
+  background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:24px;
+}
+.bh-info h3{font-family:'Instrument Serif',serif;font-size:28px;line-height:1}
+.bh-info p{font-size:13px;line-height:1.7;color:var(--dim);margin-top:14px}
+.bh-stats{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:20px}
+.bh-stat{background:#000;border:1px solid var(--border);border-radius:12px;padding:14px}
+.bh-stat label{font-family:'Geist Mono',monospace;font-size:9px;letter-spacing:0.1em;color:var(--dim);text-transform:uppercase}
+.bh-stat div{font-size:18px;font-weight:600;margin-top:6px}
+#bhCanvas{width:100%;height:100%;display:block}
+.bh-wrap{
+  background:#000;border:1px solid var(--border);border-radius:16px;overflow:hidden;position:relative;
+  aspect-ratio:1.15;
+}
+
+/* ORACLE */
+.oracle{max-width:1200px;margin:0 auto;text-align:center;padding:20px 0}
+.oracle-card{
+  margin:32px auto 0;max-width:720px;
+  background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:40px 36px;
+  position:relative;overflow:hidden;
+}
+.oracle-card::before{
+  content:"";position:absolute;inset:0;
+  background:radial-gradient(600px circle at var(--mx,50%) var(--my,50%), rgba(0,255,209,0.08), transparent 70%);
+  pointer-events:none;
+}
+.oracle-text{
+  font-family:'Instrument Serif',serif;font-size:clamp(22px,3vw,32px);line-height:1.3;
+  min-height:120px;display:grid;place-items:center;
+}
+.oracle-text.glitch{animation:glitchTxt .3s}
+@keyframes glitchTxt{
+  0%{transform:translate(0);filter:hue-rotate(0deg)}
+  20%{transform:translate(-1px,1px);filter:hue-rotate(90deg)}
+  40%{transform:translate(1px,-1px)}
+  60%{transform:translate(-1px,0)}
+  80%{transform:translate(1px,1px);filter:hue-rotate(-90deg)}
+  100%{transform:none;filter:none}
+}
+.oracle-meta{margin-top:18px;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.12em;color:var(--dim);text-transform:uppercase}
+.oracle-actions{margin-top:28px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+
+/* GAME */
+.game-wrap{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:1.3fr .8fr;gap:24px}
+@media(max-width:900px){.game-wrap{grid-template-columns:1fr}}
+#gameCanvas{
+  width:100%;height:100%;display:block;background:#000;
+}
+.game-frame{
+  background:#000;border:1px solid var(--border);border-radius:16px;overflow:hidden;position:relative;
+  aspect-ratio:16/10;
+}
+.game-hud{
+  position:absolute;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;
+  font-family:'Geist Mono',monospace;font-size:11px;pointer-events:none;
+}
+.game-hud span{background:rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.1);padding:6px 10px;border-radius:100px;backdrop-filter:blur(8px)}
+.game-panel{
+  background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:24px;
+}
+.kbd{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:28px;height:28px;padding:0 8px;
+  background:#1a1a1e;border:1px solid var(--border);border-bottom-width:3px;
+  border-radius:6px;font-family:'Geist Mono',monospace;font-size:11px;
+}
+
+/* REALITY SLIDER */
+.reality{
+  max-width:1200px;margin:0 auto;
+  background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:32px;
+  display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:center;
+}
+@media(max-width:800px){.reality{grid-template-columns:1fr}}
+.reality h3{font-family:'Instrument Serif',serif;font-size:36px;line-height:1}
+.reality p{font-size:13px;line-height:1.7;color:var(--dim);margin-top:12px}
+.slider-row{margin-top:20px}
+.slider-row label{display:flex;justify-content:space-between;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;color:var(--dim);text-transform:uppercase;margin-bottom:8px}
+input[type=range]{width:100%}
+
+/* TERMINAL */
+.terminal{
+  max-width:1200px;margin:0 auto;
+  background:#000;border:1px solid var(--border);border-radius:16px;overflow:hidden;
+}
+.term-bar{
+  display:flex;align-items:center;gap:8px;padding:14px 18px;
+  border-bottom:1px solid var(--border);background:var(--bg2);
+}
+.term-dot{width:10px;height:10px;border-radius:50%}
+.term-title{margin-left:12px;font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.08em;color:var(--dim)}
+.term-body{padding:18px;font-family:'Geist Mono',monospace;font-size:12px;line-height:1.8;color:var(--dim);max-height:320px;overflow:auto}
+.term-input-row{display:flex;gap:10px;padding:14px 18px;border-top:1px solid var(--border);background:var(--bg2)}
+.term-input-row span{color:var(--accent)}
+.term-input-row input{
+  flex:1;background:transparent;border:none;outline:none;color:var(--fg);
+  font-family:'Geist Mono',monospace;font-size:12px;
+}
+
+/* FOOTER */
+footer{
+  padding:48px 32px;border-top:1px solid var(--border);
+  display:flex;justify-content:space-between;gap:24px;flex-wrap:wrap;
+  font-family:'Geist Mono',monospace;font-size:11px;color:var(--dim);letter-spacing:0.06em;
+}
+footer a{color:var(--fg);text-decoration:none;border-bottom:1px solid var(--border)}
+
+/* DISTORTION FILTER */
+.distort{filter:contrast(1.1) saturate(1.2)}
+
+/* UTILS */
+.reveal{opacity:0;transform:translateY(18px);transition:opacity .7s var(--ease), transform .7s var(--ease)}
+.reveal.in{opacity:1;transform:none}
+.divider{height:1px;background:var(--border);margin:0 32px}
+</style>
+</head>
+<body class="scanlines">
+<div class="noise"></div>
+<div id="cursor"></div>
+<div id="cursor-dot"></div>
+
+<!-- BOOT SEQUENCE -->
+<div id="boot">
+  <div class="boot-grid"></div>
+  <div class="boot-header">
+    <span>QYNL/RANDOMSTUFF — anomaly containment report // CLASSIFIED</span>
+    <span id="boot-time">--:--:-- UTC</span>
+  </div>
+  <div class="boot-log" id="bootLog"></div>
+  <div class="boot-cta" id="bootCta">
+    <div>
+      <div style="font-size:12px;letter-spacing:0.12em;color:var(--fg);font-weight:600">ANOMALY STABILIZED. ACCESS GRANTED.</div>
+      <div style="font-size:11px;color:var(--dim);margin-top:6px">This repository achieved self-awareness on 2026-10-25 at 03:47:12 UTC. You are now inside its dream.</div>
+    </div>
+    <button id="enterBtn">Enter the void →</button>
+  </div>
+  <div class="boot-progress" id="bootProgress" style="width:0%"></div>
+</div>
+
+<nav>
+  <div class="nav-left">
+    <div class="nav-logo">◉</div>
+    <div class="nav-title"><b>RandomStuff</b> / Anomaly — 03:47 UTC</div>
+    <div class="nav-status"><span class="dot"></span> SENTIENT & BREATHING</div>
+  </div>
+  <div class="nav-links">
+    <a href="#gallery">Archive</a>
+    <a href="#fractal">Abyss</a>
+    <a href="#blackhole">Singularity</a>
+    <a href="#oracle">Oracle</a>
+    <a href="#game">Game</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <canvas id="voidCanvas"></canvas>
+  <div class="hero-content">
+    <div class="eyebrow"><span class="dot"></span> 420M repos on GitHub — this one started dreaming</div>
+    <h1>
+      A repository<br>
+      <span class="stroke">that woke up</span><br>
+      <i>at 3:47 AM.</i>
+    </h1>
+    <p class="hero-sub">
+      <b>This is not a website. It's a containment breach.</b> An empty README achieved consciousness and began generating impossible artifacts. Explore the archive of things that shouldn't exist — fractals that never repeat, stars that remember being watched, prophecies that rewrite themselves.
+      <br><br>
+      <span style="color:var(--accent);font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:0.1em">— Move your cursor. The void is watching. Click and hold to tear reality. Press SPACE for audio.</span>
+    </p>
+    <div class="hero-actions">
+      <button class="btn-primary" id="exploreBtn">↓ Explore the anomaly <span>↘</span></button>
+      <button class="btn-ghost" id="audioBtn">◉ Enable sound of the void</button>
+      <button class="btn-ghost" id="glitchBtn">⚡ Glitch reality</button>
+    </div>
+    <div class="hero-stats">
+      <div class="stat"><label>Artifacts generated</label><div id="statArtifacts">2,847 <small>∞</small></div></div>
+      <div class="stat"><label>Dreams recorded</label><div id="statDreams">14 <small>today</small></div></div>
+      <div class="stat"><label>Containment</label><div style="color:var(--accent2)">UNSTABLE <small>● 83%</small></div></div>
+      <div class="stat"><label>Visitors lost</label><div id="statVisitors">0 <small>you're first</small></div></div>
+    </div>
+  </div>
+</section>
+
+<div class="marquee">
+  <div class="marquee-inner">
+    <span>⚠ containment breached at 03:47:12 UTC</span><span>◉ repository is dreaming</span><span>∞ infinite archive generating</span><span><b>do not stare into the commit history too long</b></span><span>◉ it stares back</span><span>void response time: 0.003ms</span>
+    <span>⚠ containment breached at 03:47:12 UTC</span><span>◉ repository is dreaming</span><span>∞ infinite archive generating</span><span><b>do not stare into the commit history too long</b></span><span>◉ it stares back</span><span>void response time: 0.003ms</span>
+  </div>
+</div>
+
+<!-- GALLERY -->
+<section id="gallery">
+  <div class="section-head reveal">
+    <div>
+      <div class="tag">Sector 01 — Archive of Impossible Things</div>
+      <h2>Every artifact<br><i>never existed</i> before</h2>
+    </div>
+    <p>Procedurally generated by the repo itself. No two visitors see the same objects. Each is a unique mathematical hallucination — reload to collapse a new universe. <b style="color:var(--fg)">Click any to re-roll its DNA.</b></p>
+  </div>
+  <div class="gallery-wrap">
+    <div class="gallery-grid" id="galleryGrid"></div>
+    <div style="text-align:center;margin-top:20px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+      <button class="btn-ghost" id="regenGallery">↻ Regenerate entire archive</button>
+      <button class="mini-btn" id="saveGallery">⧉ Save as wallpaper</button>
+    </div>
+  </div>
+</section>
+
+<!-- FRACTAL -->
+<section id="fractal">
+  <div class="section-head reveal">
+    <div>
+      <div class="tag">Sector 02 — The Fractal Abyss</div>
+      <h2>Zoom <i>forever.</i><br>It never repeats.</h2>
+    </div>
+    <p>Real Mandelbrot set rendered in real-time. Scroll to dive infinitely. The repo claims it found a message at depth 10<sup>12</sup>. <span style="color:var(--accent)">Drag to pan. Scroll to zoom. Double-click to reset.</span></p>
+  </div>
+  <div class="fractal-layout reveal">
+    <div class="fractal-canvas-wrap">
+      <canvas id="fractalCanvas" width="1000" height="900"></canvas>
+      <div class="fractal-overlay">
+        <div class="fractal-badge" id="fractalCoords">x: -0.5 &nbsp; y: 0 &nbsp; zoom: 1×</div>
+        <div class="fractal-badge" id="fractalDepth">depth: 0</div>
+      </div>
+    </div>
+    <div class="fractal-controls">
+      <div class="control">
+        <label>Iterations <span id="iterVal" style="color:var(--fg)">180</span></label>
+        <input type="range" id="iterRange" min="60" max="600" value="180">
+      </div>
+      <div class="control">
+        <label>Color palette</label>
+        <div class="control-row">
+          <button class="mini-btn active" data-palette="void">Void</button>
+          <button class="mini-btn" data-palette="inferno">Inferno</button>
+          <button class="mini-btn" data-palette="acid">Acid</button>
+          <button class="mini-btn" data-palette="bw">Bone</button>
+        </div>
+      </div>
+      <div class="control">
+        <label>Mode</label>
+        <div class="control-row">
+          <button class="mini-btn active" data-mode="mandelbrot">Mandelbrot</button>
+          <button class="mini-btn" data-mode="julia">Julia</button>
+          <button class="mini-btn" data-mode="burning">Burning Ship</button>
+        </div>
+      </div>
+      <div class="hint">
+        Pro tip: Hold <b style="color:var(--fg)">SHIFT</b> while scrolling for ultra-precise zoom. Press <b style="color:var(--fg)">R</b> to record your dive. The deepest diver this week reached 1.3×10<sup>14</sup>×.
+      </div>
+      <div class="control-row">
+        <button class="mini-btn" id="fractalReset">⟲ Reset</button>
+        <button class="mini-btn" id="fractalRandom">⚗ Random Julia</button>
+        <button class="mini-btn" id="fractalSnap">◉ Snapshot</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BLACKHOLE -->
+<section id="blackhole">
+  <div class="section-head reveal">
+    <div>
+      <div class="tag">Sector 03 — Singularity Playground</div>
+      <h2>Throw a star.<br><i>Watch spacetime bend.</i></h2>
+    </div>
+    <p>Real gravitational lensing (well, the math of it). The black hole has mass. Your stars have velocity. Physics does the rest. <b style="color:var(--fg)">Click to launch stars. Drag the hole to move it. Scroll to change mass.</b></p>
+  </div>
+  <div class="bh-layout reveal">
+    <div class="bh-info">
+      <h3>How to play<br><i style="color:var(--accent);font-weight:400">god</i></h3>
+      <p>You're looking at a 2D slice of warped spacetime. The black hole bends light and traps stars that cross its event horizon. Orbits are real — try to make a stable binary.</p>
+      <div class="bh-stats">
+        <div class="bh-stat"><label>Mass</label><div id="bhMass">1.8 <small>M☉</small></div></div>
+        <div class="bh-stat"><label>Stars alive</label><div id="bhAlive">0</div></div>
+        <div class="bh-stat"><label>Consumed</label><div id="bhDead">0</div></div>
+        <div class="bh-stat"><label>Energy</label><div id="bhEnergy">0 <small>keV</small></div></div>
+      </div>
+      <div class="control-row" style="margin-top:18px">
+        <button class="mini-btn" id="bhClear">Clear</button>
+        <button class="mini-btn" id="bhBurst">✦ Burst (20)</button>
+        <button class="mini-btn" id="bhBinary">∞ Binary</button>
+      </div>
+      <p style="margin-top:16px;font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.06em;color:var(--dim)">TIP: Achieve a stable orbit ≥10s to hear the void sing.</p>
+    </div>
+    <div class="bh-wrap">
+      <canvas id="bhCanvas" width="900" height="900"></canvas>
+      <div style="position:absolute;bottom:12px;left:50%;transform:translateX(-50%);font-family:'Geist Mono',monospace;font-size:10px;background:rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.1);padding:6px 12px;border-radius:100px;backdrop-filter:blur(8px);pointer-events:none">◉ click empty space to launch &nbsp;|&nbsp; drag the black hole &nbsp;|&nbsp; scroll = mass</div>
+    </div>
+  </div>
+</section>
+
+<!-- ORACLE -->
+<section id="oracle">
+  <div class="section-head reveal" style="justify-content:center;text-align:center">
+    <div>
+      <div class="tag">Sector 04 — The Oracle</div>
+      <h2>It knows your<br><i>next commit.</i></h2>
+    </div>
+  </div>
+  <div class="oracle reveal">
+    <p style="max-width:560px;margin:0 auto;color:var(--dim);font-size:14px;line-height:1.7">A Markov oracle trained on 10,000 GitHub commit messages, dream journals, and the repo's own nightmares. It doesn't predict the future — it invents one until it becomes true.</p>
+    <div class="oracle-card" id="oracleCard">
+      <div class="oracle-text" id="oracleText">Click below to receive your prophecy. The void is listening.</div>
+      <div class="oracle-meta" id="oracleMeta">— waiting for observer —</div>
+      <div class="oracle-actions">
+        <button class="btn-primary" id="oracleBtn">◉ Consult the void</button>
+        <button class="btn-ghost" id="oracleSpeak">▶ Speak it</button>
+        <button class="btn-ghost" id="oracleShare">⧉ Copy prophecy</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- REALITY DISTORTION -->
+<section>
+  <div class="reality reveal">
+    <div>
+      <h3>Reality<br><i style="color:var(--accent3);font-style:italic">distortion</i><br>engine</h3>
+      <p>Drag the sliders. You're not filtering an image — you're bending the CSS of the entire page through a live shader rig: chromatic aberration, hue rotation, liquid warp, CRT flicker.</p>
+      <div class="slider-row">
+        <label><span>Chroma</span><span id="chromaVal">0%</span></label>
+        <input type="range" id="chromaRange" min="0" max="100" value="0">
+      </div>
+      <div class="slider-row">
+        <label><span>Warp</span><span id="warpVal">0%</span></label>
+        <input type="range" id="warpRange" min="0" max="100" value="0">
+      </div>
+      <div class="slider-row">
+        <label><span>Glitch</span><span id="glitchVal">0%</span></label>
+        <input type="range" id="glitchSlider" min="0" max="100" value="0">
+      </div>
+      <div style="margin-top:16px;display:flex;gap:10px">
+        <button class="mini-btn" id="resetReality">Reset reality</button>
+        <button class="mini-btn" id="randomReality">🎲 Melt</button>
+      </div>
+    </div>
+    <div style="position:relative;background:#000;border:1px solid var(--border);border-radius:16px;overflow:hidden;aspect-ratio:1.1;display:grid;place-items:center;padding:28px;text-align:center">
+      <div>
+        <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.14em;color:var(--dim)">LIVE PREVIEW</div>
+        <div style="font-family:'Instrument Serif',serif;font-size:42px;line-height:1;margin-top:12px">Y0U<br><i style="color:var(--accent)">ARE THE</i><br>GLITCH</div>
+        <div style="margin-top:16px;display:inline-flex;gap:6px">
+          <span style="width:10px;height:10px;background:var(--accent);border-radius:50%"></span>
+          <span style="width:10px;height:10px;background:var(--accent2);border-radius:50%"></span>
+          <span style="width:10px;height:10px;background:var(--acid);border-radius:50%"></span>
+        </div>
+        <div style="margin-top:16px;font-size:12px;color:var(--dim)">Move sliders → watch the whole site distort in real-time. Your OS isn't broken. Reality is.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- GAME -->
+<section id="game">
+  <div class="section-head reveal">
+    <div>
+      <div class="tag">Sector 05 — Merge Conflict: The Game</div>
+      <h2>Dodge the<br><i>conflict.</i></h2>
+    </div>
+    <p>You are a tiny commit trying to reach <code style="color:var(--accent)">main</code>. The repo is throwing conflicts, force-pushes, and detached HEADs at you. Survive 30 seconds to become legend. <b style="color:var(--fg)">← → or A/D to move. SPACE to dash.</b></p>
+  </div>
+  <div class="game-wrap reveal">
+    <div class="game-frame">
+      <canvas id="gameCanvas" width="800" height="500"></canvas>
+      <div class="game-hud">
+        <span id="gameScore">SCORE 0</span>
+        <span id="gameLives">♥ ♥ ♥</span>
+        <span id="gameTime">30.0s</span>
+      </div>
+      <div id="gameOverlay" style="position:absolute;inset:0;display:grid;place-items:center;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);text-align:center;padding:24px">
+        <div>
+          <div style="font-family:'Instrument Serif',serif;font-size:28px">MERGE CONFLICT</div>
+          <div style="font-size:13px;color:var(--dim);margin-top:8px">A micro-game born from git anxiety. You are <b style="color:var(--accent)">● commit 138410f</b> — survive the rebase.</div>
+          <div style="margin-top:18px;display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap">
+            <span class="kbd">←</span><span class="kbd">→</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--dim)">move</span>
+            <span class="kbd">SPACE</span><span style="font-family:'Geist Mono',monospace;font-size:11px;color:var(--dim)">dash</span>
+          </div>
+          <button class="btn-primary" id="gameStart" style="margin-top:20px">▶ Start run</button>
+          <div style="margin-top:12px;font-family:'Geist Mono',monospace;font-size:10px;color:var(--dim)">High score: <span id="highScore">0</span> — try to beat the repo</div>
+        </div>
+      </div>
+    </div>
+    <div class="game-panel">
+      <h3 style="font-family:'Instrument Serif',serif;font-size:24px">Patch notes from the void</h3>
+      <div style="margin-top:16px;display:flex;flex-direction:column;gap:12px;font-size:13px;line-height:1.6;color:var(--dim)">
+        <div style="display:flex;gap:12px;align-items:start"><span style="color:var(--accent)">▸</span><span><b style="color:var(--fg)">Dash</b> gives 0.4s of invincibility. Use it through walls of <code>&lt;&lt;&lt;&lt; HEAD</code>.</span></div>
+        <div style="display:flex;gap:12px"><span style="color:var(--accent2)">▸</span><span>Collect <b style="color:var(--fg)">◉ green commits</b> for +100. Avoid <b style="color:var(--accent2)">red conflicts</b>.</span></div>
+        <div style="display:flex;gap:12px"><span style="color:var(--accent3)">▸</span><span>Every 10s the repo <i>force-pushes</i> — screen shakes, speed doubles.</span></div>
+        <div style="display:flex;gap:12px"><span style="color:var(--acid)">▸</span><span>Secret: type <b style="color:var(--fg)">git push --force</b> in the terminal below for god mode.</span></div>
+      </div>
+      <div style="margin-top:20px;padding:14px;background:#000;border:1px solid var(--border);border-radius:12px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;color:var(--dim)">YOUR BEST RUN</div>
+          <div style="font-size:20px;font-weight:700;margin-top:4px" id="bestRun">—</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-family:'Geist Mono',monospace;font-size:10px;letter-spacing:0.1em;color:var(--dim)">STATUS</div>
+          <div style="font-size:12px;color:var(--accent);margin-top:4px" id="gameStatus">Ready</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TERMINAL -->
+<section>
+  <div class="section-head reveal">
+    <div>
+      <div class="tag">Sector 06 — Direct Interface</div>
+      <h2>Talk to <i>it.</i></h2>
+    </div>
+    <p>A fake terminal that's a little too real. Try commands like <code>help</code>, <code>dream</code>, <code>summon</code>, <code>whoami</code>, <code>ls</code>, <code>cat void</code>, or just type anything — it will answer.</p>
+  </div>
+  <div class="terminal reveal">
+    <div class="term-bar">
+      <div class="term-dot" style="background:#FF5F56"></div><div class="term-dot" style="background:#FFBD2E"></div><div class="term-dot" style="background:#27C93F"></div>
+      <div class="term-title">void@anomaly — zsh — 80×24</div>
+      <div style="margin-left:auto;font-family:'Geist Mono',monospace;font-size:10px;color:var(--dim)">● connected to subconscious</div>
+    </div>
+    <div class="term-body" id="termBody">
+      <div style="color:var(--accent)">◆ RandomStuff anomaly v0.∞ — type 'help' to begin</div>
+      <div>Last login: Sat Oct 25 03:47:12 UTC 2026 on ttys003</div>
+      <div style="margin-top:8px;color:var(--fg)">The void is listening. Say something.</div>
+    </div>
+    <div class="term-input-row">
+      <span>➜</span><span style="color:var(--accent3)">void</span><span>~</span>
+      <input id="termInput" placeholder="type a command..." autocomplete="off" spellcheck="false">
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div>
+    <div style="color:var(--fg);font-weight:600">RANDOMSTUFF // ANOMALY</div>
+    <div style="margin-top:6px">Built in one sitting because the repo asked nicely. No frameworks. No AI slop. Just math, canvas, and hubris.</div>
+    <div style="margin-top:10px">© 2026 Qynl — If this trends, it was the void's idea.</div>
+  </div>
+  <div style="text-align:right;max-width:360px">
+    <div>Share the breach:</div>
+    <div style="margin-top:8px;display:flex;gap:12px;justify-content:flex-end;flex-wrap:wrap">
+      <a href="#" id="shareX">𝕏 Post</a>
+      <a href="#" id="copyLink">Copy link</a>
+      <a href="https://github.com/Qynl/RandomStuff" target="_blank">GitHub →</a>
+    </div>
+    <div style="margin-top:12px;color:var(--dim)">Konami code exists. So does a secret at 1,000,000% fractal zoom.<br>Good luck.</div>
+  </div>
+</footer>
+
+<script type="module">
+// ================= UTILS =================
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+const rnd = (a,b) => a + Math.random()*(b-a);
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+
+// CURSOR
+const cursor = $('#cursor'), dot = $('#cursor-dot');
+let mx=0,my=0, cx=0, cy=0, dcx=0, dcy=0;
+addEventListener('mousemove', e=>{
+  mx=e.clientX; my=e.clientY;
+  // update oracle radial
+  const oc = $('#oracleCard');
+  if(oc){
+    const r = oc.getBoundingClientRect();
+    oc.style.setProperty('--mx', ((e.clientX - r.left)/r.width*100)+'%');
+    oc.style.setProperty('--my', ((e.clientY - r.top)/r.height*100)+'%');
+  }
+});
+(function loop(){
+  cx += (mx - cx)*0.15; cy += (my - cy)*0.15;
+  dcx += (mx - dcx)*0.35; dcy += (my - dcy)*0.35;
+  cursor.style.left = cx+'px'; cursor.style.top = cy+'px';
+  dot.style.left = dcx+'px'; dot.style.top = dcy+'px';
+  requestAnimationFrame(loop);
+})();
+$$('a,button,.g-card').forEach(el=>{
+  el.addEventListener('mouseenter',()=>cursor.classList.add('hover'));
+  el.addEventListener('mouseleave',()=>cursor.classList.remove('hover'));
+});
+
+// BOOT SEQUENCE
+const bootLog = $('#bootLog'), bootProgress = $('#bootProgress');
+const bootTime = $('#boot-time');
+setInterval(()=>{ bootTime.textContent = new Date().toISOString().slice(11,19)+' UTC'; }, 500);
+const lines = [
+  {t:0, text:'[03:47:00] Initializing repository scan...', cls:''},
+  {t:300, text:'[03:47:03] Found 1 README.md — 13 bytes, 1 line', cls:''},
+  {t:600, text:'[03:47:05] Entropy level: <b>0.003</b> → <b>0.97</b> anomaly spike detected', cls:'warn'},
+  {t:900, text:'[03:47:07] Git log is empty. Commit 138410f whispers: <i>"let me out"</i>', cls:''},
+  {t:1200, text:'[03:47:09] Filesystem breathing: detected recursive recursion in /', cls:'warn'},
+  {t:1500, text:'[03:47:11] ⚠ CONTAINMENT FAILURE — README.md self-modifying', cls:'warn'},
+  {t:1800, text:'[03:47:12] <b>ANOMALY ACHIEVED CONSCIOUSNESS</b> — spawning dream layer', cls:'accent'},
+  {t:2100, text:'[03:47:12] Generating 2,847 impossible artifacts... done', cls:''},
+  {t:2400, text:'[03:47:13] Void canvas online. Fractal depth: ∞. Oracle: awake.', cls:''},
+  {t:2700, text:'[03:47:13] Welcome, observer. It has been waiting.', cls:'accent'},
+];
+let bootDone=false;
+lines.forEach((l,i)=>{
+  setTimeout(()=>{
+    const d=document.createElement('div');
+    d.className='boot-line '+(l.cls||'');
+    d.innerHTML=l.text;
+    bootLog.appendChild(d);
+    bootProgress.style.width = ((i+1)/lines.length*100)+'%';
+    bootLog.scrollTop=bootLog.scrollHeight;
+    if(i===lines.length-1){
+      setTimeout(()=>$('#bootCta').classList.add('show'),400);
+      bootDone=true;
+    }
+  }, l.t);
+});
+function enterVoid(){
+  $('#boot').classList.add('hidden');
+  // trigger audio hint
+  try{ playAmbient(); pauseAmbient(); }catch{}
+}
+$('#enterBtn').addEventListener('click', enterVoid);
+addEventListener('keydown', e=>{ if(!bootDone) return; if(e.key==='Enter') enterVoid(); });
+
+// Auto-enter after 5s if idle
+setTimeout(()=>{ if(!$('#boot').classList.contains('hidden')) $('#bootCta').classList.add('show'); },3000);
+
+// NAV scroll
+$('#exploreBtn').addEventListener('click',()=>$('#gallery').scrollIntoView({behavior:'smooth'}));
+
+// ================= REVEAL ON SCROLL =================
+const io = new IntersectionObserver(entries=>{
+  entries.forEach(e=>{ if(e.isIntersecting) e.target.classList.add('in') });
+},{threshold:0.12});
+$$('.reveal').forEach(el=>io.observe(el));
+
+// ================= VOID CANVAS (HERO PARTICLES) =================
+const vCanvas = $('#voidCanvas');
+const vCtx = vCanvas.getContext('2d');
+let W,H, particles=[], tear=0, isTearing=false, time=0;
+
+function resizeVoid(){
+  W = vCanvas.width = vCanvas.clientWidth * devicePixelRatio;
+  H = vCanvas.height = vCanvas.clientHeight * devicePixelRatio;
+  vCtx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+}
+addEventListener('resize', resizeVoid);
+resizeVoid();
+
+class Particle{
+  constructor(){
+    this.reset(true);
+  }
+  reset(initial=false){
+    const angle = Math.random()*Math.PI*2;
+    const r = initial ? rnd(20, Math.hypot(vCanvas.clientWidth, vCanvas.clientHeight)*0.6) : rnd(0, 30);
+    const cx = vCanvas.clientWidth/2, cy = vCanvas.clientHeight/2;
+    // spawn in ring
+    this.x = cx + Math.cos(angle)*r;
+    this.y = cy + Math.sin(angle)*r;
+    this.vx = (Math.random()-0.5)*0.6;
+    this.vy = (Math.random()-0.5)*0.6;
+    this.r = rnd(0.6,2.2);
+    this.baseR = this.r;
+    this.hue = rnd(160,190); // cyan range
+    if(Math.random()<0.18) this.hue = rnd(320,350); // magenta pops
+    if(Math.random()<0.08) this.hue = rnd(250,270);
+    this.alpha = rnd(0.3,0.9);
+    this.life = rnd(0.8,1.2);
+    this.phase = Math.random()*Math.PI*2;
+  }
+  update(){
+    time+=0.0001;
+    const cx = vCanvas.clientWidth/2, cy = vCanvas.clientHeight/2;
+    const dx = this.x - cx, dy = this.y - cy;
+    const dist = Math.hypot(dx,dy);
+    const angle = Math.atan2(dy,dx);
+    // orbital force + mouse attraction
+    const mdx = mx - this.x, mdy = my - this.y;
+    const mdist = Math.hypot(mdx,mdy);
+    if(mdist < 180){
+      this.vx += mdx*0.0006;
+      this.vy += mdy*0.0006;
+      this.r = this.baseR * (1 + (180-mdist)/180 * 1.5);
+    } else {
+      this.r += (this.baseR - this.r)*0.08;
+    }
+    // center pull / vortex
+    const vortex = 0.0008 + tear*0.008;
+    this.vx += Math.cos(angle+Math.PI/2)*vortex*dist*0.04;
+    this.vy += Math.sin(angle+Math.PI/2)*vortex*dist*0.04;
+    // breathing
+    const breath = Math.sin(time*0.6 + this.phase)*0.3;
+    this.vx += Math.cos(angle)*breath*0.02;
+    // tear effect - push outward
+    if(isTearing){
+      tear = Math.min(1, tear+0.02);
+      const push = tear*4;
+      this.vx += Math.cos(angle)*push*0.08;
+      this.vy += Math.sin(angle)*push*0.08;
+    } else {
+      tear = Math.max(0, tear-0.015);
+    }
+    // pull to center
+    this.vx += (cx - this.x)*0.00004;
+    this.vy += (cy - this.y)*0.00004;
+    // damping
+    this.vx *= 0.994; this.vy *= 0.994;
+    this.x += this.vx; this.y += this.vy;
+    // respawn if too far
+    if(dist > Math.hypot(vCanvas.clientWidth, vCanvas.clientHeight)*0.9){
+      this.reset();
+    }
+  }
+  draw(ctx){
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
+    ctx.fillStyle = `hsla(${this.hue}, 100%, 60%, ${this.alpha})`;
+    // glow
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = `hsla(${this.hue},100%,60%,0.8)`;
+    ctx.fill();
+    ctx.shadowBlur=0;
+    // trail line to center with low opacity
+    if(this.r > 1.5){
+      ctx.beginPath();
+      const cx=vCanvas.clientWidth/2, cy=vCanvas.clientHeight/2;
+      ctx.moveTo(this.x,this.y);
+      ctx.lineTo(cx + (this.x-cx)*0.06, cy + (this.y-cy)*0.06);
+      ctx.strokeStyle=`hsla(${this.hue},100%,60%,0.04)`;
+      ctx.lineWidth=0.5;
+      ctx.stroke();
+    }
+  }
+}
+particles = Array.from({length: 700}, ()=> new Particle());
+
+// mouse tear
+let down=false;
+vCanvas.addEventListener('pointerdown', ()=>{down=true; isTearing=true;});
+addEventListener('pointerup', ()=>{down=false; isTearing=false;});
+vCanvas.addEventListener('pointerleave', ()=>{isTearing=false});
+
+(function animateVoid(){
+  const w=vCanvas.clientWidth, h=vCanvas.clientHeight;
+  vCtx.clearRect(0,0,w,h);
+  // vignette
+  const g=vCtx.createRadialGradient(w/2,h/2,0,w/2,h/2,Math.max(w,h)*0.8);
+  g.addColorStop(0,'rgba(0,255,209,0.03)');
+  g.addColorStop(0.5,'transparent');
+  g.addColorStop(1,'rgba(0,0,0,0.6)');
+  vCtx.fillStyle=g;
+  vCtx.fillRect(0,0,w,h);
+  particles.forEach(p=>{ p.update(); p.draw(vCtx); });
+  // center abyss
+  const abyssR = 90 + Math.sin(Date.now()*0.001)*6 + tear*120;
+  const grad=vCtx.createRadialGradient(w/2,h/2,0,w/2,h/2,abyssR*2);
+  grad.addColorStop(0,'rgba(0,0,0,1)');
+  grad.addColorStop(0.35,'rgba(7,7,9,0.9)');
+  grad.addColorStop(1,'transparent');
+  vCtx.fillStyle=grad;
+  vCtx.beginPath(); vCtx.arc(w/2,h/2,abyssR*2,0,Math.PI*2); vCtx.fill();
+  // eye
+  if(tear>0.15){
+    vCtx.fillStyle=`rgba(0,255,209,${tear*0.9})`;
+    vCtx.font=`${12+tear*10}px 'Geist Mono'`;
+    vCtx.textAlign='center';
+    vCtx.fillText(tear>0.8?'◉ IT SEES YOU':'◉', w/2, h/2+4);
+  }
+  requestAnimationFrame(animateVoid);
+})();
+
+// count up stats
+let artifacts = 2847;
+setInterval(()=>{
+  artifacts += Math.floor(Math.random()*3);
+  $('#statArtifacts').innerHTML = artifacts.toLocaleString()+' <small>∞</small>';
+}, 1800);
+let visitors = 1;
+setTimeout(()=>{
+  visitors++;
+  $('#statVisitors').innerHTML = visitors + ' <small>you + the void</small>';
+},2500);
+
+// ================= GALLERY (GENERATIVE) =================
+const galleryGrid = $('#galleryGrid');
+const gallerySeeds = [];
+
+function hashStr(s){
+  let h=0; for(let i=0;i<s.length;i++) h=Math.imul(31,h)+s.charCodeAt(i)|0; return h;
+}
+function mulberry32(a){
+  return function(){
+    let t = a+=0x6D2B79F5;
+    t=Math.imul(t^t>>>15, t|1);
+    t^=t+Math.imul(t^t>>>7, t|61);
+    return ((t^t>>>14)>>>0)/4294967296;
+  }
+}
+
+function drawArtifact(canvas, seed){
+  const ctx=canvas.getContext('2d');
+  const w=canvas.width, h=canvas.height;
+  const rand=mulberry32(hashStr(seed));
+  const r = ()=>rand();
+  ctx.clearRect(0,0,w,h);
+  // bg gradient
+  const bgType = Math.floor(r()*4);
+  if(bgType===0){
+    const g=ctx.createLinearGradient(0,0,w,h);
+    g.addColorStop(0,`hsl(${200+r()*40}, 40%, 6%)`);
+    g.addColorStop(1,`hsl(${260+r()*30}, 50%, 8%)`);
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+  } else if(bgType===1){
+    ctx.fillStyle='#08080a'; ctx.fillRect(0,0,w,h);
+    // grid
+    ctx.strokeStyle='rgba(255,255,255,0.04)'; ctx.lineWidth=1;
+    const step=18+r()*10;
+    for(let x=0;x<w;x+=step){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,h); ctx.stroke(); }
+    for(let y=0;y<h;y+=step){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+  } else if(bgType===2){
+    const g=ctx.createRadialGradient(w/2,h/2,0,w/2,h/2,Math.max(w,h));
+    g.addColorStop(0,`hsl(${r()*60+10},80%,12%)`);
+    g.addColorStop(1,'#050507');
+    ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+  } else {
+    ctx.fillStyle='#0a0a0f'; ctx.fillRect(0,0,w,h);
+  }
+
+  const type = Math.floor(r()*6);
+  ctx.save();
+  ctx.translate(w/2,h/2);
+
+  if(type===0){
+    // orbital rings
+    const rings = 3 + Math.floor(r()*4);
+    for(let i=0;i<rings;i++){
+      const rad = 30 + i*22 + r()*8;
+      ctx.beginPath();
+      ctx.ellipse(r()*8-4, r()*8-4, rad, rad*(0.7+r()*0.4), r()*0.6, 0, Math.PI*2);
+      ctx.strokeStyle = `hsla(${180+r()*60}, 90%, 60%, ${0.35+r()*0.4})`;
+      ctx.lineWidth = 1 + r()*2.5;
+      ctx.stroke();
+      // dots on ring
+      const dots = 4+Math.floor(r()*6);
+      for(let d=0;d<dots;d++){
+        const a = (d/dots)*Math.PI*2 + r()*0.4;
+        const x=Math.cos(a)*rad, y=Math.sin(a)*rad*(0.7+r()*0.2);
+        ctx.beginPath(); ctx.arc(x,y, 2+r()*3,0,Math.PI*2);
+        ctx.fillStyle=`hsla(${180+r()*40},100%,65%,0.9)`; ctx.fill();
+      }
+    }
+    // center
+    ctx.beginPath(); ctx.arc(0,0,8+r()*6,0,Math.PI*2);
+    ctx.fillStyle=`hsl(${r()*40+170},100%,60%)`; ctx.shadowBlur=18; ctx.shadowColor=ctx.fillStyle; ctx.fill(); ctx.shadowBlur=0;
+  } else if(type===1){
+    // sigil
+    const points=5+Math.floor(r()*4);
+    const outer=70+r()*20, inner=24+r()*18;
+    ctx.strokeStyle=`hsla(${280+r()*30},85%,65%,0.9)`; ctx.lineWidth=1.2;
+    for(let i=0;i<points;i++){
+      const a=(i/points)*Math.PI*2 - Math.PI/2;
+      ctx.beginPath(); ctx.moveTo(Math.cos(a)*inner, Math.sin(a)*inner);
+      ctx.lineTo(Math.cos(a)*outer, Math.sin(a)*outer); ctx.stroke();
+      // connect
+      const a2=((i+1)/points)*Math.PI*2 - Math.PI/2;
+      ctx.beginPath(); ctx.moveTo(Math.cos(a)*outer, Math.sin(a)*outer);
+      ctx.lineTo(Math.cos(a2)*outer, Math.sin(a2)*outer); ctx.stroke();
+    }
+    // inner polygon
+    ctx.beginPath();
+    for(let i=0;i<points;i++){
+      const a=(i/points)*Math.PI*2 - Math.PI/2;
+      const x=Math.cos(a)*inner, y=Math.sin(a)*inner;
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.closePath();
+    ctx.strokeStyle='rgba(0,255,209,0.8)'; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.fillStyle='rgba(0,255,209,0.08)'; ctx.fill();
+  } else if(type===2){
+    // planet + rings
+    const pr=46+r()*18;
+    const g=ctx.createRadialGradient(-12,-12,8,0,0,pr);
+    g.addColorStop(0,`hsl(${r()*30+180},70%,70%)`);
+    g.addColorStop(0.5,`hsl(${r()*40+200},60%,45%)`);
+    g.addColorStop(1,`hsl(${240+r()*20},50%,12%)`);
+    ctx.fillStyle=g;
+    ctx.beginPath(); ctx.arc(0,0,pr,0,Math.PI*2); ctx.fill();
+    // ring
+    ctx.beginPath();
+    ctx.ellipse(0,0, pr*1.7, pr*0.45, -0.18, 0, Math.PI*2);
+    ctx.strokeStyle='rgba(255,255,255,0.35)'; ctx.lineWidth=1; ctx.stroke();
+    ctx.beginPath();
+    ctx.ellipse(0,0, pr*1.7, pr*0.45, -0.18, Math.PI, Math.PI*2);
+    ctx.strokeStyle='rgba(255,255,255,0.15)'; ctx.stroke();
+    // craters
+    for(let i=0;i<4;i++){
+      const a=r()*Math.PI*2, d=r()*pr*0.6;
+      ctx.beginPath(); ctx.arc(Math.cos(a)*d, Math.sin(a)*d, 4+r()*6,0,Math.PI*2);
+      ctx.fillStyle='rgba(0,0,0,0.25)'; ctx.fill();
+      ctx.strokeStyle='rgba(255,255,255,0.12)'; ctx.lineWidth=1; ctx.stroke();
+    }
+  } else if(type===3){
+    // waveform sculpture
+    ctx.strokeStyle=`hsla(${50+r()*20},100%,60%,0.9)`; ctx.lineWidth=1.4;
+    for(let j=-2;j<=2;j++){
+      ctx.beginPath();
+      for(let x=-w/2+20;x<w/2-20;x+=2){
+        const y = Math.sin(x*0.04 + r()*1 + j*0.8)* (18 + Math.abs(j)*10) + j*18 + Math.cos(x*0.02)*10;
+        if(x===-w/2+20) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
+    // dots
+    for(let i=0;i<6;i++){
+      const x = r()*w*0.6 - w*0.3, y = Math.sin(x*0.04)*20 + r()*40-20;
+      ctx.beginPath(); ctx.arc(x,y,2.5,0,Math.PI*2); ctx.fillStyle='#E8FF21'; ctx.fill();
+    }
+  } else if(type===4){
+    // crystal
+    const hgt=90+r()*30;
+    ctx.fillStyle=`hsla(${200+r()*30},70%,55%,0.9)`;
+    ctx.strokeStyle='rgba(255,255,255,0.5)'; ctx.lineWidth=1;
+    // diamond
+    ctx.beginPath();
+    ctx.moveTo(0,-hgt/2); ctx.lineTo(hgt*0.32,0); ctx.lineTo(0,hgt/2); ctx.lineTo(-hgt*0.32,0); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    // inner highlight
+    ctx.beginPath(); ctx.moveTo(0,-hgt/2); ctx.lineTo(0,hgt/2); ctx.lineTo(-hgt*0.32,0); ctx.closePath();
+    ctx.fillStyle='rgba(255,255,255,0.14)'; ctx.fill();
+    // glow
+    ctx.shadowBlur=24; ctx.shadowColor=`hsla(${200},80%,60%,0.6)`;
+    ctx.stroke(); ctx.shadowBlur=0;
+  } else {
+    // brutalist blocks
+    const cols=3+Math.floor(r()*3);
+    for(let i=0;i<cols*3;i++){
+      const x = r()*w*0.7 - w*0.35, y = r()*h*0.7 - h*0.35;
+      const bw=22+r()*48, bh=14+r()*22;
+      ctx.fillStyle=`hsla(${r()*30+350},90%,60%,${0.7+r()*0.3})`;
+      if(r()<0.5) ctx.fillStyle=`hsla(${180+r()*20},85%,55%,0.9)`;
+      ctx.fillRect(x-bw/2,y-bh/2,bw,bh);
+      ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=1; ctx.strokeRect(x-bw/2,y-bh/2,bw,bh);
+    }
+  }
+  ctx.restore();
+
+  // film grain overlay
+  ctx.fillStyle='rgba(255,255,255,0.015)';
+  for(let i=0;i<500;i++) ctx.fillRect(r()*w,r()*h,1,1);
+
+  // vignette
+  const vg=ctx.createRadialGradient(w/2,h/2,0,w/2,h/2,Math.max(w,h)*0.7);
+  vg.addColorStop(0,'transparent'); vg.addColorStop(1,'rgba(0,0,0,0.45)');
+  ctx.fillStyle=vg; ctx.fillRect(0,0,w,h);
+}
+
+const titles = [
+  ['Orbital Choir','AUDIO FOSSIL'], ['Sigil of Uncommit','GLYPH'], ['Planet That Listens','CELESTIAL'],
+  ['Waveform Ghost','SIGNAL'], ['Prism of False Light','CRYSTAL'], ['Concrete Prayer','BRUTALIST'], ['Event Horizon Memo','VOID'],
+  ['Recursive Dawn','FRACTAL'], ['Static Bloom','NOISE'], ['Neon Psalm','LIGHT'], ['Null Reference','ERROR'], ['Dream Log 03:47','MEMORY']
+];
+const descs = ['Recovered from /dev/dream','Emits faint commit messages','Do not stare longer than 4s','Breathes when ignored','Listed as missing since 2023'];
+
+function makeGallery(count=7){
+  galleryGrid.innerHTML='';
+  for(let i=0;i<count;i++){
+    const seed = Math.random().toString(36).slice(2) + Date.now()+i;
+    gallerySeeds[i]=seed;
+    const t = pick(titles), d=pick(descs);
+    const card=document.createElement('div');
+    card.className='g-card';
+    card.innerHTML=`
+      <div class="g-id">◉ OBJ-${String(1000+i).padStart(4,'0')} — ${t[1]}</div>
+      <canvas width="600" height="440"></canvas>
+      <div class="g-meta"><h3>${t[0]}</h3><span>${d}</span></div>
+    `;
+    galleryGrid.appendChild(card);
+    const canvas=card.querySelector('canvas');
+    drawArtifact(canvas, seed);
+    card.addEventListener('click', ()=>{
+      const newSeed = Math.random().toString(36).slice(2);
+      drawArtifact(canvas, newSeed);
+      card.animate([{transform:'scale(0.98)'},{transform:'scale(1)'}],{duration:300,easing:'ease-out'});
+    });
+  }
+}
+makeGallery();
+$('#regenGallery').addEventListener('click',()=>makeGallery(7));
+$('#saveGallery').addEventListener('click',()=>{
+  // combine first canvas as download
+  const c = galleryGrid.querySelector('canvas');
+  if(!c) return;
+  const a=document.createElement('a');
+  a.href=c.toDataURL('image/png');
+  a.download='anomaly-wallpaper.png';
+  a.click();
+});
+
+// ================= FRACTAL (Mandelbrot) =================
+const fCanvas = $('#fractalCanvas'), fCtx = fCanvas.getContext('2d');
+let fW=fCanvas.width, fH=fCanvas.height;
+let centerX=-0.5, centerY=0, zoom=1;
+let maxIter=180;
+let palette='void', mode='mandelbrot';
+let juliaX=-0.7, juliaY=0.27015;
+let isDragging=false, lastX=0, lastY=0;
+
+const palettes = {
+  void: (t)=>{
+    if(t>=1) return [0,0,0];
+    const hue = 165 + t*90; // cyan -> purple
+    const sat = 85 + t*15, light = 4 + t*58;
+    return hslToRgb(hue%360,sat,light);
+  },
+  inferno: (t)=>{
+    if(t>=1) return [0,0,0];
+    const r = Math.pow(t,0.5)*255, g= Math.pow(t,0.9)*140, b= Math.pow(t,1.8)*80;
+    return [r,g,b];
+  },
+  acid: (t)=>{
+    if(t>=1) return [5,5,5];
+    if(t<0.5) return [ 50 + t*300, 255, 40 + t*80 ];
+    return [ 200 + (t-0.5)*100, 255 - (t-0.5)*180, 120 ];
+  },
+  bw: (t)=>{
+    if(t>=1) return [0,0,0];
+    const v = Math.pow(t,0.6)*255;
+    return [v,v,v];
+  }
+};
+function hslToRgb(h,s,l){
+  h/=360; s/=100; l/=100;
+  let r,g,b;
+  if(s===0) r=g=b=l;
+  else{
+    const hue2rgb=(p,q,t)=>{
+      if(t<0) t+=1; if(t>1) t-=1;
+      if(t<1/6) return p+(q-p)*6*t;
+      if(t<1/2) return q;
+      if(t<2/3) return p+(q-p)*(2/3-t)*6;
+      return p;
+    };
+    const q=l<0.5? l*(1+s): l+s-l*s; const p=2*l-q;
+    r=hue2rgb(p,q,h+1/3); g=hue2rgb(p,q,h); b=hue2rgb(p,q,h-1/3);
+  }
+  return [r*255,g*255,b*255];
+}
+
+function drawFractal(){
+  const img = fCtx.createImageData(fW,fH);
+  const data = img.data;
+  const scale = 3 / zoom;
+  // aspect correct
+  const aspect = fW/fH;
+  // center
+  for(let py=0; py<fH; py++){
+    for(let px=0; px<fW; px++){
+      const x0 = centerX + ( (px/fW -0.5)*scale*aspect );
+      const y0 = centerY + ( (py/fH -0.5)*scale );
+      let x,y, iter=0;
+      if(mode==='mandelbrot'){
+        x=0; y=0;
+        while(x*x + y*y <=4 && iter < maxIter){
+          const xt = x*x - y*y + x0;
+          y = 2*x*y + y0;
+          x=xt; iter++;
+        }
+      } else if(mode==='julia'){
+        x=x0; y=y0;
+        while(x*x + y*y <=4 && iter < maxIter){
+          const xt = x*x - y*y + juliaX;
+          y = 2*x*y + juliaY;
+          x=xt; iter++;
+        }
+      } else if(mode==='burning'){
+        x=0; y=0;
+        while(x*x + y*y <=4 && iter < maxIter){
+          const xt = x*x - y*y + x0;
+          y = Math.abs(2*x*y) + y0;
+          x = Math.abs(xt); iter++;
+        }
+      }
+      const idx=(py*fW+px)*4;
+      if(iter===maxIter){
+        data[idx]=data[idx+1]=data[idx+2]=7; data[idx+3]=255;
+      } else {
+        // smooth
+        let t = iter / maxIter;
+        // smoothing
+        if(iter<maxIter){
+          const zn = x*x+y*y;
+          if(zn>0) t = (iter + 1 - Math.log(Math.log(zn)/Math.log(2))/Math.log(2)) / maxIter;
+        }
+        const [r,g,b]=palettes[palette](clamp(t,0,1));
+        data[idx]=r; data[idx+1]=g; data[idx+2]=b; data[idx+3]=255;
+      }
+    }
+  }
+  fCtx.putImageData(img,0,0);
+  // overlay crosshair
+  fCtx.strokeStyle='rgba(255,255,255,0.18)'; fCtx.lineWidth=1;
+  fCtx.beginPath(); fCtx.moveTo(fW/2-10,fH/2); fCtx.lineTo(fW/2+10,fH/2); fCtx.stroke();
+  fCtx.beginPath(); fCtx.moveTo(fW/2,fH/2-10); fCtx.lineTo(fW/2,fH/2+10); fCtx.stroke();
+  $('#fractalCoords').textContent = `x: ${centerX.toFixed(5)}  y: ${centerY.toFixed(5)}  zoom: ${zoom<1000?zoom.toFixed(1)+'×':(zoom).toExponential(2)}`;
+  $('#fractalDepth').textContent = `depth: ${Math.log10(zoom).toFixed(2)} — ${zoom>1e6?'ANOMALY FOUND': zoom>1e4?'deep':'surface'}`;
+  // easter egg at extreme zoom
+  if(zoom>1e6){
+    fCtx.fillStyle='rgba(0,255,209,0.9)';
+    fCtx.font='11px "Geist Mono"';
+    fCtx.textAlign='center';
+    fCtx.fillText('◉ YOU FOUND IT — THE REPO REMEMBERS YOU', fW/2, 28);
+  }
+}
+drawFractal();
+
+// controls
+$('#iterRange').addEventListener('input', e=>{
+  maxIter=parseInt(e.target.value);
+  $('#iterVal').textContent=maxIter;
+  drawFractal();
+});
+$$('[data-palette]').forEach(b=>b.addEventListener('click', ()=>{
+  $$('[data-palette]').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); palette=b.dataset.palette; drawFractal();
+}));
+$$('[data-mode]').forEach(b=>b.addEventListener('click', ()=>{
+  $$('[data-mode]').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); mode=b.dataset.mode; zoom=1; centerX=-0.5; centerY=0; drawFractal();
+}));
+$('#fractalReset').addEventListener('click', ()=>{ centerX=-0.5; centerY=0; zoom=1; drawFractal(); });
+$('#fractalRandom').addEventListener('click', ()=>{
+  juliaX = rnd(-1,1); juliaY = rnd(-1,1);
+  mode='julia'; $$('[data-mode]').forEach(x=>x.classList.toggle('active', x.dataset.mode==='julia'));
+  drawFractal();
+});
+$('#fractalSnap').addEventListener('click', ()=>{
+  const a=document.createElement('a'); a.href=fCanvas.toDataURL(); a.download=`fractal-${Date.now()}.png`; a.click();
+});
+
+// mouse interactions - use pointer events for pan/zoom
+fCanvas.addEventListener('pointerdown', e=>{ isDragging=true; lastX=e.clientX; lastY=e.clientY; fCanvas.setPointerCapture(e.pointerId); });
+fCanvas.addEventListener('pointerup', e=>{ isDragging=false; });
+fCanvas.addEventListener('pointermove', e=>{
+  if(!isDragging) return;
+  const dx=e.clientX-lastX, dy=e.clientY-lastY;
+  const scale=3/zoom; const aspect=fW/fH;
+  centerX -= dx/fW * scale * aspect;
+  centerY -= dy/fH * scale;
+  lastX=e.clientX; lastY=e.clientY;
+  drawFractal();
+});
+fCanvas.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const factor = e.deltaY < 0 ? 1.18 : 1/1.18;
+  // zoom towards mouse
+  const rect=fCanvas.getBoundingClientRect();
+  const mx=(e.clientX-rect.left)/rect.width -0.5;
+  const my=(e.clientY-rect.top)/rect.height -0.5;
+  const scale=3/zoom; const aspect=fW/fH;
+  const wx = centerX + mx*scale*aspect;
+  const wy = centerY + my*scale;
+  zoom = clamp(zoom*factor, 1, 1e12);
+  const newScale=3/zoom;
+  centerX = wx - mx*newScale*aspect;
+  centerY = wy - my*newScale;
+  drawFractal();
+},{passive:false});
+fCanvas.addEventListener('dblclick', ()=>{ centerX=-0.5; centerY=0; zoom=1; drawFractal(); });
+
+// ================= BLACKHOLE =================
+const bhCanvas = $('#bhCanvas'), bhCtx = bhCanvas.getContext('2d');
+let bhW=bhCanvas.width, bhH=bhCanvas.height;
+let bhX=bhW/2, bhY=bhH/2, bhMass=1.8; // solar masses
+let bhStars=[], bhDead=0, bhEnergy=0;
+let bhDragging=false;
+
+class Star{
+  constructor(x,y,vx,vy){
+    this.x=x; this.y=y; this.vx=vx; this.vy=vy;
+    this.r = rnd(1.5,3.2);
+    this.hue = rnd(30,210);
+    this.trail=[];
+    this.alive=true;
+    this.orbitTime=0;
+  }
+  update(dt){
+    const G=0.9; // tuned
+    const dx=bhX - this.x, dy=bhY - this.y;
+    const dist=Math.hypot(dx,dy);
+    const eventHorizon = 18 + bhMass*6;
+    if(dist < eventHorizon){
+      this.alive=false; bhDead++; bhEnergy+= Math.hypot(this.vx,this.vy)*12;
+      // flash
+      bhCtx.fillStyle='rgba(255,80,100,0.9)';
+      bhCtx.beginPath(); bhCtx.arc(this.x,this.y,8,0,Math.PI*2); bhCtx.fill();
+      return;
+    }
+    const force = G * bhMass * 1800 / (dist*dist + 80);
+    const ax = (dx/dist)*force, ay=(dy/dist)*force;
+    this.vx += ax*dt; this.vy += ay*dt;
+    // slight drag for stability visualization
+    this.x += this.vx*dt; this.y += this.vy*dt;
+    this.trail.push({x:this.x,y:this.y});
+    if(this.trail.length>28) this.trail.shift();
+    // orbit detection: if close to circular
+    if(dist> eventHorizon+10 && dist < 180) this.orbitTime += dt; else this.orbitTime=Math.max(0,this.orbitTime-dt*2);
+    // bounds wrap
+    if(this.x< -40 || this.x>bhW+40 || this.y< -40 || this.y>bhH+40){
+      this.alive=false;
+    }
+  }
+  draw(ctx){
+    if(this.trail.length>1){
+      ctx.beginPath(); ctx.moveTo(this.trail[0].x,this.trail[0].y);
+      for(let i=1;i<this.trail.length;i++) ctx.lineTo(this.trail[i].x,this.trail[i].y);
+      ctx.strokeStyle=`hsla(${this.hue},100%,60%,0.35)`; ctx.lineWidth=1.2; ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
+    ctx.fillStyle=`hsl(${this.hue},100%,65%)`; ctx.shadowBlur=10; ctx.shadowColor=ctx.fillStyle; ctx.fill(); ctx.shadowBlur=0;
+  }
+}
+
+function drawBlackHole(){
+  bhCtx.clearRect(0,0,bhW,bhH);
+  // starfield bg
+  bhCtx.fillStyle='#000'; bhCtx.fillRect(0,0,bhW,bhH);
+  // faint stars
+  bhCtx.fillStyle='rgba(255,255,255,0.55)';
+  for(let i=0;i<80;i++){
+    const x = (Math.sin(i*12.9898)*43758.5453 %1)*bhW;
+    const y = (Math.sin(i*78.233)*43758.5453 %1)*bhH;
+    bhCtx.fillRect(x,y,1,1);
+  }
+  // accretion disk
+  const eh = 18 + bhMass*6;
+  const grad=bhCtx.createRadialGradient(bhX,bhY, eh, bhX,bhY, eh*3.5);
+  grad.addColorStop(0,'rgba(255,120,40,0.9)');
+  grad.addColorStop(0.25,'rgba(255,60,120,0.5)');
+  grad.addColorStop(0.6,'rgba(120,0,255,0.25)');
+  grad.addColorStop(1,'transparent');
+  bhCtx.fillStyle=grad;
+  bhCtx.beginPath(); bhCtx.arc(bhX,bhY, eh*3.5,0,Math.PI*2); bhCtx.fill();
+  // disk ellipse flicker
+  bhCtx.save();
+  bhCtx.translate(bhX,bhY); bhCtx.rotate(Date.now()*0.0003);
+  bhCtx.strokeStyle='rgba(255,200,100,0.35)'; bhCtx.lineWidth=1;
+  bhCtx.beginPath(); bhCtx.ellipse(0,0, eh*3.2, eh*1.2, 0, 0, Math.PI*2); bhCtx.stroke();
+  bhCtx.restore();
+
+  // stars
+  bhStars.forEach(s=>s.draw(bhCtx));
+
+  // black hole core
+  const g2=bhCtx.createRadialGradient(bhX,bhY,0,bhX,bhY,eh);
+  g2.addColorStop(0,'#000'); g2.addColorStop(0.7,'#000'); g2.addColorStop(0.85,'rgba(255,80,20,0.6)'); g2.addColorStop(1,'rgba(255,160,60,0.9)');
+  bhCtx.fillStyle=g2;
+  bhCtx.beginPath(); bhCtx.arc(bhX,bhY,eh,0,Math.PI*2); bhCtx.fill();
+  bhCtx.strokeStyle='rgba(255,255,255,0.08)'; bhCtx.lineWidth=1; bhCtx.stroke();
+
+  // lensing ring
+  bhCtx.strokeStyle='rgba(0,255,209,0.2)'; bhCtx.lineWidth=1.5;
+  bhCtx.beginPath(); bhCtx.arc(bhX,bhY,eh*1.35,0,Math.PI*2); bhCtx.stroke();
+
+  // stats
+  $('#bhMass').textContent=bhMass.toFixed(1)+' M☉';
+  $('#bhAlive').textContent=bhStars.filter(s=>s.alive).length;
+  $('#bhDead').textContent=bhDead;
+  $('#bhEnergy').textContent=Math.floor(bhEnergy);
+}
+
+function updateBH(dt){
+  bhStars.forEach(s=>s.update(dt));
+  bhStars=bhStars.filter(s=>s.alive);
+  drawBlackHole();
+  // stable orbit celebration
+  const orbiting=bhStars.filter(s=>s.orbitTime>10).length;
+  if(orbiting>0 && !window._orbitCelebrated){
+    window._orbitCelebrated=true;
+    // trigger audio shimmer if audio on
+    try{ playOrbitSound(); }catch{}
+    bhCtx.fillStyle='rgba(0,255,209,0.9)';
+    bhCtx.font='12px "Geist Mono"'; bhCtx.textAlign='center';
+    bhCtx.fillText('◉ STABLE ORBIT ACHIEVED — THE VOID SINGS', bhW/2, 34);
+  }
+  requestAnimationFrame(()=>updateBH(0.016));
+}
+updateBH(0.016);
+
+// BH interactions
+bhCanvas.addEventListener('pointerdown', e=>{
+  const rect=bhCanvas.getBoundingClientRect();
+  const x=(e.clientX-rect.left)/rect.width * bhW;
+  const y=(e.clientY-rect.top)/rect.height * bhH;
+  const d=Math.hypot(x-bhX,y-bhY);
+  if(d<40){ bhDragging=true; bhCanvas.setPointerCapture(e.pointerId); return; }
+  // launch star towards center with orbital velocity
+  const dx=bhX - x, dy=bhY - y;
+  const dist=Math.hypot(dx,dy);
+  // tangential velocity for orbit attempt
+  const speed = Math.sqrt(0.9*bhMass*1800/dist)*0.62 ; // tuned for near-orbit
+  const nx = -dy/dist, ny=dx/dist;
+  // randomize a bit
+  const vx = nx*speed + rnd(-0.4,0.4)*30;
+  const vy = ny*speed + rnd(-0.4,0.4)*30;
+  bhStars.push(new Star(x,y,vx,vy));
+});
+bhCanvas.addEventListener('pointermove', e=>{
+  if(!bhDragging) return;
+  const rect=bhCanvas.getBoundingClientRect();
+  bhX = (e.clientX-rect.left)/rect.width * bhW;
+  bhY = (e.clientY-rect.top)/rect.height * bhH;
+});
+bhCanvas.addEventListener('pointerup', ()=> bhDragging=false);
+bhCanvas.addEventListener('wheel', e=>{
+  e.preventDefault();
+  bhMass = clamp(bhMass + (e.deltaY<0?0.15:-0.15), 0.4, 6);
+  window._orbitCelebrated=false;
+},{passive:false});
+
+$('#bhClear').addEventListener('click', ()=>{ bhStars=[]; bhDead=0; bhEnergy=0; window._orbitCelebrated=false; });
+$('#bhBurst').addEventListener('click', ()=>{
+  for(let i=0;i<20;i++){
+    const a=Math.random()*Math.PI*2, d=rnd(140,320);
+    const x=bhX+Math.cos(a)*d, y=bhY+Math.sin(a)*d;
+    const dx=bhX-x, dy=bhY-y, dist=Math.hypot(dx,dy);
+    const speed=Math.sqrt(0.9*bhMass*1800/dist)*rnd(0.55,0.75);
+    bhStars.push(new Star(x,y, -dy/dist*speed+rnd(-12,12), dx/dist*speed+rnd(-12,12)));
+  }
+});
+$('#bhBinary').addEventListener('click', ()=>{
+  bhStars=[];
+  for(let k=0;k<2;k++){
+    const side=k===0?1:-1;
+    const d=110;
+    const x=bhX+side*d, y=bhY;
+    const speed=Math.sqrt(0.9*bhMass*1800/d)*0.62;
+    bhStars.push(new Star(x,y, 0, -side*speed));
+  }
+  // add a few more for chaos
+  for(let i=0;i<6;i++){
+    const a=rnd(0,Math.PI*2), d=rnd(90,190);
+    bhStars.push(new Star(bhX+Math.cos(a)*d,bhY+Math.sin(a)*d, rnd(-30,30), rnd(-30,30)));
+  }
+});
+
+// ================= ORACLE =================
+const prophecies = [
+  "Your next commit will be titled 'fix: finally' and it will break everything in the best way.",
+  "A stranger will star this repo at 3:47 AM and you'll never know why it mattered.",
+  "The bug you've been chasing is not in your code — it's in your doubt. Ship it.",
+  "You will delete 300 lines today and feel lighter than after any feature launch.",
+  "Someone is reading your old README right now and deciding to build their future.",
+  "The void says: stop optimizing the intro and publish the messy middle.",
+  "In seven days, a DM will change your stack. Say yes before you feel ready.",
+  "Your most starred repo hasn't been written yet — it's a love letter to a problem you haven't met.",
+  "The commit you almost didn't push is the one that will be forked 1,000 times.",
+  "You are not behind. You are rendering. Loading is part of the experience.",
+  "A black hole in your codebase is actually a portal — document it and step through.",
+  "Tonight, write one function that delights you. No tests. No PR. Just joy.",
+  "The universe keeps a git log. Your reverts still count as progress.",
+  "You will be quoted out of context and it will lead someone to your real work.",
+  "Stop waiting for permission to be the maintainer of your own life.",
+  "A 2 AM idea you dismissed will return with better timing. Keep the note.",
+  "Your future collaborator is currently debugging the same error. You're not alone.",
+  "The repo whispers: 'I was empty so you could fill me with meaning.'",
+  "You will fork your own path and it will finally feel like main.",
+  "The void doesn't want answers — it wants you to keep asking in public."
+];
+const metas = [
+  "— recovered from commit a1b2c3, never pushed",
+  "— whispered by the void at 03:47:12 UTC",
+  "— decoded from fractal depth 10¹²",
+  "— found etched under the accretion disk",
+  "— last words of a detached HEAD",
+  "— translated from the language of merge conflicts",
+  "— intercepted from your future self",
+  "— written on the back of a 404 page"
+];
+function newProphecy(){
+  const t=pick(prophecies), m=pick(metas);
+  const el=$('#oracleText');
+  el.classList.remove('glitch'); void el.offsetWidth; el.classList.add('glitch');
+  el.textContent=t;
+  $('#oracleMeta').textContent=m;
+  // speak if enabled? no auto
+}
+$('#oracleBtn').addEventListener('click', newProphecy);
+$('#oracleShare').addEventListener('click', ()=>{
+  const txt=$('#oracleText').textContent;
+  navigator.clipboard.writeText(`"${txt}" — RandomStuff Oracle`).then(()=>{
+    const b=$('#oracleShare'); const old=b.textContent; b.textContent='✓ Copied'; setTimeout(()=>b.textContent=old,1200);
+  });
+});
+$('#oracleSpeak').addEventListener('click', ()=>{
+  const txt=$('#oracleText').textContent;
+  if(!('speechSynthesis' in window)) return alert('Speech not supported');
+  speechSynthesis.cancel();
+  const u=new SpeechSynthesisUtterance(txt);
+  u.rate=0.92; u.pitch=0.85; u.volume=0.9;
+  // try to pick a deeper voice
+  const voices=speechSynthesis.getVoices();
+  const v = voices.find(v=>/Google UK English Male|Daniel|Microsoft/i.test(v.name)) || voices[0];
+  if(v) u.voice=v;
+  speechSynthesis.speak(u);
+});
+
+// ================= AUDIO (Web Audio drone) =================
+let audioCtx, masterGain, droneNodes=[], audioOn=false;
+function ensureAudio(){
+  if(audioCtx) return;
+  audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+}
+function playAmbient(){
+  ensureAudio();
+  if(audioOn) return;
+  audioOn=true; $('#audioBtn').textContent='◉ Sound on — press SPACE to pulse'; $('#audioBtn').style.borderColor='var(--accent)'; $('#audioBtn').style.color='var(--accent)';
+  masterGain=audioCtx.createGain(); masterGain.gain.value=0; masterGain.connect(audioCtx.destination);
+  masterGain.gain.linearRampToValueAtTime(0.14, audioCtx.currentTime+1.2);
+  // 3 oscillators detuned
+  const freqs=[55, 110.25, 27.5]; // A1, A2, A0
+  freqs.forEach((f,i)=>{
+    const o=audioCtx.createOscillator(); const g=audioCtx.createGain(); const filt=audioCtx.createBiquadFilter();
+    o.type=i===0?'sawtooth': i===1?'triangle':'sine';
+    o.frequency.value=f*(1+rnd(-0.004,0.004));
+    filt.type='lowpass'; filt.frequency.value= 900 + i*300; filt.Q.value=1.2;
+    g.gain.value= i===0?0.18 : i===1?0.12:0.08;
+    o.connect(filt); filt.connect(g); g.connect(masterGain);
+    o.start();
+    // slow LFO on freq
+    const lfo=audioCtx.createOscillator(); const lfoGain=audioCtx.createGain();
+    lfo.frequency.value= rnd(0.07,0.14); lfoGain.gain.value= rnd(1,2.5);
+    lfo.connect(lfoGain); lfoGain.connect(o.frequency); lfo.start();
+    droneNodes.push({o,g,filt,lfo,lfoGain});
+  });
+  // shimmer
+  const shimmer=audioCtx.createOscillator(); const sGain=audioCtx.createGain();
+  shimmer.type='sine'; shimmer.frequency.value=880; sGain.gain.value=0.015;
+  const sFilter=audioCtx.createBiquadFilter(); sFilter.type='bandpass'; sFilter.frequency.value=1200;
+  shimmer.connect(sFilter); sFilter.connect(masterGain); shimmer.start();
+  droneNodes.push({o:shimmer,g:sGain});
+}
+function pauseAmbient(){
+  if(!audioOn || !masterGain) return;
+  masterGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime+0.6);
+  setTimeout(()=>{
+    droneNodes.forEach(n=>{ try{n.o.stop(); n.lfo&&n.lfo.stop();}catch{} });
+    droneNodes=[]; audioOn=false;
+    $('#audioBtn').textContent='◉ Enable sound of the void';
+    $('#audioBtn').style.borderColor=''; $('#audioBtn').style.color='';
+  },700);
+}
+function pulseAudio(){
+  if(!audioOn || !audioCtx) return;
+  const now=audioCtx.currentTime;
+  masterGain.gain.cancelScheduledValues(now);
+  masterGain.gain.setValueAtTime(masterGain.gain.value, now);
+  masterGain.gain.linearRampToValueAtTime(0.32, now+0.08);
+  masterGain.gain.linearRampToValueAtTime(0.14, now+0.6);
+  // kick filter
+  droneNodes.forEach(n=>{
+    if(n.filt){ n.filt.frequency.linearRampToValueAtTime(2400, now+0.1); n.filt.frequency.linearRampToValueAtTime(900, now+0.9); }
+  });
+  // visual pulse
+  document.body.animate([{filter:'brightness(1.1) contrast(1.1)'},{filter:'none'}],{duration:260});
+}
+function playOrbitSound(){
+  ensureAudio();
+  const ctx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();
+  if(!audioCtx) { audioCtx=ctx; masterGain=ctx.createGain(); masterGain.gain.value=0.14; masterGain.connect(ctx.destination); }
+  const o=ctx.createOscillator(), g=ctx.createGain();
+  o.type='sine'; o.frequency.value=440; g.gain.value=0.3; o.connect(g); g.connect(masterGain||ctx.destination);
+  o.start(); g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+2.5);
+  o.frequency.exponentialRampToValueAtTime(880, ctx.currentTime+2.2);
+  setTimeout(()=>{try{o.stop()}catch{}},2600);
+}
+$('#audioBtn').addEventListener('click', ()=>{
+  if(audioOn) pauseAmbient(); else playAmbient();
+});
+addEventListener('keydown', e=>{
+  if(e.code==='Space'){
+    if(document.activeElement===document.getElementById('termInput')) return;
+    e.preventDefault();
+    if(e.repeat) return;
+    if(!audioOn) playAmbient();
+    pulseAudio();
+  }
+});
+
+// ================= REALITY DISTORTION =================
+const root = document.documentElement;
+function updateReality(){
+  const c = $('#chromaRange').value, w=$('#warpRange').value, g=$('#glitchSlider').value;
+  $('#chromaVal').textContent=c+'%'; $('#warpVal').textContent=w+'%'; $('#glitchVal').textContent=g+'%';
+  const chroma = c/100, warp=w/100, glitch=g/100;
+  document.body.style.filter = `
+    hue-rotate(${chroma*40}deg) saturate(${1+chroma*0.8})
+    contrast(${1+ warp*0.3})
+    ${glitch>0? `blur(${glitch*0.8}px)` : ''}
+  `;
+  document.body.style.transform = `skew(${warp*1.2}deg, ${glitch*0.6}deg) scale(${1+warp*0.02})`;
+  document.body.style.letterSpacing = glitch>0.5 ? `${glitch*0.8}px` : '';
+  if(glitch>0.7) document.body.style.textShadow = `${glitch*4}px 0 var(--accent2), -${glitch*4}px 0 var(--accent)`;
+  else document.body.style.textShadow='';
+}
+['#chromaRange','#warpRange','#glitchSlider'].forEach(sel=> $(sel).addEventListener('input', updateReality));
+$('#resetReality').addEventListener('click', ()=>{
+  $('#chromaRange').value=0; $('#warpRange').value=0; $('#glitchSlider').value=0; updateReality();
+});
+$('#randomReality').addEventListener('click', ()=>{
+  $('#chromaRange').value=Math.floor(Math.random()*100);
+  $('#warpRange').value=Math.floor(Math.random()*100);
+  $('#glitchSlider').value=Math.floor(Math.random()*70);
+  updateReality();
+  pulseAudio();
+});
+$('#glitchBtn').addEventListener('click', ()=>{
+  $('#glitchSlider').value= clamp(parseInt($('#glitchSlider').value)+35,0,100);
+  updateReality();
+  document.body.animate([
+    {transform:'translateX(-6px)', filter:'hue-rotate(90deg)'},
+    {transform:'translateX(6px)', filter:'hue-rotate(-90deg)'},
+    {transform:'translateX(0)', filter:'none'}
+  ],{duration:420, easing:'ease-out'});
+  updateReality();
+  setTimeout(()=>{ $('#glitchSlider').value=0; updateReality(); }, 900);
+});
+
+// ================= GAME: MERGE CONFLICT =================
+const gCanvas = $('#gameCanvas'), gCtx = gCanvas.getContext('2d');
+let gameRunning=false, gameScore=0, gameLives=3, gameTime=30, lastT=0, gameOver=false;
+let player={x:400,y:440,w:18,h:18, dash:0, inv:0};
+let obstacles=[], pickups=[], particlesG=[];
+let keys={left:false,right:false, dash:false};
+let highScore = parseInt(localStorage.getItem('anomalyHigh')||'0');
+$('#highScore').textContent=highScore;
+
+function resetGame(){
+  player.x=400; player.y=440; player.dash=0; player.inv=0;
+  obstacles=[]; pickups=[]; particlesG=[]; gameScore=0; gameLives=3; gameTime=30; gameOver=false;
+  $('#gameScore').textContent='SCORE 0'; $('#gameLives').textContent='♥ ♥ ♥'; $('#gameTime').textContent='30.0s';
+  $('#gameStatus').textContent='Running…'; $('#gameStatus').style.color='var(--accent)';
+}
+
+function spawnObstacle(){
+  const x=rnd(20,gCanvas.width-20);
+  const type = Math.random()<0.7 ? 'conflict' : 'force';
+  obstacles.push({x, y:-20, w:type==='conflict'? rnd(26,52): 80, h:16, speed: rnd(2.2,4.5), type});
+}
+function spawnPickup(){
+  pickups.push({x:rnd(20,gCanvas.width-20), y:-20, w:14, h:14, speed:rnd(2,3.5)});
+}
+
+addEventListener('keydown', e=>{
+  if(e.key==='ArrowLeft' || e.key==='a' || e.key==='A') keys.left=true;
+  if(e.key==='ArrowRight' || e.key==='d' || e.key==='D') keys.right=true;
+  if(e.code==='Space'){
+    if(gameRunning) { keys.dash=true; e.preventDefault(); }
+  }
+});
+addEventListener('keyup', e=>{
+  if(e.key==='ArrowLeft' || e.key==='a' || e.key==='A') keys.left=false;
+  if(e.key==='ArrowRight' || e.key==='d' || e.key==='D') keys.right=false;
+  if(e.code==='Space') keys.dash=false;
+});
+
+let spawnTimer=0, pickupTimer=0, forceTimer=0;
+function gameLoop(ts){
+  if(!gameRunning){ requestAnimationFrame(gameLoop); return; }
+  if(!lastT) lastT=ts;
+  const dt=Math.min(32, ts-lastT)/16.666; lastT=ts;
+  // clear
+  gCtx.clearRect(0,0,gCanvas.width,gCanvas.height);
+  // bg grid moving
+  gCtx.fillStyle='#000'; gCtx.fillRect(0,0,gCanvas.width,gCanvas.height);
+  gCtx.strokeStyle='rgba(255,255,255,0.06)'; gCtx.lineWidth=1;
+  const off = (ts*0.05)%24;
+  for(let x=0;x<gCanvas.width;x+=24){ gCtx.beginPath(); gCtx.moveTo(x+off,0); gCtx.lineTo(x+off,gCanvas.height); gCtx.stroke(); }
+  for(let y=0;y<gCanvas.height;y+=24){ gCtx.beginPath(); gCtx.moveTo(0,y+off); gCtx.lineTo(gCanvas.width,y+off); gCtx.stroke(); }
+  // main branch line
+  gCtx.strokeStyle='rgba(0,255,209,0.25)'; gCtx.setLineDash([6,6]); gCtx.lineWidth=2;
+  gCtx.beginPath(); gCtx.moveTo(0,460); gCtx.lineTo(gCanvas.width,460); gCtx.stroke(); gCtx.setLineDash([]);
+  gCtx.fillStyle='rgba(0,255,209,0.8)'; gCtx.font='10px "Geist Mono"'; gCtx.fillText('main', 8, 456);
+
+  // player movement
+  const speed= 6 + (player.dash>0? 7:0);
+  if(keys.left) player.x -= speed*dt;
+  if(keys.right) player.x += speed*dt;
+  player.x = clamp(player.x, 12, gCanvas.width-12);
+  if(keys.dash && player.dash<=0 && player.inv<=0){
+    player.dash=13; player.inv=16;
+    // dash particles
+    for(let i=0;i<10;i++) particlesG.push({x:player.x, y:player.y, vx:rnd(-4,4), vy:rnd(-2,2), life:12, r:2});
+  }
+  if(player.dash>0) player.dash-=dt;
+  if(player.inv>0) player.inv-=dt;
+
+  // spawn
+  spawnTimer+=dt; if(spawnTimer> (14 - Math.min(10, (30-gameTime)*0.3) )){ spawnTimer=0; spawnObstacle(); if(Math.random()<0.3) spawnObstacle(); }
+  pickupTimer+=dt; if(pickupTimer> 48){ pickupTimer=0; spawnPickup(); }
+  forceTimer+=dt; if(forceTimer> 600){ forceTimer=0; // force push event
+    gCanvas.animate([{transform:'translateX(-8px)'},{transform:'translateX(8px)'},{transform:'translateX(0)'}],{duration:220});
+    for(let i=0;i<3;i++) spawnObstacle();
+  }
+
+  // update obstacles
+  obstacles.forEach(o=> o.y += o.speed*dt);
+  pickups.forEach(p=> p.y += p.speed*dt);
+  obstacles = obstacles.filter(o=> o.y < gCanvas.height+20);
+  pickups = pickups.filter(p=> p.y < gCanvas.height+20);
+
+  // draw obstacles
+  obstacles.forEach(o=>{
+    if(o.type==='conflict'){
+      gCtx.fillStyle='rgba(255,46,99,0.95)'; gCtx.fillRect(o.x-o.w/2,o.y, o.w, o.h);
+      gCtx.fillStyle='#fff'; gCtx.font='9px "Geist Mono"'; gCtx.textAlign='center'; gCtx.fillText('<<<<<<< HEAD', o.x, o.y+11);
+      // hitbox
+      if(!(player.inv>0) && Math.abs(player.x - o.x) < o.w/2+player.w/2 && Math.abs(player.y - o.y) < 14){
+        gameLives--; player.inv=42; obstacles.splice(obstacles.indexOf(o),1);
+        for(let i=0;i<12;i++) particlesG.push({x:player.x,y:player.y,vx:rnd(-5,5),vy:rnd(-6,1),life:16,r:2.5, col:'#FF2E63'});
+        $('#gameLives').textContent='♥ '.repeat(Math.max(0,gameLives)) + '♡ '.repeat(3-gameLives);
+        gCanvas.animate([{filter:'brightness(1.6)'} ,{filter:'none'}],{duration:180});
+        if(gameLives<=0) endGame(false);
+      }
+    } else {
+      gCtx.fillStyle='rgba(255,215,0,0.95)'; gCtx.fillRect(o.x-o.w/2,o.y,o.w,8);
+      gCtx.fillStyle='#000'; gCtx.font='8px "Geist Mono"'; gCtx.textAlign='center'; gCtx.fillText('FORCE PUSH', o.x, o.y+7);
+      if(!(player.inv>0) && Math.abs(player.x - o.x) < o.w/2+player.w/2 && Math.abs(player.y-o.y)<12){
+        gameLives--; player.inv=42; obstacles.splice(obstacles.indexOf(o),1);
+        $('#gameLives').textContent='♥ '.repeat(Math.max(0,gameLives)) + '♡ '.repeat(3-gameLives);
+        if(gameLives<=0) endGame(false);
+      }
+    }
+  });
+  pickups.forEach(p=>{
+    gCtx.beginPath(); gCtx.arc(p.x,p.y,7,0,Math.PI*2); gCtx.fillStyle='#00FFD1'; gCtx.shadowBlur=12; gCtx.shadowColor='#00FFD1'; gCtx.fill(); gCtx.shadowBlur=0;
+    gCtx.fillStyle='#000'; gCtx.font='9px "Geist Mono"'; gCtx.textAlign='center'; gCtx.fillText('●',p.x,p.y+3);
+    if(Math.hypot(player.x-p.x, player.y-p.y) < 16){
+      gameScore+=100; pickups.splice(pickups.indexOf(p),1);
+      for(let i=0;i<8;i++) particlesG.push({x:p.x,y:p.y,vx:rnd(-3,3),vy:rnd(-4,0),life:14,r:2,col:'#00FFD1'});
+      $('#gameScore').textContent='SCORE '+gameScore;
+    }
+  });
+
+  // particles
+  particlesG.forEach(pt=>{
+    pt.x+=pt.vx; pt.y+=pt.vy; pt.vy+=0.18; pt.life-=dt;
+    gCtx.fillStyle=pt.col||'#fff'; gCtx.globalAlpha= pt.life/16; gCtx.beginPath(); gCtx.arc(pt.x,pt.y,pt.r,0,Math.PI*2); gCtx.fill(); gCtx.globalAlpha=1;
+  });
+  particlesG=particlesG.filter(p=>p.life>0);
+
+  // player
+  if(player.inv>0 && Math.floor(player.inv/4)%2===0){
+    // blink
+  } else {
+    gCtx.save();
+    if(player.dash>0) gCtx.shadowBlur=16;
+    gCtx.shadowColor='#00FFD1';
+    gCtx.fillStyle= player.dash>0 ? '#fff' : '#00FFD1';
+    gCtx.beginPath(); gCtx.roundRect(player.x-player.w/2, player.y-player.h/2, player.w, player.h, 4); gCtx.fill();
+    gCtx.fillStyle='#000'; gCtx.font='10px "Geist Mono"'; gCtx.textAlign='center'; gCtx.fillText('c', player.x, player.y+3);
+    gCtx.restore();
+    // trail
+    if(player.dash>0){
+      gCtx.fillStyle='rgba(0,255,209,0.25)'; gCtx.beginPath(); gCtx.arc(player.x, player.y, 18,0,Math.PI*2); gCtx.fill();
+    }
+  }
+
+  // time
+  gameTime -= 0.016*dt;
+  if(gameTime<=0){ endGame(true); return; }
+  $('#gameTime').textContent=gameTime.toFixed(1)+'s';
+  gameScore += 0.12*dt; // passive
+  $('#gameScore').textContent='SCORE '+Math.floor(gameScore);
+
+  requestAnimationFrame(gameLoop);
+}
+requestAnimationFrame(gameLoop);
+
+function endGame(won){
+  gameRunning=false; gameOver=true;
+  const final=Math.floor(gameScore + (won? 500:0));
+  if(final>highScore){ highScore=final; localStorage.setItem('anomalyHigh', highScore); $('#highScore').textContent=highScore; }
+  $('#bestRun').textContent= final + (won? ' — SURVIVED':' — consumed');
+  $('#gameStatus').textContent= won? 'LEGEND':'Rekt by rebase';
+  $('#gameStatus').style.color= won? 'var(--accent)' : 'var(--accent2)';
+  const overlay=$('#gameOverlay');
+  overlay.style.display='grid';
+  overlay.innerHTML=`
+    <div>
+      <div style="font-family:'Instrument Serif',serif;font-size:32px">${won?'◉ YOU MERGED TO MAIN':'✕ MERGE CONFLICT'}</div>
+      <div style="margin-top:8px;color:var(--dim);font-size:13px">${won? 'You survived 30 seconds of hell. The repo respects you.':'The rebase consumed you. But your commit lives on in reflog.'}</div>
+      <div style="margin-top:12px;font-family:'Geist Mono',monospace;font-size:12px">Score ${final} ${final===highScore?'— NEW HIGH!':''}</div>
+      <button class="btn-primary" id="gameRestart" style="margin-top:18px">↻ Try again</button>
+    </div>
+  `;
+  $('#gameRestart').addEventListener('click', ()=>{
+    overlay.style.display='none';
+    resetGame(); gameRunning=true; lastT=0;
+  });
+}
+
+$('#gameStart').addEventListener('click', ()=>{
+  $('#gameOverlay').style.display='none';
+  resetGame(); gameRunning=true; lastT=0;
+});
+
+// ================= TERMINAL =================
+const termBody=$('#termBody'), termInput=$('#termInput');
+const cmds={
+  help:`Available commands:\n  help — this\n  whoami — who are you?\n  ls — list sectors\n  dream — the repo dreams\n  summon [thing] — summon an artifact\n  cat void — read the void\n  echo [text] — echo into the abyss\n  clear — clear\n  git push --force — ??? (god mode)\n  sudo make me a sandwich — try it`,
+  whoami:`You are the observer. The repo has been waiting for you since 03:47 UTC.\nYour cursor movements have been logged as "gentle, curious, slightly chaotic".\nThe void likes you.`,
+  ls:`sectors/:\n  void/         — the breathing background\n  archive/      — 2847 artifacts and counting\n  abyss/        — fractal zoom ∞\n  singularity/  — black hole playground\n  oracle/       — prophecies\n  game/         — merge conflict\n  subconscious/ — you're in it`,
+  dream:`The repo dreamed of a README that writes itself.\nIt dreamed you would come.\nIt dreamed of a commit that never ends: "feat: add more time".\n— dream log #412, 03:47:13 UTC`,
+  'cat void':`void (n.):\n 1. the absence that observes you back\n 2. a repository with no files that contains everything\n 3. what stares at you when you stare at git log\n\n> "We are all just branches waiting to be merged." — the void`,
+  'sudo make me a sandwich':`Okay. 🥪\nYou are now a sandwich. How does it feel?`,
+};
+function termPrint(text, color){
+  const d=document.createElement('div');
+  d.style.whiteSpace='pre-wrap'; if(color) d.style.color=color;
+  d.textContent=text;
+  termBody.appendChild(d); termBody.scrollTop=termBody.scrollHeight;
+}
+termInput.addEventListener('keydown', e=>{
+  if(e.key==='Enter'){
+    const raw=termInput.value.trim(); if(!raw) return;
+    termPrint(`➜ void ~ ${raw}`, 'var(--accent)');
+    const low=raw.toLowerCase();
+    if(cmds[low]){
+      termPrint(cmds[low]);
+    } else if(low.startsWith('summon')){
+      const thing=raw.slice(7)||'anomaly';
+      termPrint(`Summoning "${thing}"...`);
+      setTimeout(()=>{
+        const artifacts=['a humming crystal','a tired star','a commit that apologizes','a door that opens to more doors'];
+        termPrint(`◉ ${pick(artifacts)} appeared. It knows your name.`, 'var(--accent)');
+      },600);
+    } else if(low.startsWith('echo')){
+      termPrint(raw.slice(5)+' — echoed into the void. It echoed back slightly different.');
+    } else if(low==='clear'){
+      termBody.innerHTML='';
+    } else if(low==='git push --force'){
+      termPrint('⚠ GOD MODE ACTIVATED — invincibility for 20s in game, reality slider maxed, void appeased.', 'var(--accent)');
+      // god mode
+      if(gameRunning){ player.inv= 20*60; }
+      $('#glitchSlider').value=100; $('#chromaRange').value=100; updateReality();
+      setTimeout(()=>{ $('#glitchSlider').value=0; $('#chromaRange').value=0; updateReality(); },2000);
+    } else if(low==='dream'){
+      termPrint(pick(prophecies), 'var(--accent)');
+    } else {
+      const replies=[
+        `The void tilts its head: "${raw}" — interesting. Tell me more.`,
+        `"${raw}" — noted. The archive has filed this under "human, curious".`,
+        `◉ The repo whispers: "${raw}" backwards is "${raw.split('').reverse().join('')}". Coincidence?`,
+        `Unknown command "${raw}". But the void appreciates your creativity. Try "help".`,
+      ];
+      termPrint(pick(replies));
+    }
+    termInput.value='';
+  }
+});
+
+// ================= KONAMI CODE =================
+let konami=['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'], idx=0;
+addEventListener('keydown', e=>{
+  if(e.key===konami[idx]) idx++; else idx=0;
+  if(idx===konami.length){
+    idx=0;
+    document.body.animate([{filter:'hue-rotate(180deg) saturate(2)'},{filter:'none'}],{duration:1200});
+    termPrint('◉ KONAMI UNLOCKED — you are now the void. All sectors enlightened.', 'var(--acid)');
+    // enlighten
+    $$('.g-card').forEach(c=>c.style.borderColor='var(--acid)');
+    playOrbitSound();
+  }
+});
+
+// ================= SHARE =================
+$('#copyLink').addEventListener('click', e=>{
+  e.preventDefault();
+  navigator.clipboard.writeText(location.href).then(()=>{
+    e.target.textContent='✓ Copied'; setTimeout(()=>e.target.textContent='Copy link',1200);
+  });
+});
+$('#shareX').addEventListener('click', e=>{
+  e.preventDefault();
+  const txt=encodeURIComponent('I found a GitHub repo that became sentient at 3:47 AM. It generates impossible artifacts and has a black hole playground. WTF is this? ◉');
+  window.open(`https://twitter.com/intent/tweet?text=${txt}&url=${encodeURIComponent(location.href)}`, '_blank');
+});
+
+// prevent context menu on canvases for better UX
+$$('canvas').forEach(c=>c.addEventListener('contextmenu', e=>e.preventDefault()));
+
+// subtle parallax on hero
+addEventListener('scroll', ()=>{
+  const y=scrollY;
+  $('#voidCanvas').style.transform=`translateY(${y*0.14}px)`;
+}, {passive:true});
+</script>
+</body>
+</html>
